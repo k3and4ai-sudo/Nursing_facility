@@ -78,17 +78,44 @@ def transcribe_audio(audio_bytes: bytes) -> str:
         print(f"Error during audio transcription: {e}")
         return "[音声認識エラー]"
 
+import re
+
+def remove_emojis(text: str) -> str:
+    """
+    Removes emojis, pictographs, and special symbols for clean TTS reading.
+    """
+    if not text:
+        return ""
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"  # dingbats
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended
+        "]+",
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub('', text).strip()
+
 def synthesize_speech(text: str) -> bytes:
     """
-    Synthesizes text into speech audio bytes (MP3/WAV format).
+    Synthesizes text into speech audio bytes (MP3/WAV format) with emojis stripped.
     """
     if not text:
         return b""
     
+    clean_text = remove_emojis(text)
+    if not clean_text:
+        clean_text = text
+    
     if TTS_ENGINE == "gtts":
         try:
             from gtts import gTTS
-            tts = gTTS(text=text, lang='ja')
+            tts = gTTS(text=clean_text, lang='ja')
             fp = io.BytesIO()
             tts.write_to_fp(fp)
             return fp.getvalue()

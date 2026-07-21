@@ -12,7 +12,9 @@ class WavAudioRecorder {
     }
 
     async start() {
-        if (this.isRecording) return;
+        if (this.isRecording) {
+            this.stop();
+        }
         this.audioBuffers = [];
         this.recordingLength = 0;
 
@@ -25,14 +27,19 @@ class WavAudioRecorder {
         }
 
         try {
-            // Request microphone access
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
+            // Request microphone access with fallback
+            try {
+                this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+            } catch (constraintErr) {
+                console.warn("Enhanced audio constraints failed, trying basic audio:", constraintErr);
+                this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
 
             // Initialize AudioContext
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
