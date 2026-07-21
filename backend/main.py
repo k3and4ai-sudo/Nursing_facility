@@ -296,6 +296,12 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     })
                     continue
                 
+                # Send transcribed text back to client immediately for user display
+                await websocket.send_json({
+                    "type": "transcription_result",
+                    "text": transcribed_text
+                })
+                
                 # Save User Message to DB
                 db.add_chat_message(user_id, "user", transcribed_text)
                 

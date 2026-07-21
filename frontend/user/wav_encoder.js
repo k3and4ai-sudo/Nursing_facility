@@ -1,10 +1,10 @@
-// 16kHz Mono WAV Recorder using Web Audio API
+// 16kHz Mono WAV Recorder using Web Audio API with Analyser for Oscilloscope Waveform
 class WavAudioRecorder {
     constructor() {
         this.audioContext = null;
         this.mediaStream = null;
         this.scriptProcessor = null;
-        this.inputPoint = null;
+        this.analyser = null;
         this.audioBuffers = [];
         this.targetSampleRate = 16000;
         this.isRecording = false;
@@ -30,6 +30,11 @@ class WavAudioRecorder {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
             
+            // Create AnalyserNode for Oscilloscope Waveform
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 512;
+            source.connect(this.analyser);
+
             // Create ScriptProcessor (buffer size 4096, 1 input channel, 1 output channel)
             const bufferSize = 4096;
             this.scriptProcessor = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
@@ -57,6 +62,12 @@ class WavAudioRecorder {
         }
     }
 
+    getWaveformData(dataArray) {
+        if (this.analyser) {
+            this.analyser.getByteTimeDomainData(dataArray);
+        }
+    }
+
     stop() {
         if (!this.isRecording) return null;
         this.isRecording = false;
@@ -65,6 +76,10 @@ class WavAudioRecorder {
         if (this.scriptProcessor) {
             this.scriptProcessor.disconnect();
             this.scriptProcessor = null;
+        }
+        if (this.analyser) {
+            this.analyser.disconnect();
+            this.analyser = null;
         }
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(track => track.stop());

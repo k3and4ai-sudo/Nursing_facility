@@ -19,17 +19,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const logoutBtn = document.getElementById("logout-btn");
     const modeViews = document.querySelectorAll(".mode-view");
 
-    // Patient Mode UI
+    // Patient Mode UI Elements
+    const pStatusBadge = document.getElementById("p-status-badge");
     const pMicBtn = document.getElementById("p-mic-btn");
     const pStatusText = document.getElementById("p-status-text");
     const pGuideText = document.getElementById("p-guide-text");
     const pSubtitleBox = document.getElementById("p-subtitle-box");
     const pAiAvatar = document.getElementById("p-ai-avatar");
+    const pWaveformCanvas = document.getElementById("p-waveform-canvas");
+    const pUserSpeechBox = document.getElementById("p-user-speech-box");
+    const pUserSpeechText = document.getElementById("p-user-speech-text");
     
-    // Audio Recorder
+    // Audio Recorder & Canvas Animation
     let recorder = null;
     let isRecording = false;
     let activeAudio = null;
+    let waveformAnimFrame = null;
+    const canvasCtx = pWaveformCanvas ? pWaveformCanvas.getContext("2d") : null;
 
     // Restore Session if exists
     const savedSession = sessionStorage.getItem("care_link_session");
@@ -121,23 +127,29 @@ document.addEventListener("DOMContentLoaded", () => {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         ws = new WebSocket(`${protocol}//${window.location.host}/ws/user/${terminalId}`);
 
+        setPatientState("ready");
+
         ws.onopen = () => {
-            pStatusText.textContent = "お話しする準備ができました";
+            setPatientState("ready");
             pMicBtn.disabled = false;
         };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.type === "chat_response") {
+            
+            if (data.type === "transcription_result") {
+                // Display user spoken transcription immediately
+                pUserSpeechBox.classList.remove("hidden");
+                pUserSpeechText.textContent = data.text;
+            } 
+            else if (data.type === "chat_response") {
+                setPatientState("speaking");
                 pSubtitleBox.textContent = data.text;
-                pStatusText.textContent = "お話し中...";
-                pAiAvatar.className = "avatar-circle speaking";
                 
                 if (activeAudio) activeAudio.pause();
                 activeAudio = new Audio("data:audio/mp3;base64," + data.audio);
                 activeAudio.onended = () => {
-                    pStatusText.textContent = "お話しする準備ができました";
-                    pAiAvatar.className = "avatar-circle idle";
+                    setPatientState("ready");
                 };
                 activeAudio.play().catch(e => console.warn(e));
             }
@@ -147,8 +159,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (isRecording) {
                 isRecording = false;
                 pMicBtn.classList.remove("recording");
-                pAiAvatar.className = "avatar-circle thinking";
-                pStatusText.textContent = "考えています...";
+                setPatientState("thinking");
                 
                 const blob = recorder.stop();
                 if (blob && ws && ws.readyState === WebSocket.OPEN) {
@@ -166,13 +177,99 @@ document.addEventListener("DOMContentLoaded", () => {
                     await recorder.start();
                     isRecording = true;
                     pMicBtn.classList.add("recording");
-                    pAiAvatar.className = "avatar-circle listening";
-                    pStatusText.textContent = "お話ししてください...";
+                    setPatientState("listening");
                 } catch (err) {
+                    setPatientState("ready");
                     pStatusText.textContent = "マイクに接続できません";
                 }
             }
         };
+    }
+
+    function setPatientState(state) {
+        if (!pStatusBadge) return;
+
+        // Reset state classes
+        pStatusBadge.className = "patient-status-badge";
+
+        if (state === "ready") {
+            pStatusBadge.classList.add("state-ready");
+            pStatusBadge.textContent = "🟢 お話しできます";
+            pStatusText.textContent = "お話しする準備ができました";
+            pGuideText.textContent = "ボタンを１回押して、お話ししてください";
+            pAiAvatar.className = "avatar-circle idle";
+            if (pWaveformCanvas) pWaveformCanvas.classList.add("hidden");
+            if (waveformAnimFrame) cancelAnimationFrame(waveformAnimFrame);
+        } 
+        else if (state === "listening") {
+            pStatusBadge.classList.add("state-listening");
+            pStatusBadge.textContent = "🎤 お声を聴いています...";
+            pStatusText.textContent = "お話ししてください...";
+            pGuideText.textContent = "話し終わったらもう一度ボタンを押してください";
+            pAiAvatar.className = "avatar-circle listening";
+            if (pWaveformCanvas) {
+                pWaveformCanvas.classList.remove("hidden");
+                drawOscilloscopeWaveform();
+            }
+        } 
+        else if (state === "thinking") {
+            pStatusBadge.classList.add("state-thinking");
+            pStatusBadge.textContent = "🧠 AIが考えています...";
+            pStatusText.textContent = "回答を考えています...";
+            pGuideText.textContent = "少々お待ちください";
+            pAiAvatar.className = "avatar-circle thinking";
+            if (pWaveformCanvas) pWaveformCanvas.classList.add("hidden");
+            if (waveformAnimFrame) cancelAnimationFrame(waveformAnimFrame);
+        } 
+        else if (state === "speaking") {
+            pStatusBadge.classList.add("state-speaking");
+            pStatusBadge.textContent = "🔊 AIがお話ししています...";
+            pStatusText.textContent = "お話し中...";
+            pGuideText.textContent = "じっくりお聴きください";
+            pAiAvatar.className = "avatar-circle speaking";
+            if (pWaveformCanvas) pWaveformCanvas.classList.add("hidden");
+            if (waveformAnimFrame) cancelAnimationFrame(waveformAnimFrame);
+        }
+    }
+
+    // Oscilloscope Waveform Animation Frame Loop
+    function drawOscilloscopeWaveform() {
+        if (!isRecording || !recorder || !canvasCtx) {
+            if (waveformAnimFrame) cancelAnimationFrame(waveformAnimFrame);
+            return;
+        }
+
+        waveformAnimFrame = requestAnimationFrame(drawOscilloscopeWaveform);
+
+        const bufferLength = 256;
+        const dataArray = new Uint8Array(bufferLength);
+        recorder.getWaveformData(dataArray);
+
+        canvasCtx.fillStyle = "#0f172a";
+        canvasCtx.fillRect(0, 0, pWaveformCanvas.width, pWaveformCanvas.height);
+
+        canvasCtx.lineWidth = 3;
+        canvasCtx.strokeStyle = "#38bdf8"; // Glowing cyan oscilloscope line
+        canvasCtx.beginPath();
+
+        const sliceWidth = pWaveformCanvas.width * 1.0 / bufferLength;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = v * pWaveformCanvas.height / 2;
+
+            if (i === 0) {
+                canvasCtx.moveTo(x, y);
+            } else {
+                canvasCtx.lineTo(x, y);
+            }
+
+            x += sliceWidth;
+        }
+
+        canvasCtx.lineTo(pWaveformCanvas.width, pWaveformCanvas.height / 2);
+        canvasCtx.stroke();
     }
 
     // 2. STAFF MODE LOGIC

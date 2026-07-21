@@ -67,6 +67,9 @@
         <!-- 2. MODE: PATIENT (利用者モード) -->
         <section id="mode-patient" class="mode-view hidden">
             <div class="patient-app-container">
+                <!-- Status Badge -->
+                <div id="p-status-badge" class="patient-status-badge state-ready">🟢 お話しできます</div>
+
                 <div class="avatar-container">
                     <div id="p-ai-avatar" class="avatar-circle idle">
                         <div class="inner-circle"></div>
@@ -74,11 +77,24 @@
                         <div class="wave wave2"></div>
                     </div>
                 </div>
+
                 <h1 id="p-status-text" class="patient-status">お話しする準備ができました</h1>
+
+                <!-- Oscilloscope Canvas for Listening Mode -->
+                <canvas id="p-waveform-canvas" width="360" height="80" class="waveform-canvas hidden"></canvas>
+
                 <button id="p-mic-btn" class="huge-mic-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                 </button>
                 <p id="p-guide-text" class="patient-guide">ボタンを１回押して、お話ししてください</p>
+
+                <!-- User Speech Transcription Display -->
+                <div id="p-user-speech-box" class="patient-user-speech hidden">
+                    <span class="speech-label">あなたのお言葉:</span>
+                    <strong id="p-user-speech-text">-</strong>
+                </div>
+
+                <!-- AI Response Subtitle Box -->
                 <div id="p-subtitle-box" class="patient-subtitle"></div>
             </div>
         </section>
