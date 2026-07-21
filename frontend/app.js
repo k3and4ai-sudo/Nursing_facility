@@ -255,14 +255,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const dataArray = new Uint8Array(bufferLength);
         recorder.getWaveformData(dataArray);
 
-        // Ensure canvas width/height matches display size
-        if (pWaveformCanvas.width !== pWaveformCanvas.clientWidth) {
-            pWaveformCanvas.width = pWaveformCanvas.clientWidth || 360;
-            pWaveformCanvas.height = pWaveformCanvas.clientHeight || 80;
+        // Fixed canvas resolution for rendering
+        if (!pWaveformCanvas.width || pWaveformCanvas.width !== 360) {
+            pWaveformCanvas.width = 360;
+        }
+        if (!pWaveformCanvas.height || pWaveformCanvas.height !== 80) {
+            pWaveformCanvas.height = 80;
         }
 
-        const width = pWaveformCanvas.width;
-        const height = pWaveformCanvas.height;
+        const width = 360;
+        const height = 80;
 
         canvasCtx.fillStyle = "#0f172a";
         canvasCtx.fillRect(0, 0, width, height);
