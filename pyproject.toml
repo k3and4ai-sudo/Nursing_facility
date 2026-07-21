@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "nursing-facility"
+version = "1.0.0"
+description = "介護施設向け AI アシスタント管理システム"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = ["nursing", "facility", "AI", "fastapi", "ollama"]
+
+dependencies = [
+    "fastapi==0.111.0",
+    "uvicorn[standard]==0.30.1",
+    "websockets==12.0",
+    "cryptography==42.0.7",
+    "openai-whisper",
+    "numpy==1.26.4",
+    "gTTS==2.5.1",
+    "requests==2.32.3",
+    "soundfile==0.12.1",
+    "scipy==1.13.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+start = "uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend"]
+python_files = ["test_*.py"]

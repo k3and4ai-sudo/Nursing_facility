@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタッフステーション - Nursing Care Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-mode">
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4.5 16.5c-1.5 1.26-2.5 3.19-2.5 5.5h20c0-2.31-1-4.24-2.5-5.5"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <circle cx="12" cy="11" r="3"/>
+                </svg>
+                <h2>ケア・リンク</h2>
+            </div>
+            <nav class="sidebar-menu">
+                <button class="menu-btn active" data-tab="dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                    <span>ダッシュボード</span>
+                </button>
+                <button class="menu-btn" data-tab="patients">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>利用者マスター</span>
+                </button>
+                <button class="menu-btn" data-tab="vitals">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <span>バイタル分析</span>
+                </button>
+                <button class="menu-btn" data-tab="live-console">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>対話・インターホン</span>
+                </button>
+                <button class="menu-btn" data-tab="handover">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>申し送り・スタッフチャット</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">NS</div>
+                    <div>
+                        <div class="name">スタッフステーション</div>
+                        <div class="role">管理者</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Panel Contents -->
+        <main class="main-panel">
+            <!-- Header -->
+            <header class="main-header">
+                <h1 id="tab-title">ダッシュボード</h1>
+                <div class="header-actions">
+                    <div id="alert-badge" class="alert-indicator hidden">
+                        <span class="pulse-ring"></span>
+                        <span class="alert-text">異常検知あり！</span>
+                    </div>
+                    <div id="conn-status" class="status-badge connected">サーバー接続中</div>
+                </div>
+            </header>
+
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-content active">
+                <!-- Alerts Section -->
+                <div class="dashboard-grid">
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>🚨 アクティブアラート（緊急警告）</h3>
+                            <button id="clear-alerts-btn" class="btn btn-secondary btn-sm">クリア</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="alert-list" class="alert-container-list">
+                                <div class="no-alerts-msg">現在、異常値アラートは発生していません。</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Left: Recent Vitals -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📋 最近測定されたバイタル情報</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>部屋</th>
+                                        <th>氏名</th>
+                                        <th>測定時間</th>
+                                        <th>体温</th>
+                                        <th>血圧(上/下)</th>
+                                        <th>体重</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-vitals-tbody">
+                                    <tr>
+                                        <td colspan="6" class="text-center">データを読み込んでいます...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right: Conversation Summaries -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>🧠 本日の会話要約・感情分析</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="summary-list" class="summary-cards-container">
+                                <div class="no-data-msg">本日の会話サマリーはまだ生成されていません。</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Patient Master -->
+            <section id="tab-patients" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Register/Edit Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 id="form-title">➕ 利用者 新規登録</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="patient-form" class="standard-form">
+                                <input type="hidden" id="p-id">
+                                <div class="form-group">
+                                    <label for="p-name">氏名 *</label>
+                                    <input type="text" id="p-name" required placeholder="例: 山田 太郎">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="p-age">年齢</label>
+                                        <input type="number" id="p-age" placeholder="例: 85">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="p-room">居室番号</label>
+                                        <input type="text" id="p-room" placeholder="例: 101">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-terminal">紐付け用端末ID (1対1) *</label>
+                                    <input type="text" id="p-terminal" required placeholder="例: user_tablet_1234">
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-dementia">認知症レベル</label>
+                                    <select id="p-dementia">
+                                        <option value="none">なし (正常)</option>
+                                        <option value="mild">軽度 (Dementia-1)</option>
+                                        <option value="moderate">中等度 (Dementia-2)</option>
+                                        <option value="severe">重度 (Dementia-3)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-attention">AI対話時の注意点 (感情トリガー等)</label>
+                                    <textarea id="p-attention" rows="3" placeholder="例: 「帰りたい」と言われたら否定せず、「ここにいて安心」と話しかける。孫の話をすると喜びます。"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-notes">ケア用特記事項 (持病、制限等)</label>
+                                    <textarea id="p-notes" rows="3" placeholder="例: 高血圧のため塩分制限あり。右足に軽い関節痛。"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" id="save-patient-btn" class="btn btn-primary">登録する</button>
+                                    <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden">キャンセル</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Patient List -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>👥 登録されている利用者一覧</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="patient-list" class="patient-grid-list">
+                                <div class="text-center pad-20">登録者データを読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Vitals Analytics -->
+            <section id="tab-vitals" class="tab-content">
+                <div class="card">
+                    <div class="card-header selection-bar">
+                        <h3>📈 バイタルサイン推移推移グラフ</h3>
+                        <div class="selector">
+                            <label for="vital-user-selector">利用者の選択:</label>
+                            <select id="vital-user-selector">
+                                <option value="">-- 利用者を選択してください --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="vitals-chart-empty" class="chart-empty-msg">
+                            チャートを表示するには、対象の利用者を選択してください。
+                        </div>
+                        <div id="vitals-chart-wrapper" class="chart-container hidden">
+                            <div class="chart-grid">
+                                <div class="chart-box">
+                                    <h4>体温の推移 (℃)</h4>
+                                    <canvas id="tempChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>血圧の推移 (mmHg)</h4>
+                                    <canvas id="bpChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>体重の推移 (kg)</h4>
+                                    <canvas id="weightChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Live Console & Intercom -->
+            <section id="tab-live-console" class="tab-content">
+                <div class="dashboard-grid intercom-grid">
+                    <!-- Left: Active Users List and Intercom Controller -->
+                    <div class="card flex-col">
+                        <div class="card-header">
+                            <h3>📞 リアルタイムインターホン（対話・監視）</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="room-call-list" id="intercom-room-list">
+                                <!-- Rooms to select for calling -->
+                                <div class="text-center pad-20">利用者を選択してください</div>
+                            </div>
+                            
+                            <!-- Call Control Card -->
+                            <div id="call-control-card" class="call-control-panel disabled">
+                                <h4 id="call-target-name">通話先が選択されていません</h4>
+                                <p id="call-target-room">-</p>
+                                <div class="call-timer" id="call-timer">00:00</div>
+                                
+                                <div class="call-btns">
+                                    <button id="staff-call-btn" class="btn btn-success" disabled>
+                                        <svg viewBox="0 0 24 24" fill="currentColor" width="20"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/></svg>
+                                        <span>呼び出す</span>
+                                    </button>
+                                    <button id="staff-hangup-btn" class="btn btn-danger hidden">
+                                        <svg viewBox="0 0 24 24" fill="currentColor" width="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                                        <span>通話を切る</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Conversations & Override (Pattern B) -->
+                    <div class="card flex-col flex-2">
+                        <div class="card-header selection-bar">
+                            <h3>👁️ AI対話の監視・割り込み送信</h3>
+                            <div id="active-monitor-badge" class="badge-sm">監視中: 山田様</div>
+                        </div>
+                        <div class="card-body chat-console-body">
+                            <!-- Real-time Chat log between User and AI -->
+                            <div class="chat-log-window" id="live-chat-window">
+                                <div class="chat-log-placeholder">
+                                    左のリストから利用者を選択すると、リアルタイムの会話ログを表示・監視できます。
+                                </div>
+                            </div>
+                            
+                            <!-- Override input (Pattern B) -->
+                            <div class="chat-override-input" id="chat-override-box">
+                                <input type="text" id="override-input-text" disabled placeholder="AIとの会話に割り込んで、利用者の端末に音声を送ります...">
+                                <button id="override-send-btn" class="btn btn-primary" disabled>割り込み送信</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Handover / Staff Chat -->
+            <section id="tab-handover" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Handover notes -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📝 申し送り事項 (引継ぎ用)</h3>
+                        </div>
+                        <div class="card-body flex-col">
+                            <form id="handover-form" class="standard-form inline">
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="h-author">作成者</label>
+                                        <input type="text" id="h-author" required placeholder="例: 看護師 田中">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="h-content">申し送り内容</label>
+                                    <textarea id="h-content" required rows="3" placeholder="例: 101号室の山田様、夕方から血圧高め(145)のため、夜間の見回りを多めにお願いします。"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">申し送りを保存</button>
+                            </form>
+                            <hr class="divider">
+                            <div class="handover-list scroll-y" id="handover-list-box">
+                                <div class="text-center pad-10">読み込み中...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Staff Chat Room -->
+                    <div class="card flex-col">
+                        <div class="card-header">
+                            <h3>💬 スタッフ間リアルタイムチャット</h3>
+                        </div>
+                        <div class="card-body chat-console-body">
+                            <div class="chat-log-window scroll-y" id="staff-chat-window">
+                                <!-- Staff group messages -->
+                                <div class="text-center pad-20">メッセージを読み込んでいます...</div>
+                            </div>
+                            <div class="chat-override-input">
+                                <input type="text" id="staff-chat-input" placeholder="スタッフへメッセージを送信...">
+                                <button id="staff-chat-send" class="btn btn-primary">送信</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Alert Sound Element -->
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto" loop></audio>
+</body>
+</html>

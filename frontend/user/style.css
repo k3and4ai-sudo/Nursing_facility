@@ -1,0 +1,426 @@
+:root {
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --success: #10b981;
+    --success-light: #ecfdf5;
+    --danger: #ef4444;
+    --danger-light: #fef2f2;
+    --bg-gradient: linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%);
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --card-bg: rgba(255, 255, 255, 0.85);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Zen Maru Gothic', 'Outfit', sans-serif;
+    background: var(--bg-gradient);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.app-container {
+    width: 100vw;
+    height: 100vh;
+    max-width: 600px;
+    max-height: 960px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24px;
+    position: relative;
+}
+
+/* Header style */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.badge {
+    background: var(--card-bg);
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-size: 24px;
+    font-weight: 700;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.status-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.status-dot.online {
+    background-color: var(--success);
+    box-shadow: 0 0 12px var(--success);
+}
+
+.status-dot.offline {
+    background-color: var(--danger);
+    box-shadow: 0 0 12px var(--danger);
+}
+
+/* Main Content area */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 36px;
+}
+
+/* Avatar / Wave Animations */
+.avatar-container {
+    position: relative;
+    width: 180px;
+    height: 180px;
+}
+
+.avatar-circle {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+    box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.15);
+}
+
+.inner-circle {
+    width: 70%;
+    height: 70%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
+    z-index: 12;
+}
+
+.wave {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.2);
+    z-index: 1;
+    opacity: 0;
+}
+
+/* Listening Pulse */
+.avatar-circle.listening .wave1 {
+    animation: pulse 1.5s infinite linear;
+    background: rgba(16, 185, 129, 0.25);
+}
+.avatar-circle.listening .wave2 {
+    animation: pulse 1.5s infinite linear 0.75s;
+    background: rgba(16, 185, 129, 0.25);
+}
+
+/* Speaking Wave */
+.avatar-circle.speaking .wave1 {
+    animation: pulse 1.2s infinite ease-out;
+    background: rgba(37, 99, 235, 0.3);
+}
+.avatar-circle.speaking .wave2 {
+    animation: pulse 1.2s infinite ease-out 0.6s;
+    background: rgba(37, 99, 235, 0.3);
+}
+
+/* Thinking Pulse */
+.avatar-circle.thinking {
+    animation: float 2s infinite ease-in-out;
+}
+.avatar-circle.thinking .inner-circle {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Status Messages */
+.status-message {
+    font-size: 36px;
+    font-weight: 900;
+    text-align: center;
+    min-height: 54px;
+}
+
+/* Mic button container */
+.button-container {
+    position: relative;
+}
+
+.huge-mic-btn {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    border: none;
+    outline: none;
+    background: var(--success);
+    color: white;
+    box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.huge-mic-btn:active {
+    transform: scale(0.92);
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+}
+
+.huge-mic-btn:disabled {
+    background: #cbd5e1;
+    color: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.huge-mic-btn.recording {
+    background: var(--danger);
+    box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4);
+}
+
+.mic-icon {
+    width: 72px;
+    height: 72px;
+}
+
+.guide-subtext {
+    font-size: 20px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Subtitle box (Footer) */
+.footer {
+    width: 100%;
+    min-height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.subtitle-box {
+    width: 100%;
+}
+
+.subtitle-text {
+    background: var(--card-bg);
+    padding: 16px 24px;
+    border-radius: 20px;
+    width: 100%;
+    text-align: center;
+    font-size: 22px;
+    line-height: 1.5;
+    font-weight: 700;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    min-height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Overlay & Modals */
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+}
+
+.modal-overlay.hidden {
+    display: none !important;
+}
+
+.modal-card {
+    background: white;
+    border-radius: 30px;
+    padding: 36px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.modal-card h2 {
+    font-size: 28px;
+    font-weight: 900;
+}
+
+.modal-card p {
+    font-size: 18px;
+    color: var(--text-muted);
+}
+
+.terminal-id-box {
+    background: #f1f5f9;
+    padding: 16px;
+    border-radius: 15px;
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+}
+
+.terminal-id-box strong {
+    color: var(--primary);
+}
+
+.modal-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 15px;
+    padding: 16px;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+/* Intercom Ringing animations */
+.call-card {
+    border: 3px solid var(--primary);
+}
+
+.ringing-animation {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.15);
+    animation: ring-pulse 1.8s infinite ease-out;
+}
+
+.ring:nth-child(2) {
+    animation-delay: 0.6s;
+}
+
+.ring:nth-child(3) {
+    animation-delay: 1.2s;
+}
+
+@keyframes ring-pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+.phone-icon-box {
+    position: relative;
+    z-index: 10;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+    animation: phone-shake 0.8s infinite ease-in-out;
+}
+
+.phone-icon-box svg {
+    width: 36px;
+    height: 36px;
+}
+
+@keyframes phone-shake {
+    0%, 100% { transform: rotate(0); }
+    10%, 30%, 50%, 70%, 90% { transform: rotate(-15deg); }
+    20%, 40%, 60%, 80% { transform: rotate(15deg); }
+}
+
+.call-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+}
+
+.call-btn {
+    flex: 1;
+    border: none;
+    border-radius: 15px;
+    padding: 16px;
+    font-size: 22px;
+    font-weight: 700;
+    cursor: pointer;
+    color: white;
+    max-width: 200px;
+}
+
+.call-btn.hangup {
+    background: var(--danger);
+    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
+}

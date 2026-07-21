@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>利用者様クライアント - Nursing Care AI</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top status bar -->
+        <header class="header">
+            <div id="room-badge" class="badge">確認中...</div>
+            <div id="connection-status" class="status-dot offline"></div>
+        </header>
+
+        <!-- Main UI: Friendly Avatar and Big Button -->
+        <main class="main-content">
+            <!-- AI Wave Avatar -->
+            <div class="avatar-container">
+                <div id="ai-avatar" class="avatar-circle idle">
+                    <div class="inner-circle"></div>
+                    <div class="wave wave1"></div>
+                    <div class="wave wave2"></div>
+                </div>
+            </div>
+
+            <!-- Legible Status text -->
+            <h1 id="status-text" class="status-message">接続しています...</h1>
+
+            <!-- The Big Button -->
+            <div class="button-container">
+                <button id="mic-btn" class="huge-mic-btn" disabled>
+                    <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
+        </main>
+
+        <!-- Text Display (Optional transcription log) -->
+        <footer class="footer">
+            <div id="subtitle-box" class="subtitle-text"></div>
+        </footer>
+
+        <!-- Terminal Register Overlay (if not bound to a user) -->
+        <div id="register-overlay" class="modal-overlay hidden">
+            <div class="modal-card">
+                <h2>端末の登録が必要です</h2>
+                <p>この端末はまだ利用者に紐付けられていません。</p>
+                <div class="terminal-id-box">
+                    <span>この端末のID:</span>
+                    <strong id="display-terminal-id">-</strong>
+                </div>
+                <p class="instruction">スタッフステーション画面で、このIDを新しい利用者に登録してください。</p>
+                <button id="retry-btn" class="modal-btn">再接続</button>
+            </div>
+        </div>
+
+        <!-- Intercom Call Overlay (Pattern A) -->
+        <div id="intercom-overlay" class="modal-overlay hidden">
+            <div class="modal-card call-card">
+                <div class="ringing-animation">
+                    <div class="ring"></div>
+                    <div class="ring"></div>
+                    <div class="ring"></div>
+                    <div class="phone-icon-box">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/>
+                        </svg>
+                    </div>
+                </div>
+                <h2 id="call-status">スタッフから呼び出し中...</h2>
+                <div class="call-actions">
+                    <button id="hangup-btn" class="call-btn hangup">切る</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

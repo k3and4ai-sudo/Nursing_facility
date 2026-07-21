@@ -1,0 +1,23 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database & Encryption Keys
+*.db
+backend/*.db
+backend/.enc_key
+backend/audio_temp/
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
