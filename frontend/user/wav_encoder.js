@@ -36,11 +36,16 @@ class WavAudioRecorder {
 
             // Initialize AudioContext
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.audioContext.state === "suspended") {
+                await this.audioContext.resume();
+            }
+
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
             
             // Create AnalyserNode for Oscilloscope Waveform
             this.analyser = this.audioContext.createAnalyser();
             this.analyser.fftSize = 512;
+            this.analyser.smoothingTimeConstant = 0.5;
             source.connect(this.analyser);
 
             // Create ScriptProcessor (buffer size 4096, 1 input channel, 1 output channel)
@@ -63,7 +68,7 @@ class WavAudioRecorder {
             };
 
             this.isRecording = true;
-            console.log("Audio recording started...");
+            console.log("Audio recording started with Analyser active...");
         } catch (err) {
             console.error("Failed to start audio recording:", err);
             throw err;

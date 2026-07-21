@@ -382,21 +382,24 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     })
                     
                 else:
-                    # 2. General Conversation (with RAG memory)
+                    # 2. General Conversation (Fast Ollama query)
                     history = db.get_chat_history(user_id, limit=6)
-                    # Search long-term memory
-                    context = rag.get_relevant_context(user_id, transcribed_text, limit=2)
                     
-                    # Query Gemma
-                    ai_reply = query_ollama_chat(user, history, transcribed_text, context)
+                    # Query Gemma for chat reply
+                    ai_reply = query_ollama_chat(user, history, transcribed_text, "")
                     
-                    # Save AI reply
+                    # Save AI reply to DB
                     db.add_chat_message(user_id, "ai", ai_reply)
                     
-                    # Save memory for future RAG query
-                    rag.store_conversation_memory(user_id, transcribed_text, ai_reply)
+                    # Generate Speech and send back to client IMMEDIATELY for ultra-low latency
+                    audio_res = speech.synthesize_speech(ai_reply)
+                    await websocket.send_json({
+                        "type": "chat_response",
+                        "text": ai_reply,
+                        "audio": base64.b64encode(audio_res).decode("utf-8")
+                    })
                     
-                    # Broadcast to staff
+                    # Broadcast to staff console
                     await manager.broadcast_to_staff({
                         "type": "user_chat",
                         "user_id": user_id,
@@ -404,14 +407,12 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                         "message": ai_reply,
                         "timestamp": db.datetime.now().isoformat()
                     })
-                    
-                    # Generate Speech
-                    audio_res = speech.synthesize_speech(ai_reply)
-                    await websocket.send_json({
-                        "type": "chat_response",
-                        "text": ai_reply,
-                        "audio": base64.b64encode(audio_res).decode("utf-8")
-                    })
+
+                    # Save memory asynchronously after response has been sent
+                    try:
+                        rag.store_conversation_memory(user_id, transcribed_text, ai_reply)
+                    except Exception as e:
+                        print(f"Background RAG embedding skipped: {e}")
             
             # Pattern A: Real-time Audio Stream from User to Staff (Intercom)
             elif msg_type == "audio_stream":

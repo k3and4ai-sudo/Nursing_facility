@@ -11,10 +11,11 @@ def get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
         import whisper
-        # Using cpu or gpu automatically
-        print(f"Loading Whisper model: {WHISPER_MODEL_NAME}...")
-        _whisper_model = whisper.load_model(WHISPER_MODEL_NAME)
-        print("Whisper model loaded successfully.")
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading Whisper model '{WHISPER_MODEL_NAME}' on device '{device}'...")
+        _whisper_model = whisper.load_model(WHISPER_MODEL_NAME, device=device)
+        print(f"Whisper model '{WHISPER_MODEL_NAME}' loaded successfully on {device}.")
     return _whisper_model
 
 def decode_wav_to_float32(audio_bytes: bytes) -> np.ndarray:
@@ -55,17 +56,23 @@ def decode_wav_to_float32(audio_bytes: bytes) -> np.ndarray:
 
 def transcribe_audio(audio_bytes: bytes) -> str:
     """
-    Transcribes audio bytes (WAV format) using Whisper.
+    Transcribes audio bytes (WAV format) using Whisper on CUDA/CPU.
     """
     if not audio_bytes:
         return ""
     try:
+        import torch
         model = get_whisper_model()
-        # Decode WAV to numpy array to bypass ffmpeg
         audio_array = decode_wav_to_float32(audio_bytes)
         
-        # Transcribe with language set to Japanese
-        result = model.transcribe(audio_array, language="ja", fp16=False)
+        use_fp16 = torch.cuda.is_available()
+        initial_prompt = "介護施設の高齢者・利用者との日常会話。体温は36度5分、血圧は120の80、体重は50キロです。体調、食事、散歩。"
+        result = model.transcribe(
+            audio_array, 
+            language="ja", 
+            fp16=use_fp16,
+            initial_prompt=initial_prompt
+        )
         return result.get("text", "").strip()
     except Exception as e:
         print(f"Error during audio transcription: {e}")

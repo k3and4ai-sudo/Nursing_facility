@@ -9,12 +9,12 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Ollama settings
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:26b")
-# By default, use the main model for embeddings, but nomic-embed-text is recommended for speed
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "gemma4:26b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:2b")
+# By default, use the main model for embeddings, or nomic-embed-text for high performance
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "gemma2:2b")
 
 # Speech Processing
-WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "tiny")  # "tiny", "base", "small" etc.
+WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "small")  # "small", "base", "medium" etc.
 TTS_ENGINE = os.getenv("TTS_ENGINE", "gtts")  # "gtts" or "local" (mock/system)
 
 # Vital Sign Thresholds (Alert limits)

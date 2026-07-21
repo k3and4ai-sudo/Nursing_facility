@@ -242,6 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Oscilloscope Waveform Animation Frame Loop
+    let wavePhase = 0;
     function drawOscilloscopeWaveform() {
         if (!isRecording || !recorder || !canvasCtx) {
             if (waveformAnimFrame) cancelAnimationFrame(waveformAnimFrame);
@@ -254,19 +255,52 @@ document.addEventListener("DOMContentLoaded", () => {
         const dataArray = new Uint8Array(bufferLength);
         recorder.getWaveformData(dataArray);
 
-        canvasCtx.fillStyle = "#0f172a";
-        canvasCtx.fillRect(0, 0, pWaveformCanvas.width, pWaveformCanvas.height);
+        // Ensure canvas width/height matches display size
+        if (pWaveformCanvas.width !== pWaveformCanvas.clientWidth) {
+            pWaveformCanvas.width = pWaveformCanvas.clientWidth || 360;
+            pWaveformCanvas.height = pWaveformCanvas.clientHeight || 80;
+        }
 
+        const width = pWaveformCanvas.width;
+        const height = pWaveformCanvas.height;
+
+        canvasCtx.fillStyle = "#0f172a";
+        canvasCtx.fillRect(0, 0, width, height);
+
+        // Draw grid lines for oscilloscope aesthetic
+        canvasCtx.strokeStyle = "rgba(56, 189, 248, 0.15)";
+        canvasCtx.lineWidth = 1;
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(0, height / 2);
+        canvasCtx.lineTo(width, height / 2);
+        canvasCtx.stroke();
+
+        // Calculate audio amplitude
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            const sample = Math.abs(dataArray[i] - 128);
+            sum += sample;
+        }
+        const avgAmplitude = sum / bufferLength;
+
+        // Oscilloscope Wave path
         canvasCtx.lineWidth = 3;
-        canvasCtx.strokeStyle = "#38bdf8"; // Glowing cyan oscilloscope line
+        canvasCtx.strokeStyle = avgAmplitude > 2 ? "#38bdf8" : "#818cf8"; // Cyan when speaking, Indigo when background
+        canvasCtx.shadowBlur = 10;
+        canvasCtx.shadowColor = avgAmplitude > 2 ? "#0284c7" : "#4f46e5";
         canvasCtx.beginPath();
 
-        const sliceWidth = pWaveformCanvas.width * 1.0 / bufferLength;
+        const sliceWidth = width * 1.0 / bufferLength;
         let x = 0;
+        wavePhase += 0.15;
 
         for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 128.0;
-            const y = v * pWaveformCanvas.height / 2;
+            let v = (dataArray[i] - 128) / 128.0;
+            // Add subtle sine pulse if amplitude is zero
+            if (avgAmplitude < 1) {
+                v = Math.sin(i * 0.1 + wavePhase) * 0.1;
+            }
+            const y = (height / 2) + (v * height * 0.45);
 
             if (i === 0) {
                 canvasCtx.moveTo(x, y);
@@ -277,8 +311,9 @@ document.addEventListener("DOMContentLoaded", () => {
             x += sliceWidth;
         }
 
-        canvasCtx.lineTo(pWaveformCanvas.width, pWaveformCanvas.height / 2);
+        canvasCtx.lineTo(width, height / 2);
         canvasCtx.stroke();
+        canvasCtx.shadowBlur = 0; // Reset shadow
     }
 
     // 2. STAFF MODE LOGIC
