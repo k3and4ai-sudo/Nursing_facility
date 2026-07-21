@@ -85,6 +85,8 @@ class WavAudioRecorder {
     getWaveformData(dataArray) {
         if (this.analyser) {
             this.analyser.getByteTimeDomainData(dataArray);
+        } else if (dataArray && dataArray.fill) {
+            dataArray.fill(128);
         }
     }
 

@@ -253,7 +253,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const bufferLength = 256;
         const dataArray = new Uint8Array(bufferLength);
-        recorder.getWaveformData(dataArray);
+        if (recorder && typeof recorder.getWaveformData === "function") {
+            recorder.getWaveformData(dataArray);
+        } else {
+            dataArray.fill(128);
+        }
 
         // Fixed canvas resolution for rendering
         if (!pWaveformCanvas.width || pWaveformCanvas.width !== 360) {

@@ -82,7 +82,7 @@ import re
 
 def remove_emojis(text: str) -> str:
     """
-    Removes emojis, pictographs, and special symbols for clean TTS reading.
+    Removes ONLY emojis without touching Japanese Kanji, Hiragana, or Katakana.
     """
     if not text:
         return ""
@@ -92,14 +92,15 @@ def remove_emojis(text: str) -> str:
         "\U0001F300-\U0001F5FF"  # symbols & pictographs
         "\U0001F680-\U0001F6FF"  # transport & map symbols
         "\U0001F1E0-\U0001F1FF"  # flags
-        "\U00002702-\U000027B0"  # dingbats
-        "\U000024C2-\U0001F251"
         "\U0001F900-\U0001F9FF"  # supplemental symbols
-        "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended
+        "\U0001FA00-\U0001FAFF"  # extended symbols
+        "\u2600-\u26FF"          # misc symbols
+        "\u2700-\u27BF"          # dingbats
         "]+",
         flags=re.UNICODE
     )
-    return emoji_pattern.sub('', text).strip()
+    cleaned = emoji_pattern.sub('', text).strip()
+    return cleaned if cleaned else text
 
 def synthesize_speech(text: str) -> bytes:
     """
