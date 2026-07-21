@@ -213,9 +213,16 @@ def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_c
     }
     dem_desc = dementia_info.get(user["dementia_level"], "")
     
+    is_first_turn = (len(chat_history) == 0)
+    
+    if is_first_turn:
+        name_instruction = f"利用者の名前は「{user['name']}」様です。最初の会話ですので、「{user['name']}さん、こんにちは！」のように名前を入れて温かく迎えてください。"
+    else:
+        name_instruction = "【重要】これは継続中の会話です。ユーザーの名前（「〇〇さん」「〇〇様」など）は絶対に使わないでください。名前を一切呼ばず、「そうですね」「はい」など自然な相槌から発言を開始してください。"
+
     # Construct System Prompt
     system_prompt = f"""あなたは介護施設の高齢者ケアに特化したAIアシスタントです。
-利用者の名前は「{user["name"]}」様です。
+{name_instruction}
 利用者の特徴: {dem_desc}
 AI対話時の注意点: {user["attention_points"]}
 申し送り・特記事項: {user["notes"]}
@@ -225,7 +232,6 @@ AI対話時の注意点: {user["attention_points"]}
 2. 認知症の特性を考慮し、優しく温かい口調で（「〜ですね」「〜ですよ」など）、簡潔に話してください。
 3. 過去の会話の記憶があれば、それを自然に会話に取り入れてください。
 4. 専門用語は使わず、親しみやすい日本語で対話してください。
-5. 【重要】毎回の発言の冒頭で相手の名前（「〇〇さん」「〇〇様」など）を絶対に連呼・連用しないでください。自然な相槌から対話を開始してください。
 
 {memory_context}
 """
@@ -253,10 +259,21 @@ AI対話時の注意点: {user["attention_points"]}
     try:
         response = requests.post(url, json=payload, timeout=25)
         response.raise_for_status()
-        return response.json().get("message", {}).get("content", "").strip()
+        ai_reply = response.json().get("message", {}).get("content", "").strip()
+        
+        # Post-processing: If not first turn, filter out any residual name prefixes
+        if not is_first_turn and user.get("name"):
+            full_name = user["name"]
+            parts = full_name.split()
+            first_name = parts[0] if parts else full_name
+            for n in [full_name, first_name]:
+                ai_reply = re.sub(rf"^{n}(さん|様|くん|ちゃん)?(、|。|\s|！|\!)?", "", ai_reply).strip()
+                ai_reply = re.sub(rf"{n}(さん|様|くん|ちゃん)", "", ai_reply).strip()
+                
+        return ai_reply if ai_reply else "はい、おっしゃる通りですね。どうぞお話しください。"
     except Exception as e:
         print(f"Ollama API query error: {e}")
-        return f"{user['name']}さん、お呼びですか？何かお手伝いできることはありますか？"
+        return "はい、おっしゃる通りですね。お話を聞かせてくださりありがとうございます。"
 
 # WebSocket Endpoint for User client
 @app.websocket("/ws/user/{terminal_id}")
