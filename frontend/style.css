@@ -1,0 +1,264 @@
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --bg-dark: #0f172a;
+    --card-dark: rgba(30, 41, 59, 0.85);
+    --text-dark: #f8fafc;
+    --border-dark: rgba(255, 255, 255, 0.1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body.theme-dark {
+    background-color: var(--bg-dark);
+    color: var(--text-dark);
+    font-family: 'Inter', 'Zen Kaku Gothic New', sans-serif;
+    min-height: 100vh;
+}
+
+body.theme-light {
+    background: linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%);
+    color: #1e293b;
+    font-family: 'Zen Maru Gothic', sans-serif;
+    min-height: 100vh;
+}
+
+/* LOGIN OVERLAY */
+.login-screen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.login-card {
+    background: #1e293b;
+    border: 1px solid var(--border-dark);
+    border-radius: 24px;
+    padding: 36px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.app-logo {
+    width: 48px;
+    height: 48px;
+    color: var(--primary);
+    margin-bottom: 8px;
+}
+
+.login-header h1 {
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.login-header p {
+    font-size: 13px;
+    color: #94a3b8;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+input, select {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--border-dark);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+}
+
+input:focus {
+    border-color: var(--primary);
+}
+
+.btn {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-block { width: 100%; }
+
+.login-error-msg {
+    color: var(--danger);
+    font-size: 13px;
+    text-align: center;
+    margin-top: 10px;
+}
+
+.demo-login-box {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-dark);
+}
+
+.demo-login-box span {
+    font-size: 11px;
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.demo-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.btn-demo {
+    background: rgba(255, 255, 255, 0.05);
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 8px;
+    border: 1px solid var(--border-dark);
+}
+
+.btn-demo:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* NAVBAR */
+.navbar {
+    height: 60px;
+    background: rgba(15, 23, 42, 0.8);
+    border-bottom: 1px solid var(--border-dark);
+    padding: 0 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.badge-role {
+    background: var(--primary);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 10px;
+}
+
+.user-name { font-weight: 700; }
+.btn-logout { background: rgba(255, 255, 255, 0.1); color: white; font-size: 12px; }
+
+/* PATIENT MODE (超大文字・シンプル操作) */
+.patient-app-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 32px;
+    text-align: center;
+}
+
+.patient-status {
+    font-size: 38px;
+    font-weight: 900;
+    color: #1e293b;
+}
+
+.huge-mic-btn {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    border: none;
+    background: var(--success);
+    color: white;
+    box-shadow: 0 12px 30px rgba(16, 185, 129, 0.4);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.huge-mic-btn svg { width: 80px; height: 80px; }
+.huge-mic-btn.recording { background: var(--danger); }
+
+.patient-guide {
+    font-size: 24px;
+    font-weight: 700;
+    color: #64748b;
+}
+
+.patient-subtitle {
+    font-size: 26px;
+    font-weight: 700;
+    background: white;
+    padding: 20px 30px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 600px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* AVATAR WAVE */
+.avatar-container { position: relative; width: 160px; height: 160px; }
+.avatar-circle { width: 100%; height: 100%; border-radius: 50%; background: white; position: relative; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.inner-circle { width: 70%; height: 70%; border-radius: 50%; background: var(--primary); }
+.avatar-circle.speaking .inner-circle { background: #3b82f6; }
+
+/* STAFF / FAMILY / BARBER BOARDS */
+.staff-dashboard, .family-dashboard, .barber-dashboard {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+.full-width { grid-column: span 2; }
+
+.card {
+    background: var(--card-dark);
+    border: 1px solid var(--border-dark);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.card h3 { font-size: 16px; font-weight: 700; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th, .data-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border-dark); }
+.hidden { display: none !important; }

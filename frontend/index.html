@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ケア・リンク (Care-Link) - 施設統合AIシステム</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Zen+Maru+Gothic:wght@700;900&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="user/wav_encoder.js"></script>
+</head>
+<body class="theme-dark">
+    <!-- 1. LOGIN SCREEN -->
+    <div id="login-overlay" class="login-screen-overlay">
+        <div class="login-card">
+            <div class="login-header">
+                <svg class="app-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4.5 16.5c-1.5 1.26-2.5 3.19-2.5 5.5h20c0-2.31-1-4.24-2.5-5.5"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <circle cx="12" cy="11" r="3"/>
+                </svg>
+                <h1>ケア・リンク</h1>
+                <p>介護施設統合AIプラットフォーム</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="user-code">ユーザーID (ユーザーコード)</label>
+                    <input type="text" id="user-code" required placeholder="例: patient01, staff01">
+                </div>
+                <div class="form-group">
+                    <label for="user-pass">パスワード</label>
+                    <input type="password" id="user-pass" required placeholder="パスワードを入力">
+                </div>
+                <button type="submit" id="login-btn" class="btn btn-primary btn-block">ログイン</button>
+                <div id="login-error" class="login-error-msg hidden">IDまたはパスワードが正しくありません</div>
+            </form>
+
+            <!-- Quick Demo Credentials for Fast Testing -->
+            <div class="demo-login-box">
+                <span>デモ用クイックログイン:</span>
+                <div class="demo-buttons">
+                    <button type="button" class="btn btn-demo" data-user="patient01" data-pass="patient123">👴 利用者</button>
+                    <button type="button" class="btn btn-demo" data-user="staff01" data-pass="staff123">👩‍⚕️ スタッフ</button>
+                    <button type="button" class="btn btn-demo" data-user="family01" data-pass="family123">👨‍👩‍👧 ご家族</button>
+                    <button type="button" class="btn btn-demo" data-user="barber01" data-pass="barber123">💈 訪問理容</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="app-wrapper" class="hidden">
+        
+        <!-- Top Navigation Bar (Shared) -->
+        <header class="navbar">
+            <div class="navbar-brand">
+                <span id="role-badge" class="badge-role">利用者モード</span>
+                <span id="user-display-name" class="user-name">-</span>
+            </div>
+            <button id="logout-btn" class="btn btn-logout">ログアウト</button>
+        </header>
+
+        <!-- 2. MODE: PATIENT (利用者モード) -->
+        <section id="mode-patient" class="mode-view hidden">
+            <div class="patient-app-container">
+                <div class="avatar-container">
+                    <div id="p-ai-avatar" class="avatar-circle idle">
+                        <div class="inner-circle"></div>
+                        <div class="wave wave1"></div>
+                        <div class="wave wave2"></div>
+                    </div>
+                </div>
+                <h1 id="p-status-text" class="patient-status">お話しする準備ができました</h1>
+                <button id="p-mic-btn" class="huge-mic-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                </button>
+                <p id="p-guide-text" class="patient-guide">ボタンを１回押して、お話ししてください</p>
+                <div id="p-subtitle-box" class="patient-subtitle"></div>
+            </div>
+        </section>
+
+        <!-- 3. MODE: STAFF (介護スタッフモード) -->
+        <section id="mode-staff" class="mode-view hidden">
+            <div class="staff-dashboard">
+                <div class="card full-width">
+                    <h3>🚨 アクティブアラート（緊急警告）</h3>
+                    <div id="s-alert-list" class="alert-container-list">
+                        <div class="no-alerts-msg">現在、異常値アラートは発生していません。</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>📋 最近測定されたバイタル情報</h3>
+                    <table class="data-table">
+                        <thead><tr><th>部屋</th><th>氏名</th><th>時間</th><th>体温</th><th>血圧</th><th>体重</th></tr></thead>
+                        <tbody id="s-vitals-tbody"><tr><td colspan="6" class="text-center">データ読み込み中...</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <h3>🧠 本日の会話要約・感情分析</h3>
+                    <div id="s-summary-list" class="summary-cards-container">
+                        <div class="no-data-msg">本日の会話要約はありません</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. MODE: FAMILY (ご家族モード) -->
+        <section id="mode-family" class="mode-view hidden">
+            <div class="family-dashboard">
+                <div class="card">
+                    <h3>👴 本日のご様子・バイタル情報</h3>
+                    <div class="family-status-box">
+                        <div class="status-row"><span>対象者:</span> <strong id="f-patient-name">山田 太郎 様</strong></div>
+                        <div class="status-row"><span>体温:</span> <strong id="f-temp">36.5 ℃</strong></div>
+                        <div class="status-row"><span>血圧:</span> <strong id="f-bp">118/75 mmHg</strong></div>
+                        <div class="status-row"><span>ご機嫌状態:</span> <span class="sentiment-badge positive" id="f-mood">お元気に会話されています</span></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>📅 面会予約 (Googleカレンダー連動)</h3>
+                    <form id="f-visit-form" class="standard-form">
+                        <div class="form-group">
+                            <label>希望面会日時</label>
+                            <input type="datetime-local" id="f-visit-time" required>
+                        </div>
+                        <div class="form-group">
+                            <label>訪問人数・メッセージ</label>
+                            <input type="text" id="f-visit-msg" placeholder="例: 家族2名で面会に伺います">
+                        </div>
+                        <button type="submit" class="btn btn-primary">面会予約を送信</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. MODE: BARBER (訪問理容・美容師モード) -->
+        <section id="mode-barber" class="mode-view hidden">
+            <div class="barber-dashboard">
+                <div class="card">
+                    <h3>💈 本日の理美容 予約・施術リスト</h3>
+                    <div class="barber-list">
+                        <div class="barber-item">
+                            <div class="details">
+                                <h4>101号室 山田 太郎 様 (85歳)</h4>
+                                <p>メニュー: <strong>カット ＋ 顔剃り</strong></p>
+                                <p class="caution-note">⚠️ 姿勢・認知症注意点: 首を後ろに倒すのが困難なため、浅めの傾斜で洗髪してください。</p>
+                            </div>
+                            <button class="btn btn-primary btn-sm finish-barber-btn">施術完了を報告</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</body>
+</html>

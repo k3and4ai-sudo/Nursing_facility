@@ -3,6 +3,7 @@ import json
 import numpy as np
 from datetime import datetime
 from backend.config import DB_PATH, encrypt_data, decrypt_data
+from backend.auth import hash_password, verify_password
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -88,10 +89,131 @@ def db_init():
                 content TEXT NOT NULL              -- Encrypted
             )
         """)
+
+        # 7. Groups table (Patient - Staff - Family bound group)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_name TEXT NOT NULL,
+                patient_id INTEGER,
+                FOREIGN KEY (patient_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # 8. User Accounts table (Auth & Role Management)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_code TEXT UNIQUE NOT NULL,    -- Login ID (e.g. staff01)
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT NOT NULL,                -- 'patient', 'staff', 'family', 'barber'
+                name TEXT NOT NULL,                -- Encrypted
+                group_id INTEGER,
+                terminal_id TEXT,
+                FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE SET NULL
+            )
+        """)
         
         conn.commit()
 
-# User Management Functions
+    # Seed default accounts if user_accounts table is empty
+    seed_default_accounts()
+
+def seed_default_accounts():
+    """Seeds default demo accounts for testing each role."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM user_accounts")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            # 1. Create a default patient and group
+            cursor.execute(
+                "INSERT INTO users (name, age, room_number, terminal_id, dementia_level, notes, attention_points) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (encrypt_data("山田 太郎"), 85, "101", "user_tablet_1", "mild", encrypt_data("要見守り"), encrypt_data("優しく傾聴"))
+            )
+            patient_id = cursor.lastrowid
+            
+            cursor.execute("INSERT INTO groups (group_name, patient_id) VALUES (?, ?)", ("山田様ケアグループ", patient_id))
+            group_id = cursor.lastrowid
+
+            # Default demo accounts
+            accounts = [
+                ("staff01", "staff123", "staff", "看護師 田中", group_id, None),
+                ("patient01", "patient123", "patient", "山田 太郎", group_id, "user_tablet_1"),
+                ("family01", "family123", "family", "山田 花子 (ご長女)", group_id, None),
+                ("barber01", "barber123", "barber", "訪問理容 鈴木", group_id, None)
+            ]
+
+            for user_code, password, role, name, g_id, t_id in accounts:
+                pwd_hash, salt = hash_password(password)
+                cursor.execute(
+                    """INSERT INTO user_accounts (user_code, password_hash, salt, role, name, group_id, terminal_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (user_code, pwd_hash, salt, role, encrypt_data(name), g_id, t_id)
+                )
+            conn.commit()
+            print("Default demo user accounts seeded successfully.")
+
+# Group Management
+def add_group(group_name: str, patient_id: int):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO groups (group_name, patient_id) VALUES (?, ?)", (group_name, patient_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_group(group_id: int):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM groups WHERE id = ?", (group_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+# User Account Management
+def add_user_account(user_code: str, password: str, role: str, name: str, group_id: int = None, terminal_id: str = None):
+    pwd_hash, salt = hash_password(password)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO user_accounts (user_code, password_hash, salt, role, name, group_id, terminal_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_code, pwd_hash, salt, role, encrypt_data(name), group_id, terminal_id)
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def authenticate_user_account(user_code: str, password: str):
+    """Authenticates a user_code and password. Returns user dict or None."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM user_accounts WHERE user_code = ?", (user_code,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        user_dict = dict(row)
+        if verify_password(password, user_dict["password_hash"], user_dict["salt"]):
+            user_dict["name"] = decrypt_data(user_dict["name"])
+            del user_dict["password_hash"]
+            del user_dict["salt"]
+            return user_dict
+    return None
+
+def get_user_account_by_code(user_code: str):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM user_accounts WHERE user_code = ?", (user_code,))
+        row = cursor.fetchone()
+        if row:
+            data = dict(row)
+            data["name"] = decrypt_data(data["name"])
+            del data["password_hash"]
+            del data["salt"]
+            return data
+    return None
+
+# Original User (Patient) Functions
 def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str):
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -234,7 +356,6 @@ def get_chat_history(user_id: int, limit: int = 50):
             data = dict(row)
             data["message"] = decrypt_data(data["message"])
             history.append(data)
-    # Return in chronological order
     return history[::-1]
 
 # Long-term Memory / RAG Functions
@@ -249,7 +370,6 @@ def add_memory(user_id: int, text_chunk: str, embedding_vector: list):
         conn.commit()
 
 def search_memories(user_id: int, query_vector: list, limit: int = 3):
-    """Calculates cosine similarity in python to find relevant past memories."""
     memories = []
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -277,7 +397,6 @@ def search_memories(user_id: int, query_vector: list, limit: int = 3):
         except Exception:
             continue
             
-    # Sort by similarity descending
     scored_memories.sort(key=lambda x: x[0], reverse=True)
     return [text for score, text in scored_memories[:limit] if score > 0.35]
 

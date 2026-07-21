@@ -29,6 +29,10 @@ app.add_middleware(
 )
 
 # Request Models
+class LoginRequest(BaseModel):
+    user_code: str
+    password: str
+
 class UserCreate(BaseModel):
     name: str
     age: int
@@ -52,6 +56,20 @@ class HandoverCreate(BaseModel):
     content: str
 
 # HTTP Endpoints
+
+@app.post("/api/auth/login")
+def login_user(login_data: LoginRequest):
+    user_acc = db.authenticate_user_account(login_data.user_code, login_data.password)
+    if not user_acc:
+        raise HTTPException(status_code=401, detail="ユーザーIDまたはパスワードが正しくありません")
+    return {
+        "status": "success",
+        "user_code": user_acc["user_code"],
+        "name": user_acc["name"],
+        "role": user_acc["role"],
+        "group_id": user_acc["group_id"],
+        "terminal_id": user_acc["terminal_id"]
+    }
 
 @app.post("/api/users")
 def create_user(user: UserCreate):
