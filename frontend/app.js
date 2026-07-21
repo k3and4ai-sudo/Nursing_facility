@@ -292,19 +292,22 @@ document.addEventListener("DOMContentLoaded", () => {
         // Oscilloscope Wave path
         canvasCtx.lineWidth = 3;
         canvasCtx.strokeStyle = avgAmplitude > 2 ? "#38bdf8" : "#818cf8"; // Cyan when speaking, Indigo when background
-        canvasCtx.shadowBlur = 10;
+        canvasCtx.shadowBlur = avgAmplitude > 2 ? 12 : 4;
         canvasCtx.shadowColor = avgAmplitude > 2 ? "#0284c7" : "#4f46e5";
         canvasCtx.beginPath();
 
         const sliceWidth = width * 1.0 / bufferLength;
         let x = 0;
         wavePhase += 0.15;
+        const gainFactor = 2.8; // Amplification for clear visual response
 
         for (let i = 0; i < bufferLength; i++) {
-            let v = (dataArray[i] - 128) / 128.0;
-            // Add subtle sine pulse if amplitude is zero
+            let v = ((dataArray[i] - 128) / 128.0) * gainFactor;
+            v = Math.max(-1, Math.min(1, v));
+
+            // Add subtle sine pulse if room is quiet
             if (avgAmplitude < 1) {
-                v = Math.sin(i * 0.1 + wavePhase) * 0.1;
+                v = Math.sin(i * 0.15 + wavePhase) * 0.08;
             }
             const y = (height / 2) + (v * height * 0.45);
 

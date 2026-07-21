@@ -51,9 +51,15 @@ class WavAudioRecorder {
             
             // Create AnalyserNode for Oscilloscope Waveform
             this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 512;
-            this.analyser.smoothingTimeConstant = 0.5;
+            this.analyser.fftSize = 256;
+            this.analyser.smoothingTimeConstant = 0.3;
             source.connect(this.analyser);
+
+            // Connect Analyser through a silent GainNode to destination to keep active in Chrome
+            const silentGain = this.audioContext.createGain();
+            silentGain.gain.value = 0;
+            this.analyser.connect(silentGain);
+            silentGain.connect(this.audioContext.destination);
 
             // Create ScriptProcessor (buffer size 4096, 1 input channel, 1 output channel)
             const bufferSize = 4096;
