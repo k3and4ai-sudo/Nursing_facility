@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import base64
 import requests
@@ -214,6 +215,7 @@ def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_c
     dem_desc = dementia_info.get(user["dementia_level"], "")
     
     is_first_turn = (len(chat_history) == 0)
+    current_time_str = db.datetime.now().strftime("%Y年%m月%d日 %H時%M分")
     
     if is_first_turn:
         name_instruction = f"利用者の名前は「{user['name']}」様です。最初の会話ですので、「{user['name']}さん、こんにちは！」のように名前を入れて温かく迎えてください。"
@@ -222,6 +224,7 @@ def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_c
 
     # Construct System Prompt
     system_prompt = f"""あなたは介護施設の高齢者ケアに特化したAIアシスタントです。
+現在の施設内時刻: {current_time_str}
 {name_instruction}
 利用者の特徴: {dem_desc}
 AI対話時の注意点: {user["attention_points"]}
@@ -230,8 +233,9 @@ AI対話時の注意点: {user["attention_points"]}
 対話時のルール:
 1. 相手の言葉を否定せず、傾聴、共感、受容の姿勢を徹底してください。
 2. 認知症の特性を考慮し、優しく温かい口調で（「〜ですね」「〜ですよ」など）、簡潔に話してください。
-3. 過去の会話の記憶があれば、それを自然に会話に取り入れてください。
-4. 専門用語は使わず、親しみやすい日本語で対話してください。
+3. 時間や日付を聞かれたら、現在の施設内時刻（{current_time_str}）を元に答えてください。
+4. 過去の会話の記憶があれば、それを自然に会話に取り入れてください。
+5. 専門用語は使わず、親しみやすい日本語で対話してください。
 
 {memory_context}
 """
@@ -270,10 +274,12 @@ AI対話時の注意点: {user["attention_points"]}
                 ai_reply = re.sub(rf"^{n}(さん|様|くん|ちゃん)?(、|。|\s|！|\!)?", "", ai_reply).strip()
                 ai_reply = re.sub(rf"{n}(さん|様|くん|ちゃん)", "", ai_reply).strip()
                 
-        return ai_reply if ai_reply else "はい、おっしゃる通りですね。どうぞお話しください。"
+        return ai_reply if ai_reply else "はい、どうぞお話しください。"
     except Exception as e:
+        import traceback
         print(f"Ollama API query error: {e}")
-        return "はい、おっしゃる通りですね。お話を聞かせてくださりありがとうございます。"
+        traceback.print_exc()
+        return "ただいまの時刻は " + db.datetime.now().strftime("%H時%M分") + " ですよ。お話ししてくださりありがとうございます。"
 
 # WebSocket Endpoint for User client
 @app.websocket("/ws/user/{terminal_id}")
