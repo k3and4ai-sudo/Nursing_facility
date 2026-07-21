@@ -16,6 +16,14 @@ class WavAudioRecorder {
         this.audioBuffers = [];
         this.recordingLength = 0;
 
+        // Check browser mediaDevices support & security origin
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            if (window.isSecureContext === false) {
+                throw new Error("SECURITY_ORIGIN_ERROR");
+            }
+            throw new Error("MEDIA_DEVICES_NOT_SUPPORTED");
+        }
+
         try {
             // Request microphone access
             this.mediaStream = await navigator.mediaDevices.getUserMedia({

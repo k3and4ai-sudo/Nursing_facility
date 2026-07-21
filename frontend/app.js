@@ -179,8 +179,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     pMicBtn.classList.add("recording");
                     setPatientState("listening");
                 } catch (err) {
+                    console.error("Microphone access error:", err);
                     setPatientState("ready");
-                    pStatusText.textContent = "マイクに接続できません";
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        pStatusText.textContent = "マイクが拒否されました（ブラウザのアドレスバー横で許可してください）";
+                    } else if (err.message === "SECURITY_ORIGIN_ERROR") {
+                        pStatusText.textContent = "http://localhost:8000 で接続してください（IPアドレス直接指定は制限されます）";
+                    } else if (err.name === "NotFoundError") {
+                        pStatusText.textContent = "マイク機器が見つかりません（マイクを接続してください）";
+                    } else {
+                        pStatusText.textContent = `マイクエラー: ${err.message || err.name || '接続不可'}`;
+                    }
                 }
             }
         };
