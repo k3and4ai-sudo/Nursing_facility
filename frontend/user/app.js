@@ -317,12 +317,17 @@ document.addEventListener("DOMContentLoaded", () => {
             
             try {
                 isRecording = true;
-                chunkAccumulator = [];
-                let lastChunkSendTime = Date.now();
-                
+                let isSpeaking = false;
+                let silenceStartTime = 0;
+                let speechBuffer = [];
+                const VOICE_THRESHOLD = 0.0025;
+                const SILENCE_DURATION_MS = 500; // 500ms of silence indicates end of utterance
+
                 recorder.onChunkCallback = (resampledChunk) => {
                     if (activeAudio && !activeAudio.paused && !activeAudio.ended) {
-                        chunkAccumulator = [];
+                        speechBuffer = [];
+                        isSpeaking = false;
+                        silenceStartTime = 0;
                         return;
                     }
                     
@@ -331,37 +336,49 @@ document.addEventListener("DOMContentLoaded", () => {
                         sum += resampledChunk[i] * resampledChunk[i];
                     }
                     const rms = Math.sqrt(sum / resampledChunk.length);
-
-                    if (rms > 0.003) {
-                        chunkAccumulator.push(resampledChunk);
-                    }
-                    
                     const now = Date.now();
-                    if (now - lastChunkSendTime >= 800 && chunkAccumulator.length > 0) {
-                        lastChunkSendTime = now;
-                        let totalLen = 0;
-                        for (let c of chunkAccumulator) totalLen += c.length;
-                        const merged = new Float32Array(totalLen);
-                        let offset = 0;
-                        for (let c of chunkAccumulator) {
-                            merged.set(c, offset);
-                            offset += c.length;
+
+                    if (rms > VOICE_THRESHOLD) {
+                        if (!isSpeaking) {
+                            isSpeaking = true;
+                            speechBuffer = [];
                         }
-                        chunkAccumulator = [];
-                        
-                        const wavBlob = recorder.encodeChunkToWav(merged);
-                        const reader = new FileReader();
-                        reader.readAsDataURL(wavBlob);
-                        reader.onloadend = () => {
-                            const b64 = reader.result.split(',')[1];
-                            if (ws && ws.readyState === WebSocket.OPEN && isRecording) {
-                                ws.send(JSON.stringify({
-                                    type: "bidi_audio",
-                                    audio: b64,
-                                    debug_mode: isDebugMode
-                                }));
+                        speechBuffer.push(resampledChunk);
+                        silenceStartTime = 0;
+                    } else if (isSpeaking) {
+                        // Pad silence trailing edge
+                        speechBuffer.push(resampledChunk);
+                        if (silenceStartTime === 0) {
+                            silenceStartTime = now;
+                        } else if (now - silenceStartTime >= SILENCE_DURATION_MS || speechBuffer.length >= 30) {
+                            // End of Speech (EOS) detected! Send complete utterance
+                            let totalLen = 0;
+                            for (let c of speechBuffer) totalLen += c.length;
+                            const merged = new Float32Array(totalLen);
+                            let offset = 0;
+                            for (let c of speechBuffer) {
+                                merged.set(c, offset);
+                                offset += c.length;
                             }
-                        };
+                            speechBuffer = [];
+                            isSpeaking = false;
+                            silenceStartTime = 0;
+                            
+                            const wavBlob = recorder.encodeChunkToWav(merged);
+                            const reader = new FileReader();
+                            reader.readAsDataURL(wavBlob);
+                            reader.onloadend = () => {
+                                const b64 = reader.result.split(',')[1];
+                                if (ws && ws.readyState === WebSocket.OPEN && isRecording) {
+                                    ws.send(JSON.stringify({
+                                        type: "bidi_audio",
+                                        audio: b64,
+                                        eos: true,
+                                        debug_mode: isDebugMode
+                                    }));
+                                }
+                            };
+                        }
                     }
                 };
 

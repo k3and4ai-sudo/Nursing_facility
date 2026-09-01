@@ -89,6 +89,15 @@ def is_japanese_speech(text: str) -> bool:
     if any(black in text.lower() for black in hallucination_blacklist):
         return False
     
+    # Filter out repetitive loop hallucinations (e.g., "お食事、散歩" or "散歩、散歩" repeated over and over)
+    words = [w for w in re.split(r'[、,。\s]+', text) if w]
+    if len(words) >= 4:
+        from collections import Counter
+        counts = Counter(words)
+        most_common_count = counts.most_common(1)[0][1]
+        if (most_common_count / len(words)) >= 0.35:
+            return False
+            
     jp_char_count = len(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', text))
     total_len = len(text)
     if total_len == 0:
@@ -115,13 +124,15 @@ def transcribe_audio(audio_bytes: bytes) -> str:
             return ""
 
         use_fp16 = torch.cuda.is_available()
-        initial_prompt = "介護施設の高齢者・利用者との日常会話。体温、血圧、お食事、散歩、こんにちは、ありがとう。"
+        initial_prompt = "介護施設での会話。"
         result = model.transcribe(
             audio_array, 
             language="ja", 
             fp16=use_fp16,
             initial_prompt=initial_prompt,
-            temperature=0.0
+            temperature=0.0,
+            no_speech_threshold=0.6,
+            condition_on_previous_text=False
         )
         text = result.get("text", "").strip()
         

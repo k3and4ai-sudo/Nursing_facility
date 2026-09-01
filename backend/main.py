@@ -236,7 +236,7 @@ AI対話時の注意点: {user["attention_points"]}
 対話時のルール:
 1. 相手の言葉を否定せず、傾聴、共感、受容の姿勢を徹底してください。
 2. 認知症の特性を考慮し、優しく温かい口調で（「〜ですね」「〜ですよ」など）、簡潔に話してください。
-3. 時間や日付を聞かれたら、現在の施設内時刻（{current_time_str}）を元に答えてください。
+3. ユーザーから時間や日付を直接質問された場合のみ、時刻（{current_time_str}）を答えてください。時間や日付を聞かれていない時は、絶対に文末に時刻や日付を付け足さないでください。
 4. 過去の会話の記憶があれば、それを自然に会話に取り入れてください。
 5. 専門用語は使わず、親しみやすい日本語で対話してください。
 
@@ -292,10 +292,10 @@ def anonymize_user_name(name: str) -> str:
     first_name = parts[-1] if len(parts) > 1 else name
     return f"{first_name}さん"
 
-def sanitize_gemini_response(text: str) -> str:
+def sanitize_gemini_response(text: str, is_time_requested: bool = False) -> str:
     """
     Strips disclaimer meta-text (e.g., '**注意:** この会話は...', '※注:...', '会話例:')
-    to ensure ONLY pure, warm spoken conversation is displayed and voiced.
+    and unwanted trailing facility timestamp additions unless time was requested.
     """
     if not text:
         return ""
@@ -305,6 +305,11 @@ def sanitize_gemini_response(text: str) -> str:
     match = re.search(pattern, text)
     if match:
         text = text[:match.start()].strip()
+
+    # Strip trailing unprompted facility time additions
+    if not is_time_requested:
+        text = re.sub(r'[\(（]?施設内?時刻[は:\s]*\d{4}年\d{2}月\d{2}日\s*\d{2}時\d{2}分です?[\)）\s]*[😊😃😄]*', '', text).strip()
+        text = re.sub(r'[\(（]?現在の?時間[は:\s]*\d{2}時\d{2}分です?[\)）\s]*[😊😃😄]*', '', text).strip()
     
     # Remove lingering markdown formatting
     text = re.sub(r'[\*\#\`\_\~]', '', text).strip()
@@ -337,7 +342,7 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
 1. 相手の言葉を否定せず、傾聴・共感・受容に努めてください。
 2. 簡潔で温かい日本語（「〜ですね」「〜ですよ」1〜2文の短文）で答えてください。
 3. 会話例・注意書き・注釈（『注意:』『注:』『意図的に...』など）は絶対に含めず、高齢者への直接の発話応答のみを返してください。
-4. 時間を聞かれたら {current_time_str} を答えてください。
+4. ユーザーから時間や日付を直接質問された場合のみ、時刻（{current_time_str}）を答えてください。時間や日付を聞かれていない時は、絶対に文末に時刻や日付を付け足さないでください。
 """
 
     gemini_key = os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
@@ -345,9 +350,6 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={gemini_key}"
             contents = []
-            contents.append({"role": "user", "parts": [{"text": system_prompt}]})
-            contents.append({"role": "model", "parts": [{"text": f"了解しました。{nickname}のお話に寄り添って対話します。"}]})
-            
             for msg in chat_history[-4:]:
                 role = "user" if msg["sender"] == "user" else "model"
                 contents.append({"role": role, "parts": [{"text": msg["message"]}]})
@@ -355,6 +357,9 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
             contents.append({"role": "user", "parts": [{"text": new_message}]})
 
             payload = {
+                "systemInstruction": {
+                    "parts": [{"text": system_prompt}]
+                },
                 "contents": contents,
                 "generationConfig": {
                     "temperature": 0.7,
@@ -365,13 +370,14 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
             if res.status_code == 200:
                 res_data = res.json()
                 text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                text = sanitize_gemini_response(text)
                 if text:
                     return f"✨ [Gemini Live] {text}"
         except Exception as e:
             print(f"Gemini API direct query fallback: {e}")
 
-    # Fallback / Debug Simulation when API Key is missing or debug testing
-    return f"✨ [Gemini Live デバッグ応答] {nickname}、お話ししてくれてありがとうございます！今日も穏やかな一日ですね。"
+    # Fallback to local Ollama (Gemma2) when API Key is missing or cloud query fails
+    return query_ollama_chat(user, chat_history, new_message, memory_context)
 
 def query_gemini_live_audio(user: dict, chat_history: list, audio_bytes: bytes, memory_context: str) -> dict:
     """
@@ -508,13 +514,14 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     bidi_buffers[terminal_id] = bytearray()
                     continue
 
+                is_eos = data.get("eos", False)
                 audio_b64 = data.get("audio")
                 if audio_b64:
                     chunk_bytes = base64.b64decode(audio_b64)
                     bidi_buffers[terminal_id].extend(chunk_bytes)
                     
-                    # When buffer reaches ~1.2s of audio (~38400 bytes)
-                    if len(bidi_buffers[terminal_id]) >= 38400 and not is_processing_speech.get(terminal_id, False):
+                    # Process full sentence utterance when client signals End of Speech (eos) or max buffer reached
+                    if (is_eos or len(bidi_buffers[terminal_id]) >= 96000) and len(bidi_buffers[terminal_id]) >= 12000 and not is_processing_speech.get(terminal_id, False):
                         is_processing_speech[terminal_id] = True
                         audio_bytes = bytes(bidi_buffers[terminal_id])
                         bidi_buffers[terminal_id].clear()
@@ -545,14 +552,17 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                                 "text": clean_text
                             })
 
-                            is_debug_mode = config.ENABLE_DEBUG_MODE and (data.get("debug_mode", False) or data.get("is_debug", False))
                             history = db.get_chat_history(user_id, limit=6)
-                            
                             llm_start_time = time.time()
-                            if is_debug_mode:
+                            
+                            # Use Gemini Live Chat Engine when debug mode or Gemini API Key is available
+                            if config.ENABLE_DEBUG_MODE or data.get("debug_mode", False) or data.get("is_debug", False) or config.GEMINI_API_KEY:
                                 ai_reply = await asyncio.to_thread(query_gemini_live_chat, user, history, clean_text, "")
                             else:
                                 ai_reply = await asyncio.to_thread(query_ollama_chat, user, history, clean_text, "")
+                            
+                            # Sanitize response to ensure no disclaimers or raw tags slip into DB or UI
+                            ai_reply = sanitize_gemini_response(ai_reply)
                             llm_time = time.time() - llm_start_time
                             
                             db.add_chat_message(user_id, "user", clean_text)
