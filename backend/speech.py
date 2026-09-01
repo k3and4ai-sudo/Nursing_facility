@@ -20,39 +20,84 @@ def get_whisper_model():
 
 def decode_wav_to_float32(audio_bytes: bytes) -> np.ndarray:
     """
-    Decodes raw WAV bytes to a 16kHz mono float32 numpy array.
-    This bypasses Whisper's internal ffmpeg dependency.
+    Safely decodes single or concatenated WAV byte buffers to a 16kHz mono float32 numpy array.
+    Strips embedded WAV headers if multiple WAV chunks were concatenated together.
     """
-    with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_file:
-        params = wav_file.getparams()
-        n_channels, sampwidth, framerate, n_frames = params[:4]
-        raw_data = wav_file.readframes(n_frames)
+    if not audio_bytes:
+        return np.array([], dtype=np.float32)
         
-        # Convert buffer to numpy array
-        if sampwidth == 2:
-            data = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
-        elif sampwidth == 1:
-            data = (np.frombuffer(raw_data, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
-        elif sampwidth == 4:
-            data = np.frombuffer(raw_data, dtype=np.int32).astype(np.float32) / 2147483648.0
+    chunks = []
+    raw_pos = 0
+    while True:
+        riff_idx = audio_bytes.find(b'RIFF', raw_pos)
+        if riff_idx == -1:
+            break
+        next_riff = audio_bytes.find(b'RIFF', riff_idx + 4)
+        if next_riff == -1:
+            wav_chunk = audio_bytes[riff_idx:]
+            raw_pos = len(audio_bytes)
         else:
-            raise ValueError(f"Unsupported sample width: {sampwidth}")
+            wav_chunk = audio_bytes[riff_idx:next_riff]
+            raw_pos = next_riff
+            
+        try:
+            with wave.open(io.BytesIO(wav_chunk), 'rb') as wav_file:
+                params = wav_file.getparams()
+                n_channels, sampwidth, framerate, n_frames = params[:4]
+                raw_data = wav_file.readframes(n_frames)
+                
+                if sampwidth == 2:
+                    data = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+                elif sampwidth == 1:
+                    data = (np.frombuffer(raw_data, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+                elif sampwidth == 4:
+                    data = np.frombuffer(raw_data, dtype=np.int32).astype(np.float32) / 2147483648.0
+                else:
+                    continue
+                
+                if n_channels > 1:
+                    data = data.reshape(-1, n_channels).mean(axis=1)
+                    
+                if framerate != 16000:
+                    new_length = int(len(data) * 16000 / framerate)
+                    data = np.interp(
+                        np.linspace(0, len(data) - 1, new_length),
+                        np.arange(len(data)),
+                        data
+                    ).astype(np.float32)
+                chunks.append(data)
+        except Exception as e:
+            print(f"Error parsing audio chunk: {e}")
+            
+    if not chunks:
+        return np.array([], dtype=np.float32)
         
-        # Convert to mono if stereo by averaging channels
-        if n_channels > 1:
-            data = data.reshape(-1, n_channels).mean(axis=1)
-            
-        # Resample to 16000Hz (Whisper's required sampling rate)
-        if framerate != 16000:
-            new_length = int(len(data) * 16000 / framerate)
-            # Linear interpolation resampling
-            data = np.interp(
-                np.linspace(0, len(data) - 1, new_length),
-                np.arange(len(data)),
-                data
-            ).astype(np.float32)
-            
-        return data
+    return np.concatenate(chunks)
+
+import re
+
+def is_japanese_speech(text: str) -> bool:
+    """
+    Validates if transcribed text is valid Japanese speech and filters out Whisper hallucinations.
+    """
+    if not text:
+        return False
+    hallucination_blacklist = [
+        "ご視聴", "チャンネル登録", "字幕", "amara.org", "bandits", "tässä", 
+        "capacity", "ogels", "マキム", "チンコ", "http", "www", "ごらんくだ", "ご覧くだ"
+    ]
+    if any(black in text.lower() for black in hallucination_blacklist):
+        return False
+    
+    jp_char_count = len(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', text))
+    total_len = len(text)
+    if total_len == 0:
+        return False
+    
+    if (jp_char_count / total_len) < 0.4:
+        return False
+        
+    return True
 
 def transcribe_audio(audio_bytes: bytes) -> str:
     """
@@ -65,18 +110,29 @@ def transcribe_audio(audio_bytes: bytes) -> str:
         model = get_whisper_model()
         audio_array = decode_wav_to_float32(audio_bytes)
         
+        # Audio energy check: if peak or RMS is near zero (silence), return empty
+        if len(audio_array) == 0 or np.max(np.abs(audio_array)) < 0.015:
+            return ""
+
         use_fp16 = torch.cuda.is_available()
-        initial_prompt = "介護施設の高齢者・利用者との日常会話。体温は36度5分、血圧は120の80、体重は50キロです。体調、食事、散歩。"
+        initial_prompt = "介護施設の高齢者・利用者との日常会話。体温、血圧、お食事、散歩、こんにちは、ありがとう。"
         result = model.transcribe(
             audio_array, 
             language="ja", 
             fp16=use_fp16,
-            initial_prompt=initial_prompt
+            initial_prompt=initial_prompt,
+            temperature=0.0
         )
-        return result.get("text", "").strip()
+        text = result.get("text", "").strip()
+        
+        if not is_japanese_speech(text):
+            print(f"Filtered out Whisper hallucinated text: '{text}'")
+            return ""
+            
+        return text
     except Exception as e:
         print(f"Error during audio transcription: {e}")
-        return "[音声認識エラー]"
+        return ""
 
 import re
 

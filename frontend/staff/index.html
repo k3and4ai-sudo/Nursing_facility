@@ -43,6 +43,14 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     <span>申し送り・スタッフチャット</span>
                 </button>
+                <button class="menu-btn" data-tab="prompts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <span>プロンプト雛形設定</span>
+                </button>
+                <button class="menu-btn" data-tab="barber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                    <span>訪問理美容管理</span>
+                </button>
             </nav>
             <div class="sidebar-footer">
                 <div class="user-info">
@@ -265,9 +273,12 @@
 
                     <!-- Right: Live Conversations & Override (Pattern B) -->
                     <div class="card flex-col flex-2">
-                        <div class="card-header selection-bar">
-                            <h3>👁️ AI対話の監視・割り込み送信</h3>
-                            <div id="active-monitor-badge" class="badge-sm">監視中: 山田様</div>
+                        <div class="card-header selection-bar" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3>👁️ AI対話の監視・割り込み送信</h3>
+                                <div id="active-monitor-badge" class="badge-sm" style="display: none;">監視中: 山田様</div>
+                            </div>
+                            <button id="live-line-btn" class="btn btn-line btn-sm" style="display: none;">家族へLINE連絡</button>
                         </div>
                         <div class="card-body chat-console-body">
                             <!-- Real-time Chat log between User and AI -->
@@ -334,10 +345,76 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Tab: Prompt Templates Library -->
+            <section id="tab-prompts" class="tab-content">
+                <div class="dashboard-grid">
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>📚 認知症対応プロンプト雛形ライブラリ (Gemini-Live / Ollama 共同利用)</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <p class="text-secondary mb-15">ワンタップで利用者の状態や認知症のレベルに合わせたAIの会話ペルソナを設定・カスタマイズできます。</p>
+                            <div id="prompt-templates-list" class="prompt-grid-container">
+                                <div class="text-center pad-20">プロンプト雛形を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Barber Management -->
+            <section id="tab-barber" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Reservation Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>✂️ 訪問理美容 予約登録</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="barber-form" class="standard-form">
+                                <div class="form-group">
+                                    <label for="b-user-id">対象利用者 *</label>
+                                    <select id="b-user-id" required>
+                                        <option value="">選択してください</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-date">予約日時 *</label>
+                                    <input type="datetime-local" id="b-date" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-menu">メニュー *</label>
+                                    <input type="text" id="b-menu" required placeholder="例: カット・顔剃り・シャンプー">
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-notes">姿勢・認知症の注意点</label>
+                                    <textarea id="b-notes" rows="2" placeholder="例: 首を後ろに傾けるのが難しいため角度注意。洗髪時声かけ要。"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">訪問理美容を予約</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Reservations List & Reports -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>💈 訪問理美容 予約一覧 & 施術報告</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="barber-reservations-list" class="reservation-list-box">
+                                <div class="text-center pad-20">予約情報を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
     <!-- Alert Sound Element -->
     <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto" loop></audio>
+
+    <script src="app.js"></script>
 </body>
 </html>

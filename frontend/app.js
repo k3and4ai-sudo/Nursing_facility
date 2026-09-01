@@ -30,12 +30,82 @@ document.addEventListener("DOMContentLoaded", () => {
     const pUserSpeechBox = document.getElementById("p-user-speech-box");
     const pUserSpeechText = document.getElementById("p-user-speech-text");
     
+    // Processing Status elements
+    const pProcessingIndicator = document.getElementById("p-processing-indicator");
+    const pLampStt = document.getElementById("p-lamp-stt");
+    const pLampLlm = document.getElementById("p-lamp-llm");
+    const pLampTts = document.getElementById("p-lamp-tts");
+    const pTimeStt = document.getElementById("p-time-stt");
+    const pTimeLlm = document.getElementById("p-time-llm");
+    const pTimeTts = document.getElementById("p-time-tts");
+    
     // Audio Recorder & Canvas Animation
     let recorder = null;
     let isRecording = false;
     let activeAudio = null;
     let waveformAnimFrame = null;
     const canvasCtx = pWaveformCanvas ? pWaveformCanvas.getContext("2d") : null;
+
+    // UI Elements - Server Status
+    const statusFrontend = document.getElementById("status-frontend");
+    const statusBackend = document.getElementById("status-backend");
+    const addressFrontend = document.getElementById("address-frontend");
+    const addressBackend = document.getElementById("address-backend");
+
+    async function checkServerHealth() {
+        // Dynamic Address Update
+        if (addressFrontend) {
+            addressFrontend.textContent = window.location.origin || "http://localhost:8080";
+        }
+        if (addressBackend) {
+            // Default backend API location is http://localhost:8000
+            const backendOrigin = window.location.port === "8000" ? window.location.origin : "http://localhost:8000";
+            addressBackend.textContent = backendOrigin;
+        }
+
+        // Frontend Check: Browser parsed HTML & JS, so Web server is active
+        if (statusFrontend) {
+            statusFrontend.className = "status-pill status-online";
+            statusFrontend.textContent = "🟢 起動中";
+        }
+
+        // Backend Check: Ping API endpoint
+        if (statusBackend) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const res = await fetch("/api/users", { method: "GET", cache: "no-store", signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (res.ok) {
+                    statusBackend.className = "status-pill status-online";
+                    statusBackend.textContent = "🟢 起動中";
+                } else {
+                    statusBackend.className = "status-pill status-offline";
+                    statusBackend.textContent = "🔴 停止中";
+                }
+            } catch (err) {
+                statusBackend.className = "status-pill status-offline";
+                statusBackend.textContent = "🔴 停止中";
+            }
+        }
+
+        // Fetch System Release Flags
+        try {
+            const infoRes = await fetch("/api/config/system_info");
+            if (infoRes.ok) {
+                const sysInfo = await infoRes.json();
+                const dbDemoBtn = document.querySelector('.btn-demo[data-user="DB"]');
+                if (dbDemoBtn) {
+                    dbDemoBtn.style.display = sysInfo.enable_debug_mode ? "inline-flex" : "none";
+                }
+            }
+        } catch (e) {}
+    }
+
+    // Run health check initially and periodically every 10s
+    checkServerHealth();
+    setInterval(checkServerHealth, 10000);
 
     // Restore Session if exists
     const savedSession = sessionStorage.getItem("care_link_session");
@@ -61,6 +131,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function performLogin(userCode, password) {
         loginError.classList.add("hidden");
+        if (userCode && userCode.toUpperCase() === "DB") {
+            localStorage.setItem("nursing_debug_mode", "true");
+            userCode = "patient01";
+            password = "patient123";
+        }
         try {
             const res = await fetch("/api/auth/login", {
                 method: "POST",
@@ -123,6 +198,24 @@ document.addEventListener("DOMContentLoaded", () => {
     function initPatientMode(user) {
         const terminalId = user.terminal_id || "user_tablet_1";
         recorder = new WavAudioRecorder();
+
+        function handlePatientProcessingStatus(status, sttTime, llmTime) {
+            if (status === "stt_start") {
+                pLampStt.className = "lamp-dot active-stt";
+                pLampLlm.className = "lamp-dot idle";
+                pLampTts.className = "lamp-dot idle";
+            } else if (status === "llm_start") {
+                pLampStt.className = "lamp-dot idle";
+                if (sttTime !== undefined && sttTime !== null) pTimeStt.textContent = parseFloat(sttTime).toFixed(2) + "秒";
+                pLampLlm.className = "lamp-dot active-llm";
+                pLampTts.className = "lamp-dot idle";
+            } else if (status === "tts_start") {
+                pLampStt.className = "lamp-dot idle";
+                pLampLlm.className = "lamp-dot idle";
+                if (llmTime !== undefined && llmTime !== null) pTimeLlm.textContent = parseFloat(llmTime).toFixed(2) + "秒";
+                pLampTts.className = "lamp-dot active-tts";
+            }
+        }
         
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         ws = new WebSocket(`${protocol}//${window.location.host}/ws/user/${terminalId}`);
@@ -137,12 +230,24 @@ document.addEventListener("DOMContentLoaded", () => {
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
-            if (data.type === "transcription_result") {
+            if (data.type === "processing_status") {
+                handlePatientProcessingStatus(data.status, data.stt_time, data.llm_time);
+            }
+            else if (data.type === "transcription_result") {
                 // Display user spoken transcription immediately
                 pUserSpeechBox.classList.remove("hidden");
                 pUserSpeechText.textContent = data.text;
             } 
             else if (data.type === "chat_response") {
+                // Finalize indicators
+                pLampStt.className = "lamp-dot idle";
+                pLampLlm.className = "lamp-dot idle";
+                pLampTts.className = "lamp-dot idle";
+                
+                if (data.stt_time !== undefined && data.stt_time !== null) pTimeStt.textContent = parseFloat(data.stt_time).toFixed(2) + "秒";
+                if (data.llm_time !== undefined && data.llm_time !== null) pTimeLlm.textContent = parseFloat(data.llm_time).toFixed(2) + "秒";
+                if (data.tts_time !== undefined && data.tts_time !== null) pTimeTts.textContent = parseFloat(data.tts_time).toFixed(2) + "秒";
+
                 setPatientState("speaking");
                 pSubtitleBox.textContent = data.text;
                 
@@ -160,6 +265,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 isRecording = false;
                 pMicBtn.classList.remove("recording");
                 setPatientState("thinking");
+                
+                // Reset and Show status indicators
+                pProcessingIndicator.classList.remove("hidden");
+                pLampStt.className = "lamp-dot idle";
+                pLampLlm.className = "lamp-dot idle";
+                pLampTts.className = "lamp-dot idle";
+                pTimeStt.textContent = "-";
+                pTimeLlm.textContent = "-";
+                pTimeTts.textContent = "-";
                 
                 const blob = recorder.stop();
                 if (blob && ws && ws.readyState === WebSocket.OPEN) {

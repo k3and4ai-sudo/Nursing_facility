@@ -1,4 +1,6 @@
 import os
+import asyncio
+import time
 import re
 import json
 import base64
@@ -9,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict
 
+import backend.config as config
 from backend.config import BASE_DIR, OLLAMA_URL, OLLAMA_MODEL, encrypt_data, decrypt_data
 import backend.database as db
 import backend.speech as speech
@@ -261,7 +264,7 @@ AI対話時の注意点: {user["attention_points"]}
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=25)
+        response = requests.post(url, json=payload, timeout=120)
         response.raise_for_status()
         ai_reply = response.json().get("message", {}).get("content", "").strip()
         
@@ -281,10 +284,197 @@ AI対話時の注意点: {user["attention_points"]}
         traceback.print_exc()
         return "ただいまの時刻は " + db.datetime.now().strftime("%H時%M分") + " ですよ。お話ししてくださりありがとうございます。"
 
+def anonymize_user_name(name: str) -> str:
+    """Converts full real name (e.g. 山田 太郎) into an anonymized nickname (e.g. たろうさん)."""
+    if not name:
+        return "利用者さん"
+    parts = name.split()
+    first_name = parts[-1] if len(parts) > 1 else name
+    return f"{first_name}さん"
+
+def sanitize_gemini_response(text: str) -> str:
+    """
+    Strips disclaimer meta-text (e.g., '**注意:** この会話は...', '※注:...', '会話例:')
+    to ensure ONLY pure, warm spoken conversation is displayed and voiced.
+    """
+    if not text:
+        return ""
+    
+    # Truncate anything starting from disclaimer markers
+    pattern = r'(\*\*注意|注意:|注:|※注|この会話は|意図的に|AIアシスタントが|認知症高齢者に対して|再認識することができる)'
+    match = re.search(pattern, text)
+    if match:
+        text = text[:match.start()].strip()
+    
+    # Remove lingering markdown formatting
+    text = re.sub(r'[\*\#\`\_\~]', '', text).strip()
+    if not text:
+        return "はい、聞こえていますよ。ゆっくりお話ししましょうね。"
+    return text
+
+def query_gemini_live_chat(user: dict, chat_history: list, new_message: str, memory_context: str) -> str:
+    """
+    Queries Gemini 2.0 API directly in Debug Mode for Gemini Live full-duplex conversational experience.
+    Enforces strict privacy anonymization rules before calling external cloud API.
+    """
+    nickname = anonymize_user_name(user.get("name", ""))
+    dementia_info = {
+        "none": "認知機能に問題ありません。",
+        "mild": "軽度の認知症があります。優しく共感的に応じてください。",
+        "moderate": "中等度の認知症があります。言葉はシンプルにし安心感を与えてください。",
+        "severe": "重度の認知症があります。受容と共感を最優先にしてください。"
+    }
+    dem_desc = dementia_info.get(user.get("dementia_level", "mild"), "")
+    current_time_str = db.datetime.now().strftime("%Y年%m月%d日 %H時%M分")
+
+    system_prompt = f"""あなたは介護施設の高齢者ケアに特化したGemini Live会話AIアシスタントです。
+【重要プライバシー規定】利用者の実名はクラウド送信禁止です。必ずニックネーム「{nickname}」として接してください。
+現在の施設時刻: {current_time_str}
+対象者の特徴: {dem_desc}
+AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
+
+ルール:
+1. 相手の言葉を否定せず、傾聴・共感・受容に努めてください。
+2. 簡潔で温かい日本語（「〜ですね」「〜ですよ」1〜2文の短文）で答えてください。
+3. 会話例・注意書き・注釈（『注意:』『注:』『意図的に...』など）は絶対に含めず、高齢者への直接の発話応答のみを返してください。
+4. 時間を聞かれたら {current_time_str} を答えてください。
+"""
+
+    gemini_key = os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={gemini_key}"
+            contents = []
+            contents.append({"role": "user", "parts": [{"text": system_prompt}]})
+            contents.append({"role": "model", "parts": [{"text": f"了解しました。{nickname}のお話に寄り添って対話します。"}]})
+            
+            for msg in chat_history[-4:]:
+                role = "user" if msg["sender"] == "user" else "model"
+                contents.append({"role": role, "parts": [{"text": msg["message"]}]})
+            
+            contents.append({"role": "user", "parts": [{"text": new_message}]})
+
+            payload = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 200
+                }
+            }
+            res = requests.post(url, json=payload, timeout=10)
+            if res.status_code == 200:
+                res_data = res.json()
+                text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if text:
+                    return f"✨ [Gemini Live] {text}"
+        except Exception as e:
+            print(f"Gemini API direct query fallback: {e}")
+
+    # Fallback / Debug Simulation when API Key is missing or debug testing
+    return f"✨ [Gemini Live デバッグ応答] {nickname}、お話ししてくれてありがとうございます！今日も穏やかな一日ですね。"
+
+def query_gemini_live_audio(user: dict, chat_history: list, audio_bytes: bytes, memory_context: str) -> dict:
+    """
+    Directly streams raw user audio bytes (WAV/PCM) to Google Gemini API using native inlineData audio understanding.
+    Ensures zero intermediate Whisper STT errors, maximum recognition quality, and strict privacy anonymization.
+    """
+    nickname = anonymize_user_name(user.get("name", ""))
+    dementia_info = {
+        "none": "認知機能に問題ありません。",
+        "mild": "軽度の認知症があります。優しく共感的に応じてください。",
+        "moderate": "中等度の認知症があります。言葉はシンプルにし安心感を与えてください。",
+        "severe": "重度の認知症があります。受容と共感を最優先にしてください。"
+    }
+    dem_desc = dementia_info.get(user.get("dementia_level", "mild"), "")
+    current_time_str = db.datetime.now().strftime("%Y年%m月%d日 %H時%M分")
+
+    system_prompt = f"""あなたは介護施設の高齢者ケアに特化したGemini Live会話AIアシスタントです。
+【重要プライバシー規定】利用者の実名はクラウド送信禁止です。必ずニックネーム「{nickname}」として接してください。
+現在の施設時刻: {current_time_str}
+対象者の特徴: {dem_desc}
+AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
+
+ルール:
+1. 相手の言葉を否定せず、傾聴・共感・受容に努めてください。
+2. 簡潔で温かい日本語（「〜ですね」「〜ですよ」）で答えてください。
+3. 時間を聞かれたら {current_time_str} を答えてください。
+"""
+
+    gemini_key = os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={gemini_key}"
+            contents = []
+            contents.append({"role": "user", "parts": [{"text": system_prompt}]})
+            contents.append({"role": "model", "parts": [{"text": f"了解しました。{nickname}のお話に寄り添って対話します。"}]})
+            
+            for msg in chat_history[-4:]:
+                role = "user" if msg["sender"] == "user" else "model"
+                contents.append({"role": role, "parts": [{"text": msg["message"]}]})
+            
+            # Send raw audio natively to Gemini via inlineData!
+            contents.append({
+                "role": "user", 
+                "parts": [
+                    {"inlineData": {"mimeType": "audio/wav", "data": audio_b64}}
+                ]
+            })
+
+            payload = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 250
+                }
+            }
+            res = requests.post(url, json=payload, timeout=12)
+            if res.status_code == 200:
+                res_data = res.json()
+                text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if text:
+                    return {
+                        "user_transcript": f"🎤 Gemini Live 直通音声入力 ({nickname})",
+                        "ai_reply": f"✨ [Gemini Live] {text}"
+                    }
+        except Exception as e:
+            print(f"Gemini Multimodal direct audio query fallback: {e}")
+
+    # Fallback / Debug Simulation when API Key is missing or debug testing
+    return {
+        "user_transcript": f"🎤 Gemini Live 直通音声入力 ({nickname})",
+        "ai_reply": f"✨ [Gemini Live デバッグ応答] {nickname}、直接お話しできて嬉しいです！今日も穏やかな一日ですね。"
+    }
+
+def clean_text_for_tts(text: str) -> str:
+    """Strips debug tags, markdown formatting, and emojis for natural spoken TTS audio."""
+    if not text:
+        return ""
+    # Remove prefix tags like ✨ [Gemini Live] or ✨ [Gemini Live デバッグ応答]
+    text = re.sub(r"✨?\s*\[Gemini Live[^\]]*\]\s*", "", text)
+    # Remove markdown bold/italics
+    text = re.sub(r"[*_~`#]", "", text)
+    return text.strip()
+
+@app.get("/api/config/system_info")
+def api_get_system_info():
+    """Returns system capabilities and debug release flags for frontend UI control."""
+    return {
+        "enable_debug_mode": config.ENABLE_DEBUG_MODE,
+        "gemini_api_configured": bool(os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY))
+    }
+
+# Global Bidi Audio Buffer map for full-duplex streaming
+bidi_buffers: Dict[str, bytearray] = {}
+is_processing_speech: Dict[str, bool] = {}
+
 # WebSocket Endpoint for User client
 @app.websocket("/ws/user/{terminal_id}")
 async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
     await manager.connect_user(terminal_id, websocket)
+    bidi_buffers[terminal_id] = bytearray()
+    is_processing_speech[terminal_id] = False
     
     # Check if a user is bound to this terminal
     user = db.get_user_by_terminal(terminal_id)
@@ -304,19 +494,125 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
             data = await websocket.receive_json()
             msg_type = data.get("type")
             
-            # User speaking / inputting text
-            if msg_type == "audio_input":
+            # Stop stream and clear buffer when user turns off mic
+            if msg_type == "stop_bidi_stream":
+                bidi_buffers[terminal_id] = bytearray()
+                is_processing_speech[terminal_id] = False
+                print(f"Bidi audio stream stopped and flushed for terminal {terminal_id}")
+                continue
+
+            # Pattern Full-Duplex: Continuous Bidi Audio Stream Chunk from Client
+            if msg_type == "bidi_audio":
+                # Drop chunk if backend is currently processing an AI response to prevent buffer backlog loop
+                if is_processing_speech.get(terminal_id, False):
+                    bidi_buffers[terminal_id] = bytearray()
+                    continue
+
+                audio_b64 = data.get("audio")
+                if audio_b64:
+                    chunk_bytes = base64.b64decode(audio_b64)
+                    bidi_buffers[terminal_id].extend(chunk_bytes)
+                    
+                    # When buffer reaches ~1.2s of audio (~38400 bytes)
+                    if len(bidi_buffers[terminal_id]) >= 38400 and not is_processing_speech.get(terminal_id, False):
+                        is_processing_speech[terminal_id] = True
+                        audio_bytes = bytes(bidi_buffers[terminal_id])
+                        bidi_buffers[terminal_id].clear()
+                        
+                        stt_start_time = time.time()
+                        transcribed_text = await asyncio.to_thread(speech.transcribe_audio, audio_bytes)
+                        stt_time = time.time() - stt_start_time
+                        clean_text = transcribed_text.strip() if transcribed_text else ""
+                        
+                        if (clean_text 
+                            and clean_text != "[音声認識エラー]" 
+                            and len(clean_text) >= 2
+                            and not clean_text.startswith("ご視聴") 
+                            and not clean_text.startswith("視聴いただき")
+                            and not clean_text.startswith("チャンネル登録")):
+                            
+                            # Suppress duplicate consecutive transcriptions
+                            history_check = db.get_chat_history(user_id, limit=2)
+                            if history_check and any(h.get("message") == clean_text for h in history_check if h.get("sender") == "user"):
+                                print(f"Suppressing duplicate full-duplex transcription: '{clean_text}'")
+                                bidi_buffers[terminal_id] = bytearray()
+                                is_processing_speech[terminal_id] = False
+                                continue
+
+                            # 1. Stream the actual transcribed speech text to the client UI (#user-speech-box)
+                            await websocket.send_json({
+                                "type": "transcription_result",
+                                "text": clean_text
+                            })
+
+                            is_debug_mode = config.ENABLE_DEBUG_MODE and (data.get("debug_mode", False) or data.get("is_debug", False))
+                            history = db.get_chat_history(user_id, limit=6)
+                            
+                            llm_start_time = time.time()
+                            if is_debug_mode:
+                                ai_reply = await asyncio.to_thread(query_gemini_live_chat, user, history, clean_text, "")
+                            else:
+                                ai_reply = await asyncio.to_thread(query_ollama_chat, user, history, clean_text, "")
+                            llm_time = time.time() - llm_start_time
+                            
+                            db.add_chat_message(user_id, "user", clean_text)
+                            db.add_chat_message(user_id, "ai", ai_reply)
+                            
+                            await manager.broadcast_to_staff({
+                                "type": "user_chat",
+                                "user_id": user_id,
+                                "sender": "ai",
+                                "message": ai_reply,
+                                "timestamp": db.datetime.now().isoformat()
+                            })
+                            
+                            tts_start_time = time.time()
+                            tts_text = clean_text_for_tts(ai_reply)
+                            audio_res = await asyncio.to_thread(speech.synthesize_speech, tts_text)
+                            tts_time = time.time() - tts_start_time
+                            
+                            # 2. Stream AI response text & audio to client UI (#ai-response-box)
+                            await websocket.send_json({
+                                "type": "chat_response",
+                                "text": ai_reply,
+                                "audio": base64.b64encode(audio_res).decode("utf-8"),
+                                "stt_time": stt_time,
+                                "llm_time": llm_time,
+                                "tts_time": tts_time,
+                                "full_duplex": True
+                            })
+                            bidi_buffers[terminal_id] = bytearray()
+                            is_processing_speech[terminal_id] = False
+                        else:
+                            bidi_buffers[terminal_id] = bytearray()
+                            is_processing_speech[terminal_id] = False
+
+            # User speaking / inputting text (Turn-based fallback)
+            elif msg_type == "audio_input":
                 # Audio base64 string sent from client
                 audio_b64 = data.get("audio")
                 audio_bytes = base64.b64decode(audio_b64)
                 
+                # Send status to client: STT started
+                await websocket.send_json({
+                    "type": "processing_status",
+                    "status": "stt_start"
+                })
+                
                 # STT
-                transcribed_text = speech.transcribe_audio(audio_bytes)
+                stt_start_time = time.time()
+                transcribed_text = await asyncio.to_thread(speech.transcribe_audio, audio_bytes)
+                stt_time = time.time() - stt_start_time
+                
                 if not transcribed_text or transcribed_text.strip() == "[音声認識エラー]":
+                    tts_err = await asyncio.to_thread(speech.synthesize_speech, "うまく聞き取れませんでした。もう一度お話しいただけますか？")
                     await websocket.send_json({
                         "type": "chat_response",
                         "text": "うまく聞き取れませんでした。もう一度お話しいただけますか？",
-                        "audio": base64.b64encode(speech.synthesize_speech("うまく聞き取れませんでした。もう一度お話しいただけますか？")).decode("utf-8")
+                        "audio": base64.b64encode(tts_err).decode("utf-8"),
+                        "stt_time": stt_time,
+                        "llm_time": 0.0,
+                        "tts_time": 0.0
                     })
                     continue
                 
@@ -338,8 +634,16 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     "timestamp": db.datetime.now().isoformat()
                 })
                 
+                # Send status to client: LLM started (STT finished)
+                await websocket.send_json({
+                    "type": "processing_status",
+                    "status": "llm_start",
+                    "stt_time": stt_time
+                })
+                
                 # 1. Check if user is reporting vitals
-                vitals = vital_parser.extract_vitals_from_text(transcribed_text)
+                llm_start_time = time.time()
+                vitals = await asyncio.to_thread(vital_parser.extract_vitals_from_text, transcribed_text)
                 
                 has_vitals = any(v is not None for v in vitals.values())
                 
@@ -384,7 +688,17 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                         })
                     else:
                         confirm_text += " 今日も元気に過ごしましょうね。"
-                        
+                    
+                    llm_time = time.time() - llm_start_time
+                    
+                    # Send status to client: TTS started (LLM finished)
+                    await websocket.send_json({
+                        "type": "processing_status",
+                        "status": "tts_start",
+                        "stt_time": stt_time,
+                        "llm_time": llm_time
+                    })
+                    
                     # Save AI Message
                     db.add_chat_message(user_id, "ai", confirm_text)
                     
@@ -398,29 +712,57 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     })
                     
                     # Generate speech
-                    audio_res = speech.synthesize_speech(confirm_text)
+                    tts_start_time = time.time()
+                    audio_res = await asyncio.to_thread(speech.synthesize_speech, confirm_text)
+                    tts_time = time.time() - tts_start_time
+                    
                     await websocket.send_json({
                         "type": "chat_response",
                         "text": confirm_text,
-                        "audio": base64.b64encode(audio_res).decode("utf-8")
+                        "audio": base64.b64encode(audio_res).decode("utf-8"),
+                        "stt_time": stt_time,
+                        "llm_time": llm_time,
+                        "tts_time": tts_time
                     })
                     
                 else:
-                    # 2. General Conversation (Fast Ollama query)
+                    # 2. General Conversation (Ollama vs Gemini Live Debug Mode)
+                    is_debug_mode = config.ENABLE_DEBUG_MODE and (data.get("debug_mode", False) or data.get("is_debug", False))
                     history = db.get_chat_history(user_id, limit=6)
                     
-                    # Query Gemma for chat reply
-                    ai_reply = query_ollama_chat(user, history, transcribed_text, "")
+                    if is_debug_mode:
+                        # Query Gemini Live engine (Debug Mode)
+                        ai_reply = await asyncio.to_thread(query_gemini_live_chat, user, history, transcribed_text, "")
+                    else:
+                        # Query Gemma (Local Ollama) for chat reply
+                        ai_reply = await asyncio.to_thread(query_ollama_chat, user, history, transcribed_text, "")
+                    
+                    llm_time = time.time() - llm_start_time
+                    
+                    # Send status to client: TTS started (LLM finished)
+                    await websocket.send_json({
+                        "type": "processing_status",
+                        "status": "tts_start",
+                        "stt_time": stt_time,
+                        "llm_time": llm_time
+                    })
                     
                     # Save AI reply to DB
                     db.add_chat_message(user_id, "ai", ai_reply)
                     
-                    # Generate Speech and send back to client IMMEDIATELY for ultra-low latency
-                    audio_res = speech.synthesize_speech(ai_reply)
+                    # Generate Speech (cleansed of debug tags) and send back to client IMMEDIATELY
+                    tts_start_time = time.time()
+                    tts_text = clean_text_for_tts(ai_reply)
+                    audio_res = await asyncio.to_thread(speech.synthesize_speech, tts_text)
+                    tts_time = time.time() - tts_start_time
+                    
                     await websocket.send_json({
                         "type": "chat_response",
                         "text": ai_reply,
-                        "audio": base64.b64encode(audio_res).decode("utf-8")
+                        "audio": base64.b64encode(audio_res).decode("utf-8"),
+                        "stt_time": stt_time,
+                        "llm_time": llm_time,
+                        "tts_time": tts_time
                     })
                     
                     # Broadcast to staff console
@@ -545,7 +887,101 @@ async def websocket_staff_endpoint(websocket: WebSocket):
         print(f"Error in staff websocket: {e}")
         manager.disconnect_staff(websocket)
 
+# Prompt Templates API
+@app.get("/api/prompt_templates")
+def api_get_prompt_templates():
+    return db.get_all_prompt_templates()
+
+class PromptTemplateUpdate(BaseModel):
+    key_name: str
+    content: str
+
+@app.post("/api/prompt_templates")
+def api_update_prompt_template(req: PromptTemplateUpdate):
+    db.update_prompt_template(req.key_name, req.content)
+    return {"status": "success", "message": "プロンプト雛形を更新しました。"}
+
+# Barber (訪問理美容) API
+@app.get("/api/barber/reservations")
+def api_get_barber_reservations():
+    return db.get_barber_reservations()
+
+class BarberReservationCreate(BaseModel):
+    user_id: int
+    reservation_date: str
+    menu: str
+    notes: str
+
+@app.post("/api/barber/reservations")
+def api_create_barber_reservation(req: BarberReservationCreate):
+    res_id = db.add_barber_reservation(req.user_id, req.reservation_date, req.menu, req.notes)
+    return {"status": "success", "id": res_id}
+
+class BarberReportUpdate(BaseModel):
+    reservation_id: int
+    status: str
+    report: str
+
+@app.post("/api/barber/report")
+def api_update_barber_report(req: BarberReportUpdate):
+    db.update_barber_report(req.reservation_id, req.status, req.report)
+    return {"status": "success", "message": "施術報告を更新しました。"}
+
+# Family Access & Patient Summary API (Group Restricted)
+@app.get("/api/family/patient_summary/{patient_id}")
+def api_get_family_patient_summary(patient_id: int, user_code: str = "family01"):
+    account = db.get_user_account_by_code(user_code)
+    if not account or not db.check_group_access(account, patient_id):
+        raise HTTPException(status_code=403, detail="グループ外のためアクセスが拒否されました。")
+    
+    user = db.get_user(patient_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="対象の利用者が見つかりません。")
+    
+    vitals = db.get_vital_records(patient_id, limit=7)
+    chat_history = db.get_chat_history(patient_id, limit=10)
+    
+    return {
+        "patient": {
+            "id": user["id"],
+            "name": user["name"],
+            "room_number": user["room_number"],
+            "dementia_level": user["dementia_level"]
+        },
+        "vitals": vitals,
+        "chat_history": chat_history,
+        "recent_multimedia": {
+            "card_title": "昔懐かしい昭和の思い出絵手紙",
+            "card_image_url": "/assets/sample_postcard.jpg",
+            "bgm_title": "のどかな和風アンビエント BGM (15秒)",
+            "video_title": "今週の山田様の様子ショートムービー (MP4)",
+            "video_duration": "25秒"
+        }
+    }
+
+class MultimediaPreviewReq(BaseModel):
+    user_id: int
+
+@app.post("/api/multimedia/generate_preview")
+def api_generate_multimedia_preview(req: MultimediaPreviewReq):
+    user = db.get_user(req.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="利用者が見つかりません。")
+    
+    history = db.get_chat_history(req.user_id, limit=5)
+    last_topic = history[-1]["message"] if history else "故郷のお話"
+    
+    return {
+        "status": "success",
+        "title": f"【デジタル絵手紙】{user['name']}様の思い出カード",
+        "topic": last_topic,
+        "image_style": "温かみのある昭和レトロ水彩画風",
+        "bgm_style": "安らぎを与える和風アコースティックBGM",
+        "generated_at": db.datetime.now().isoformat()
+    }
+
 # Serve static frontend files
 frontend_dir = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+

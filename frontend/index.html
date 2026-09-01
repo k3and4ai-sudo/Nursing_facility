@@ -39,6 +39,30 @@
                 <div id="login-error" class="login-error-msg hidden">IDまたはパスワードが正しくありません</div>
             </form>
 
+            <!-- Server Health & Status Box -->
+            <div class="server-status-container">
+                <div class="server-status-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="status-icon"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span>サーバー稼働・接続状況</span>
+                </div>
+                <div class="server-status-grid">
+                    <div class="server-status-item">
+                        <div class="server-details">
+                            <span class="server-label">フロントエンド (Web)</span>
+                            <span id="address-frontend" class="server-address">http://localhost:8080</span>
+                        </div>
+                        <span id="status-frontend" class="status-pill status-online">🟢 起動中</span>
+                    </div>
+                    <div class="server-status-item">
+                        <div class="server-details">
+                            <span class="server-label">バックエンド (FastAPI)</span>
+                            <span id="address-backend" class="server-address">http://localhost:8000</span>
+                        </div>
+                        <span id="status-backend" class="status-pill status-checking">🟡 確認中...</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Demo Credentials for Fast Testing -->
             <div class="demo-login-box">
                 <span>デモ用クイックログイン:</span>
@@ -47,6 +71,7 @@
                     <button type="button" class="btn btn-demo" data-user="staff01" data-pass="staff123">👩‍⚕️ スタッフ</button>
                     <button type="button" class="btn btn-demo" data-user="family01" data-pass="family123">👨‍👩‍👧 ご家族</button>
                     <button type="button" class="btn btn-demo" data-user="barber01" data-pass="barber123">💈 訪問理容</button>
+                    <button type="button" class="btn btn-demo" data-user="DB" data-pass="debug">🛠️ デバッグ(Gemini)</button>
                 </div>
             </div>
         </div>
@@ -87,6 +112,31 @@
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                 </button>
                 <p id="p-guide-text" class="patient-guide">ボタンを１回押して、お話ししてください</p>
+
+                <!-- Processing Status Indicator (STT, LLM, TTS) -->
+                <div id="p-processing-indicator" class="processing-container hidden">
+                    <div class="indicator-row">
+                        <div class="row-left">
+                            <span id="p-lamp-stt" class="lamp-dot idle"></span>
+                            <span class="lamp-label">音声認識</span>
+                        </div>
+                        <span id="p-time-stt" class="time-label">-</span>
+                    </div>
+                    <div class="indicator-row">
+                        <div class="row-left">
+                            <span id="p-lamp-llm" class="lamp-dot idle"></span>
+                            <span class="lamp-label">テキスト生成</span>
+                        </div>
+                        <span id="p-time-llm" class="time-label">-</span>
+                    </div>
+                    <div class="indicator-row">
+                        <div class="row-left">
+                            <span id="p-lamp-tts" class="lamp-dot idle"></span>
+                            <span class="lamp-label">音声作成(TTS)</span>
+                        </div>
+                        <span id="p-time-tts" class="time-label">-</span>
+                    </div>
+                </div>
 
                 <!-- User Speech Transcription Display -->
                 <div id="p-user-speech-box" class="patient-user-speech hidden">

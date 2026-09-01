@@ -3,7 +3,7 @@ import re
 import subprocess
 
 # Paths
-MD_PATH = "/home/k3and4/.gemini/antigravity/brain/76e414de-c1c8-4fe5-bb55-3b8af2b81268/system_requirements_specification.md"
+MD_PATH = "/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/system_requirements_specification.md"
 HTML_PATH = "/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/temp_requirements.html"
 PDF_PATH = "/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/Care_Link_System_Requirements.pdf"
 
@@ -89,6 +89,12 @@ def simple_md_to_html(md_text):
 # Read Markdown
 with open(MD_PATH, "r", encoding="utf-8") as f:
     md_content = f.read()
+
+# Strip Obsidian YAML Frontmatter for PDF rendering
+if md_content.startswith("---"):
+    parts = md_content.split("---", 2)
+    if len(parts) >= 3:
+        md_content = parts[2].strip()
 
 body_html = simple_md_to_html(md_content)
 

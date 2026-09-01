@@ -14,8 +14,15 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:2b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "gemma2:2b")
 
 # Speech Processing
-WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "small")  # "small", "base", "medium" etc.
+WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "tiny")  # "small", "base", "medium" etc.
 TTS_ENGINE = os.getenv("TTS_ENGINE", "gtts")  # "gtts" or "local" (mock/system)
+
+# Gemini API / Gemini Live Settings (Debug Mode)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Release Flag: Set ENABLE_DEBUG_MODE=false in production to completely abolish debug features
+ENABLE_DEBUG_MODE = os.getenv("ENABLE_DEBUG_MODE", "true").lower() == "true"
 
 # Vital Sign Thresholds (Alert limits)
 TEMP_MIN = 35.0

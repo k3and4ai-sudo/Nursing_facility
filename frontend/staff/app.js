@@ -173,6 +173,11 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (tabName === "handover") {
                 loadHandovers();
                 loadStaffChatHistory();
+            } else if (tabName === "prompts") {
+                loadPromptTemplates();
+            } else if (tabName === "barber") {
+                loadBarberReservations();
+                populateBarberUserSelector();
             }
         });
     });
@@ -185,6 +190,52 @@ document.addEventListener("DOMContentLoaded", () => {
         loadIntercomRooms();
         loadHandovers();
         loadStaffChatHistory();
+    }
+
+    // LINE Share Window Helper
+    async function openLineShareWindow(userId, name, room, alertReason = null) {
+        let text = `【ケア・リンク 家族連絡】\n`;
+        text += `${room ? room + '号室 ' : ''}${name}様に関するご報告です。\n\n`;
+
+        // 1. Fetch latest vitals
+        try {
+            const vitalsRes = await fetch("/api/vitals");
+            const vitalsData = await vitalsRes.json();
+            const userVitals = vitalsData.find(v => v.user_name === name);
+            if (userVitals) {
+                const time = new Date(userVitals.timestamp).toLocaleTimeString("ja-JP", {hour: '2-digit', minute:'2-digit'});
+                text += `■ 直近のバイタル測定（${time}）:\n`;
+                if (userVitals.temperature) text += `・体温: ${userVitals.temperature} ℃\n`;
+                if (userVitals.bp_sys) text += `・血圧: ${userVitals.bp_sys}/${userVitals.bp_dia} mmHg\n`;
+                if (userVitals.weight) text += `・体重: ${userVitals.weight} kg\n`;
+            }
+        } catch (err) {
+            console.error("Failed to fetch vitals for LINE message:", err);
+        }
+
+        // 2. Alert info
+        if (alertReason) {
+            text += `\n⚠️ 警告: ${alertReason}\n`;
+        }
+
+        // 3. Last conversation message
+        if (userId) {
+            try {
+                const chatRes = await fetch(`/api/users/${userId}/chat`);
+                const chatData = await chatRes.json();
+                const lastUserMsg = chatData.slice().reverse().find(msg => msg.sender === "user");
+                if (lastUserMsg) {
+                    text += `\n■ ご本人の直近のご発言:\n「${lastUserMsg.message}」\n`;
+                }
+            } catch (err) {
+                console.error("Failed to fetch chat for LINE message:", err);
+            }
+        }
+
+        text += `\nご不明な点等ございましたら、施設までお気軽にお問い合わせください。`;
+
+        const lineUrl = `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+        window.open(lineUrl, "_blank");
     }
 
     // 4. Dashboard Logic & Alerts
@@ -308,9 +359,27 @@ document.addEventListener("DOMContentLoaded", () => {
                     <h4>🚨 異常検知: ${a.room ? a.room + '号室 ' : ''}${a.name}様</h4>
                     <p>理由: ${a.reason}</p>
                 </div>
-                <div class="time">${time}</div>
+                <div class="alert-actions" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                    <button class="btn btn-line btn-sm line-alert-btn" data-name="${a.name}" data-room="${a.room || ''}" data-reason="${a.reason}">LINE連絡</button>
+                    <div class="time">${time}</div>
+                </div>
             `;
             alertList.appendChild(div);
+        });
+
+        document.querySelectorAll(".line-alert-btn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                let patientId = null;
+                try {
+                    const res = await fetch("/api/users");
+                    const data = await res.json();
+                    const p = data.find(user => user.name === btn.dataset.name);
+                    if (p) patientId = p.id;
+                } catch (e) {
+                    console.error("Error looking up patient id for alert LINE:", e);
+                }
+                openLineShareWindow(patientId, btn.dataset.name, btn.dataset.room, btn.dataset.reason);
+            });
         });
     }
 
@@ -345,6 +414,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         ${p.notes ? `<p style="font-size:11px; color:var(--text-muted);">メモ: ${p.notes}</p>` : ''}
                     </div>
                     <div class="actions">
+                        <button class="btn btn-line btn-sm line-patient-btn" data-id="${p.id}" data-name="${p.name}" data-room="${p.room_number || ''}">LINE連絡</button>
                         <button class="btn btn-secondary btn-sm edit-p-btn" data-id="${p.id}">編集</button>
                         <button class="btn btn-danger btn-sm delete-p-btn" data-id="${p.id}">削除</button>
                     </div>
@@ -352,7 +422,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 patientList.appendChild(div);
             });
 
-            // Bind edit/delete events
+            // Bind edit/delete/LINE events
+            document.querySelectorAll(".line-patient-btn").forEach(btn => {
+                btn.addEventListener("click", () => openLineShareWindow(parseInt(btn.dataset.id), btn.dataset.name, btn.dataset.room));
+            });
             document.querySelectorAll(".edit-p-btn").forEach(btn => {
                 btn.addEventListener("click", () => editPatient(parseInt(btn.dataset.id)));
             });
@@ -632,6 +705,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Load historical chat logs
         loadChatHistory(p.id);
+
+        // Show LINE contact button
+        const liveLineBtn = document.getElementById("live-line-btn");
+        if (liveLineBtn) {
+            liveLineBtn.style.display = "inline-block";
+            const newBtn = liveLineBtn.cloneNode(true);
+            liveLineBtn.parentNode.replaceChild(newBtn, liveLineBtn);
+            newBtn.addEventListener("click", () => {
+                openLineShareWindow(p.id, p.name, p.room_number);
+            });
+        }
     }
 
     async function loadChatHistory(userId) {
@@ -930,6 +1014,148 @@ document.addEventListener("DOMContentLoaded", () => {
         }));
 
         staffChatInput.value = "";
+    }
+
+    // 9. Prompt Templates Library Logic
+    async function loadPromptTemplates() {
+        const container = document.getElementById("prompt-templates-list");
+        if (!container) return;
+        try {
+            const res = await fetch("/api/prompt_templates");
+            const data = await res.json();
+            
+            container.innerHTML = "";
+            if (data.length === 0) {
+                container.innerHTML = `<div class="no-data-msg">登録されているプロンプト雛形はありません</div>`;
+                return;
+            }
+
+            data.forEach(tmpl => {
+                const card = document.createElement("div");
+                card.className = "card prompt-card";
+                card.style.marginBottom = "15px";
+                card.innerHTML = `
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="margin: 0;">${tmpl.title}</h4>
+                        <span class="badge" style="background: rgba(37,99,235,0.2); color: #60a5fa; padding: 4px 10px; border-radius: 4px; font-size: 12px;">${tmpl.category}</span>
+                    </div>
+                    <div class="card-body">
+                        <textarea id="tmpl-content-${tmpl.key_name}" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-family: inherit; font-size: 13px; margin-bottom: 10px;">${tmpl.content}</textarea>
+                        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                            <button class="btn btn-secondary btn-sm" onclick="alert('ペルソナプロンプトを適用しました。次のAI対話から反映されます。')">AIペルソナに適用</button>
+                            <button class="btn btn-primary btn-sm" onclick="savePromptTemplate('${tmpl.key_name}')">内容を更新・保存</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        } catch (err) {
+            console.error("Error loading prompt templates:", err);
+        }
+    }
+
+    window.savePromptTemplate = async function(keyName) {
+        const textarea = document.getElementById(`tmpl-content-${keyName}`);
+        if (!textarea) return;
+        try {
+            const res = await fetch("/api/prompt_templates", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key_name: keyName, content: textarea.value.trim() })
+            });
+            if (res.ok) {
+                alert("プロンプト雛形を更新・保存しました。");
+                loadPromptTemplates();
+            }
+        } catch (err) {
+            console.error("Error saving prompt template:", err);
+        }
+    };
+
+    // 10. Barber Management Logic
+    async function populateBarberUserSelector() {
+        const selector = document.getElementById("b-user-id");
+        if (!selector) return;
+        try {
+            const res = await fetch("/api/users");
+            const data = await res.json();
+            selector.innerHTML = `<option value="">選択してください</option>`;
+            data.forEach(u => {
+                selector.innerHTML += `<option value="${u.id}">${u.room_number ? u.room_number + '号室: ' : ''}${u.name}</option>`;
+            });
+        } catch (err) {
+            console.error("Error populating barber user selector:", err);
+        }
+    }
+
+    async function loadBarberReservations() {
+        const container = document.getElementById("barber-reservations-list");
+        if (!container) return;
+        try {
+            const res = await fetch("/api/barber/reservations");
+            const data = await res.json();
+            
+            container.innerHTML = "";
+            if (data.length === 0) {
+                container.innerHTML = `<div class="no-data-msg">訪問理美容の予約はありません</div>`;
+                return;
+            }
+
+            data.forEach(r => {
+                const card = document.createElement("div");
+                card.className = "card reservation-card";
+                card.style.marginBottom = "15px";
+                const isCompleted = r.status === "completed";
+                const statusBadge = isCompleted ? `<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; padding: 3px 8px; border-radius: 4px; font-size: 12px;">施術完了</span>` : `<span class="badge" style="background: rgba(234,179,8,0.2); color: #facc15; padding: 3px 8px; border-radius: 4px; font-size: 12px;">予約中</span>`;
+                
+                card.innerHTML = `
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4>${r.room_number ? r.room_number + '号室: ' : ''}<strong>${r.user_name}</strong> 様</h4>
+                        ${statusBadge}
+                    </div>
+                    <div class="card-body">
+                        <p style="margin-bottom: 5px;"><strong>予約日時:</strong> ${r.reservation_date}</p>
+                        <p style="margin-bottom: 5px;"><strong>メニュー:</strong> ${r.menu}</p>
+                        ${r.notes ? `<p style="margin-bottom: 5px; color: #f87171;"><strong>注意点:</strong> ${r.notes}</p>` : ''}
+                        ${r.report ? `<p style="margin-top: 8px; background: rgba(15,23,42,0.6); padding: 8px; border-radius: 4px;"><strong>施術完了報告:</strong> ${r.report}</p>` : ''}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        } catch (err) {
+            console.error("Error loading barber reservations:", err);
+        }
+    }
+
+    const barberForm = document.getElementById("barber-form");
+    if (barberForm) {
+        barberForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const bUserId = document.getElementById("b-user-id").value;
+            const bDate = document.getElementById("b-date").value;
+            const bMenu = document.getElementById("b-menu").value;
+            const bNotes = document.getElementById("b-notes").value;
+
+            try {
+                const res = await fetch("/api/barber/reservations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        user_id: parseInt(bUserId),
+                        reservation_date: bDate.replace("T", " "),
+                        menu: bMenu,
+                        notes: bNotes
+                    })
+                });
+                if (res.ok) {
+                    alert("訪問理美容の予約を登録しました。");
+                    barberForm.reset();
+                    loadBarberReservations();
+                }
+            } catch (err) {
+                console.error("Error creating barber reservation:", err);
+            }
+        });
     }
 
     // Initialize Connection

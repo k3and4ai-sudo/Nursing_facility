@@ -14,6 +14,7 @@
         <!-- Top status bar -->
         <header class="header">
             <div id="room-badge" class="badge">確認中...</div>
+            <div id="debug-badge" class="badge debug-badge hidden">🛠️ デバッグモード (Gemini Live)</div>
             <div id="connection-status" class="status-dot offline"></div>
         </header>
 
@@ -31,22 +32,72 @@
             <!-- Legible Status text -->
             <h1 id="status-text" class="status-message">接続しています...</h1>
 
-            <!-- The Big Button -->
-            <div class="button-container">
+            <!-- Mic Button Shifted to Left + Live Audio Waveform Visualizer on Right -->
+            <div class="mic-waveform-row">
                 <button id="mic-btn" class="huge-mic-btn" disabled>
                     <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                     </svg>
                 </button>
+                <div class="waveform-box">
+                    <div class="waveform-header">
+                        <span class="waveform-icon">📊</span>
+                        <span>音声レベル (マイク入力波形)</span>
+                    </div>
+                    <canvas id="waveform-canvas" width="340" height="90"></canvas>
+                </div>
             </div>
             
             <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
+
+            <!-- Processing Status Indicator (STT, LLM, TTS) -->
+            <div id="processing-indicator" class="processing-container hidden">
+                <div class="indicator-row">
+                    <div class="row-left">
+                        <span id="lamp-stt" class="lamp-dot idle"></span>
+                        <span class="lamp-label">音声認識</span>
+                    </div>
+                    <span id="time-stt" class="time-label">-</span>
+                </div>
+                <div class="indicator-row">
+                    <div class="row-left">
+                        <span id="lamp-llm" class="lamp-dot idle"></span>
+                        <span class="lamp-label">テキスト生成</span>
+                    </div>
+                    <span id="time-llm" class="time-label">-</span>
+                </div>
+                <div class="indicator-row">
+                    <div class="row-left">
+                        <span id="lamp-tts" class="lamp-dot idle"></span>
+                        <span class="lamp-label">音声作成(TTS)</span>
+                    </div>
+                    <span id="time-tts" class="time-label">-</span>
+                </div>
+            </div>
         </main>
 
-        <!-- Text Display (Optional transcription log) -->
+        <!-- Two Separate Text Displays: User Speech vs Gemini Live Response -->
         <footer class="footer">
-            <div id="subtitle-box" class="subtitle-text"></div>
+            <div class="speech-display-container">
+                <!-- User Speech (Microphone STT Result) -->
+                <div class="speech-box user-box">
+                    <div class="box-title">
+                        <span class="box-icon">🎤</span>
+                        <span>あなたの声 (マイク認識結果)</span>
+                    </div>
+                    <div id="user-speech-box" class="box-content">お話しになるとここに認識結果が表示されます...</div>
+                </div>
+                
+                <!-- Gemini Live Response -->
+                <div class="speech-box ai-box">
+                    <div class="box-title">
+                        <span class="box-icon">✨</span>
+                        <span>Gemini Live からの返答</span>
+                    </div>
+                    <div id="ai-response-box" class="box-content">ここにGeminiのお返事・音声内容が表示されます...</div>
+                </div>
+            </div>
         </footer>
 
         <!-- Terminal Register Overlay (if not bound to a user) -->
@@ -83,5 +134,7 @@
             </div>
         </div>
     </div>
+    <script src="wav_encoder.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

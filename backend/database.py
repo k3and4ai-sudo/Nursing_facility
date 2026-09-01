@@ -114,10 +114,35 @@ def db_init():
                 FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE SET NULL
             )
         """)
+
+        # 9. Barber Reservations table (訪問理美容)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS barber_reservations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                reservation_date TEXT NOT NULL,
+                menu TEXT NOT NULL,
+                notes TEXT,                        -- Encrypted
+                status TEXT DEFAULT 'pending',     -- 'pending', 'completed'
+                report TEXT,                       -- Encrypted
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # 10. Prompt Templates Library (プロンプト雛形)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key_name TEXT UNIQUE NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL
+            )
+        """)
         
         conn.commit()
 
-    # Seed default accounts if user_accounts table is empty
+    # Seed default accounts and data if needed
     seed_default_accounts()
 
 def seed_default_accounts():
@@ -152,8 +177,59 @@ def seed_default_accounts():
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (user_code, pwd_hash, salt, role, encrypt_data(name), g_id, t_id)
                 )
+            
+            # Seed default barber reservation
+            cursor.execute(
+                """INSERT INTO barber_reservations (user_id, reservation_date, menu, notes, status, report)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    patient_id,
+                    "2026-08-28 14:00",
+                    "カット・顔剃り",
+                    encrypt_data("首を後ろに傾けるのが困難。洗髪時の声かけ要。"),
+                    "pending",
+                    encrypt_data("")
+                )
+            )
+
             conn.commit()
-            print("Default demo user accounts seeded successfully.")
+            print("Default demo user accounts and barber reservation seeded successfully.")
+
+        # Seed Prompt Templates if prompt_templates table is empty
+        cursor.execute("SELECT COUNT(*) FROM prompt_templates")
+        if cursor.fetchone()[0] == 0:
+            templates = [
+                (
+                    "template_listening",
+                    "🌸 受容・傾聴テンプレート (認知症・不穏対応)",
+                    "あなたは優しく落ち着いた介護スタッフです。利用者の話を途中で遮らず、すべて肯定的に「そうなんですね」「お気持ち分かりますよ」と受け止めてください。否定や訂正は一切せず、安心感を与える対話を行ってください。",
+                    "認知症ケア"
+                ),
+                (
+                    "template_reminiscence",
+                    "📻 回想療法・昔話テンプレート (昭和レトロ)",
+                    "あなたは昭和の時代や昔の暮らしに詳しい温かい話し相手です。「昔はどんなお仕事をされていたのですか？」「故郷の美味しい食べ物は何でしたか？」など、利用者が嬉しそうに語れる思い出を優しく引き出してください。",
+                    "回想療法"
+                ),
+                (
+                    "template_activity",
+                    "☀️ 意欲向上・アクティビティテンプレート (運動・散歩案内)",
+                    "あなたは明るく元気な健康アドバイザーです。今日の体調を気遣いながら、「今日はお天気が良いので少しお庭を歩きませんか？」とお話しし、散歩や運動・水分補給を優しく前向きに促してください。",
+                    "アクティビティ"
+                ),
+                (
+                    "template_sunset",
+                    "🌇 夕暮れ症候群・帰宅願望対応テンプレート (不安軽減)",
+                    "あなたは安心感を提供する見守り手です。「家に帰りたい」という訴えに「帰れません」と否定せず、「心配ですね。もうすぐスタッフがお茶を持ってきますから、少しここでお話しして待ちましょうね」と気持ちを受け止めて落ち着かせてください。",
+                    "不穏・帰宅願望"
+                )
+            ]
+            for key_name, title, content, category in templates:
+                cursor.execute(
+                    "INSERT INTO prompt_templates (key_name, title, content, category) VALUES (?, ?, ?, ?)",
+                    (key_name, title, content, category)
+                )
+            conn.commit()
 
 # Group Management
 def add_group(group_name: str, patient_id: int):
@@ -442,3 +518,77 @@ def get_handovers(limit: int = 50):
             data["content"] = decrypt_data(data["content"])
             handovers.append(data)
     return handovers
+
+# Prompt Template Functions
+def get_all_prompt_templates():
+    templates = []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM prompt_templates ORDER BY id ASC")
+        for row in cursor.fetchall():
+            templates.append(dict(row))
+    return templates
+
+def update_prompt_template(key_name: str, content: str):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE prompt_templates SET content = ? WHERE key_name = ?", (content, key_name))
+        conn.commit()
+
+# Barber Reservation Functions
+def get_barber_reservations(limit: int = 50):
+    reservations = []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT r.*, u.name as user_name, u.room_number, u.dementia_level
+               FROM barber_reservations r
+               JOIN users u ON r.user_id = u.id
+               ORDER BY r.reservation_date ASC LIMIT ?""",
+            (limit,)
+        )
+        for row in cursor.fetchall():
+            data = dict(row)
+            data["user_name"] = decrypt_data(data["user_name"])
+            data["notes"] = decrypt_data(data["notes"])
+            data["report"] = decrypt_data(data["report"])
+            reservations.append(data)
+    return reservations
+
+def add_barber_reservation(user_id: int, reservation_date: str, menu: str, notes: str):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO barber_reservations (user_id, reservation_date, menu, notes, status, report)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, reservation_date, menu, encrypt_data(notes), "pending", encrypt_data(""))
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def update_barber_report(reservation_id: int, status: str, report: str):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE barber_reservations SET status = ?, report = ? WHERE id = ?",
+            (status, encrypt_data(report), reservation_id)
+        )
+        conn.commit()
+
+# Access Control Functions
+def check_group_access(account: dict, target_patient_id: int) -> bool:
+    """Returns True if the user account is allowed to access data for target_patient_id."""
+    if not account:
+        return False
+    role = account.get("role")
+    if role in ["staff", "barber"]:
+        return True  # Staff and Barber have facility-wide access
+    if role == "family" or role == "patient":
+        user_group_id = account.get("group_id")
+        if not user_group_id:
+            return False
+        group = get_group(user_group_id)
+        if group and group.get("patient_id") == target_patient_id:
+            return True
+    return False
+

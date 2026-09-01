@@ -339,3 +339,173 @@ input:focus {
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border-dark); }
 .hidden { display: none !important; }
+
+/* SERVER HEALTH & STATUS BOX */
+.server-status-container {
+    margin-top: 18px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border-dark);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.server-status-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+}
+
+.status-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--primary);
+}
+
+.server-status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.server-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.server-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.server-label {
+    color: #cbd5e1;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.server-address {
+    color: #94a3b8;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.status-pill {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.3s ease;
+}
+
+.status-pill.status-online {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-pill.status-checking {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-pill.status-offline {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Processing Indicator Styles */
+.processing-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.65);
+    border-radius: 20px;
+    padding: 16px 24px;
+    margin: 20px auto 10px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+}
+
+.processing-container.hidden {
+    display: none;
+}
+
+.indicator-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Zen Maru Gothic', sans-serif;
+    font-size: 16px;
+    color: #1e293b;
+}
+
+.row-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lamp-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.lamp-dot.idle {
+    background-color: #cbd5e1;
+    box-shadow: none;
+}
+
+.lamp-dot.active-stt {
+    background-color: #3b82f6;
+    box-shadow: 0 0 10px #3b82f6;
+    animation: blink 1s infinite alternate;
+}
+
+.lamp-dot.active-llm {
+    background-color: #a855f7;
+    box-shadow: 0 0 10px #a855f7;
+    animation: blink 1s infinite alternate;
+}
+
+.lamp-dot.active-tts {
+    background-color: #ec4899;
+    box-shadow: 0 0 10px #ec4899;
+    animation: blink 1s infinite alternate;
+}
+
+.lamp-label {
+    font-weight: 700;
+}
+
+.time-label {
+    font-family: 'Outfit', monospace;
+    font-weight: 800;
+    color: #64748b;
+}
+
+@keyframes blink {
+    from { opacity: 0.4; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.1); }
+}
+

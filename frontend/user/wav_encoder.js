@@ -78,6 +78,10 @@ class WavAudioRecorder {
                 const resampledChunk = this.resample(inputData, sourceSampleRate, this.targetSampleRate);
                 this.audioBuffers.push(resampledChunk);
                 this.recordingLength += resampledChunk.length;
+
+                if (typeof this.onChunkCallback === "function") {
+                    this.onChunkCallback(resampledChunk);
+                }
             };
 
             this.isRecording = true;
@@ -134,6 +138,33 @@ class WavAudioRecorder {
             result[i] = inputData[nearestIndex];
         }
         return result;
+    }
+
+    encodeChunkToWav(samples) {
+        const buffer = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buffer);
+
+        this.writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * 2, true);
+        this.writeString(view, 8, 'WAVE');
+        this.writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, this.targetSampleRate, true);
+        view.setUint32(28, this.targetSampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        this.writeString(view, 36, 'data');
+        view.setUint32(40, samples.length * 2, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++, offset += 2) {
+            const s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
     }
 
     encodeWAV() {

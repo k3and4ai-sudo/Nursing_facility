@@ -1,20 +1,87 @@
 // main application logic for user client
 document.addEventListener("DOMContentLoaded", () => {
-    let terminalId = localStorage.getItem("nursing_terminal_id");
+    const urlParams = new URLSearchParams(window.location.search);
+    let terminalId = urlParams.get("terminal_id") || localStorage.getItem("nursing_terminal_id");
     if (!terminalId) {
         // Generate random terminal ID
         terminalId = "user_tablet_" + Math.floor(1000 + Math.random() * 9000);
-        localStorage.setItem("nursing_terminal_id", terminalId);
     }
+    localStorage.setItem("nursing_terminal_id", terminalId);
     
     // UI Elements
     const roomBadge = document.getElementById("room-badge");
+    const debugBadge = document.getElementById("debug-badge");
     const connectionStatus = document.getElementById("connection-status");
     const aiAvatar = document.getElementById("ai-avatar");
     const statusText = document.getElementById("status-text");
     const micBtn = document.getElementById("mic-btn");
     const guideText = document.getElementById("guide-text");
     const subtitleBox = document.getElementById("subtitle-box");
+    const userSpeechBox = document.getElementById("user-speech-box");
+    const aiResponseBox = document.getElementById("ai-response-box");
+
+    // System Config & Release Flags
+    let systemInfo = { enable_debug_mode: true };
+    async function checkSystemInfo() {
+        try {
+            const res = await fetch("/api/config/system_info");
+            if (res.ok) {
+                systemInfo = await res.json();
+                if (!systemInfo.enable_debug_mode) {
+                    isDebugMode = false;
+                    localStorage.setItem("nursing_debug_mode", "false");
+                    if (debugBadge) debugBadge.classList.add("hidden");
+                }
+            }
+        } catch (e) {
+            console.log("Could not fetch system info:", e);
+        }
+    }
+    checkSystemInfo();
+
+    // Debug Mode (Gemini Live) Toggle Logic
+    let isDebugMode = urlParams.get("debug") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+    function updateDebugUI() {
+        if (isDebugMode && systemInfo.enable_debug_mode) {
+            debugBadge.classList.remove("hidden");
+            localStorage.setItem("nursing_debug_mode", "true");
+        } else {
+            debugBadge.classList.add("hidden");
+            localStorage.setItem("nursing_debug_mode", "false");
+        }
+    }
+    updateDebugUI();
+
+    if (debugBadge) {
+        debugBadge.addEventListener("click", () => {
+            if (!systemInfo.enable_debug_mode) return;
+            isDebugMode = !isDebugMode;
+            updateDebugUI();
+        });
+    }
+
+    // Secret Key Listener for 'DB' command (Disabled when ENABLE_DEBUG_MODE=false)
+    let keyBuffer = "";
+    document.addEventListener("keydown", (e) => {
+        if (!systemInfo.enable_debug_mode) return;
+        keyBuffer += e.key.toUpperCase();
+        if (keyBuffer.length > 2) keyBuffer = keyBuffer.slice(-2);
+        if (keyBuffer === "DB") {
+            isDebugMode = !isDebugMode;
+            updateDebugUI();
+            keyBuffer = "";
+            console.log(`Debug Mode (Gemini Live) set to: ${isDebugMode}`);
+        }
+    });
+    
+    // Processing Status elements
+    const processingIndicator = document.getElementById("processing-indicator");
+    const lampStt = document.getElementById("lamp-stt");
+    const lampLlm = document.getElementById("lamp-llm");
+    const lampTts = document.getElementById("lamp-tts");
+    const timeStt = document.getElementById("time-stt");
+    const timeLlm = document.getElementById("time-llm");
+    const timeTts = document.getElementById("time-tts");
     
     const registerOverlay = document.getElementById("register-overlay");
     const displayTerminalId = document.getElementById("display-terminal-id");
@@ -110,8 +177,19 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("WS Received:", data.type);
 
             switch (data.type) {
+                case "transcription_result":
+                    if (userSpeechBox) userSpeechBox.textContent = data.text;
+                    if (subtitleBox) subtitleBox.textContent = `あなた: "${data.text}"`;
+                    setAvatarState("thinking");
+                    statusText.textContent = "考え中...";
+                    break;
+
+                case "processing_status":
+                    handleProcessingStatus(data.status, data.stt_time, data.llm_time);
+                    break;
+
                 case "chat_response":
-                    handleChatResponse(data.text, data.audio);
+                    handleChatResponse(data.text, data.audio, data.stt_time, data.llm_time, data.tts_time);
                     break;
                     
                 case "play_voice": // Staff override (Pattern B)
@@ -144,63 +222,247 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    // Dialogue Interaction
+    // Dialogue Interaction (Full-Duplex Gemini Live Streaming)
     micBtn.addEventListener("click", toggleDialogueRecording);
 
+    let chunkAccumulator = [];
+    let lastChunkSendTime = 0;
+
     async function toggleDialogueRecording() {
-        if (isRecording) {
-            // Stop recording and send
-            isRecording = false;
-            micBtn.classList.remove("recording");
-            setAvatarState("thinking");
-            statusText.textContent = "考えています...";
-            guideText.textContent = "少々お待ちください";
-            
-            const audioBlob = recorder.stop();
-            if (audioBlob) {
-                const reader = new FileReader();
-                reader.readAsDataURL(audioBlob);
-                reader.onloadend = () => {
-                    const base64Audio = reader.result.split(',')[1];
-                    ws.send(JSON.stringify({
-                        type: "audio_input",
-                        audio: base64Audio
-                    }));
-                };
+        console.log("toggleDialogueRecording called. isRecording:", isRecording);
+    let waveformAnimId = null;
+
+    function startWaveformVisualizer(analyser) {
+        const canvas = document.getElementById("waveform-canvas");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        
+        if (waveformAnimId) {
+            cancelAnimationFrame(waveformAnimId);
+            waveformAnimId = null;
+        }
+
+        function draw() {
+            if (!isRecording) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = "#cbd5e1";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height / 2);
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+                return;
             }
+            waveformAnimId = requestAnimationFrame(draw);
+
+            if (!analyser) return;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.2;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const val = dataArray[i];
+                const percent = val / 255;
+                const barHeight = Math.max(4, percent * canvas.height * 0.85);
+
+                const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+                gradient.addColorStop(0, "#10b981");
+                gradient.addColorStop(1, "#34d399");
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, (canvas.height - barHeight) / 2, Math.max(2, barWidth - 3), barHeight, 4);
+                } else {
+                    ctx.rect(x, (canvas.height - barHeight) / 2, Math.max(2, barWidth - 3), barHeight);
+                }
+                ctx.fill();
+
+                x += barWidth;
+            }
+        }
+        draw();
+    }
+
+    function stopMicrophone() {
+        if (isRecording) {
+            isRecording = false;
+            if (recorder) {
+                recorder.stop();
+            }
+            if (activeAudio) {
+                activeAudio.pause();
+                activeAudio = null;
+            }
+            chunkAccumulator = [];
+            startWaveformVisualizer(null);
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "stop_bidi_stream" }));
+            }
+
+            micBtn.classList.remove("recording", "full-duplex-on");
+            statusText.textContent = "お話しする準備ができました";
+            guideText.textContent = "ボタンを１回押して、お話ししてください";
+            setAvatarState("idle");
         } else {
-            // Start recording
-            // Stop any playing audio first
             if (activeAudio) {
                 activeAudio.pause();
                 activeAudio = null;
             }
             
             try {
-                await recorder.start();
                 isRecording = true;
-                micBtn.classList.add("recording");
+                chunkAccumulator = [];
+                let lastChunkSendTime = Date.now();
+                
+                recorder.onChunkCallback = (resampledChunk) => {
+                    if (activeAudio && !activeAudio.paused && !activeAudio.ended) {
+                        chunkAccumulator = [];
+                        return;
+                    }
+                    
+                    let sum = 0;
+                    for (let i = 0; i < resampledChunk.length; i++) {
+                        sum += resampledChunk[i] * resampledChunk[i];
+                    }
+                    const rms = Math.sqrt(sum / resampledChunk.length);
+
+                    if (rms > 0.003) {
+                        chunkAccumulator.push(resampledChunk);
+                    }
+                    
+                    const now = Date.now();
+                    if (now - lastChunkSendTime >= 800 && chunkAccumulator.length > 0) {
+                        lastChunkSendTime = now;
+                        let totalLen = 0;
+                        for (let c of chunkAccumulator) totalLen += c.length;
+                        const merged = new Float32Array(totalLen);
+                        let offset = 0;
+                        for (let c of chunkAccumulator) {
+                            merged.set(c, offset);
+                            offset += c.length;
+                        }
+                        chunkAccumulator = [];
+                        
+                        const wavBlob = recorder.encodeChunkToWav(merged);
+                        const reader = new FileReader();
+                        reader.readAsDataURL(wavBlob);
+                        reader.onloadend = () => {
+                            const b64 = reader.result.split(',')[1];
+                            if (ws && ws.readyState === WebSocket.OPEN && isRecording) {
+                                ws.send(JSON.stringify({
+                                    type: "bidi_audio",
+                                    audio: b64,
+                                    debug_mode: isDebugMode
+                                }));
+                            }
+                        };
+                    }
+                };
+
+                await recorder.start();
+                startWaveformVisualizer(recorder.analyser);
+                micBtn.classList.add("recording", "full-duplex-on");
                 setAvatarState("listening");
-                statusText.textContent = "お話ししてください...";
-                guideText.textContent = "話し終わったらもう一度ボタンを押してください";
-                subtitleBox.textContent = "";
+                statusText.textContent = "全二重リアルタイム対話中 (お話しください)";
+                guideText.textContent = "トークボタンはONのままです（終了するにはもう1回押します）";
+                if (userSpeechBox) userSpeechBox.textContent = "マイクがあなたの声を待っています...";
+                if (aiResponseBox) aiResponseBox.textContent = "ここにGeminiのお返事が表示されます...";
             } catch (err) {
                 statusText.textContent = "マイクが使えません";
-                console.error(err);
+                console.error("Microphone start error:", err);
             }
         }
     }
 
-    function handleChatResponse(text, base64Audio) {
-        subtitleBox.textContent = text;
-        statusText.textContent = "お話し中...";
+    function handleProcessingStatus(status, sttTime, llmTime) {
+        if (status === "stt_start") {
+            lampStt.className = "lamp-dot active-stt";
+            lampLlm.className = "lamp-dot idle";
+            lampTts.className = "lamp-dot idle";
+        } else if (status === "llm_start") {
+            lampStt.className = "lamp-dot idle";
+            if (sttTime !== undefined && sttTime !== null) timeStt.textContent = parseFloat(sttTime).toFixed(2) + "秒";
+            lampLlm.className = "lamp-dot active-llm";
+            lampTts.className = "lamp-dot idle";
+        } else if (status === "tts_start") {
+            lampStt.className = "lamp-dot idle";
+            lampLlm.className = "lamp-dot idle";
+            if (llmTime !== undefined && llmTime !== null) timeLlm.textContent = parseFloat(llmTime).toFixed(2) + "秒";
+            lampTts.className = "lamp-dot active-tts";
+        }
+    }
+
+    function handleChatResponse(text, base64Audio, sttTime, llmTime, ttsTime) {
+        // Finalize indicators if not done already
+        lampStt.className = "lamp-dot idle";
+        lampLlm.className = "lamp-dot idle";
+        lampTts.className = "lamp-dot idle";
+        
+        if (sttTime !== undefined && sttTime !== null) timeStt.textContent = parseFloat(sttTime).toFixed(2) + "秒";
+        if (llmTime !== undefined && llmTime !== null) timeLlm.textContent = parseFloat(llmTime).toFixed(2) + "秒";
+        if (ttsTime !== undefined && ttsTime !== null) timeTts.textContent = parseFloat(ttsTime).toFixed(2) + "秒";
+
+        if (aiResponseBox) aiResponseBox.textContent = text;
+        if (subtitleBox) subtitleBox.textContent = text;
+        statusText.textContent = "AIがお話し中...";
         setAvatarState("speaking");
         
         playBase64Audio(base64Audio, () => {
-            // Callback when finished speaking
-            statusText.textContent = "お話しする準備ができました";
-            setAvatarState("idle");
-            guideText.textContent = "ボタンを１回押して、お話ししてください";
+            // Callback when finished speaking (Full-Duplex retention)
+            if (isRecording) {
+                statusText.textContent = "全二重リアルタイム対話中 (お話しください)";
+                setAvatarState("listening");
+                guideText.textContent = "トークボタンはONのままです（終了するにはもう1回押します）";
+            } else {
+                statusText.textContent = "お話しする準備ができました";
+                setAvatarState("idle");
+                guideText.textContent = "ボタンを１回押して、お話ししてください";
+            }
+        });
+    }
+
+    function handleStaffOverride(text, base64Audio) {
+        subtitleBox.textContent = `スタッフ: "${text}"`;
+        statusText.textContent = "スタッフからの連絡中...";
+        setAvatarState("speaking");
+        
+        playBase64Audio(base64Audio, () => {
+            if (isRecording) {
+                statusText.textContent = "全二重リアルタイム対話中 (お話しください)";
+                setAvatarState("listening");
+            } else {
+                statusText.textContent = "お話しする準備ができました";
+                setAvatarState("idle");
+            }
+        });
+    }
+
+    function playBase64Audio(base64Data, onEnded) {
+        if (activeAudio) {
+            activeAudio.pause();
+        }
+        
+        activeAudio = new Audio("data:audio/mp3;base64," + base64Data);
+        activeAudio.onended = () => {
+            activeAudio = null;
+            if (onEnded) onEnded();
+        };
+        activeAudio.onerror = (e) => {
+            console.error("Audio playback error:", e);
+            activeAudio = null;
+            if (onEnded) onEnded();
+        };
+        activeAudio.play().catch(err => {
+            console.error("Audio play blocked/failed:", err);
+            activeAudio = null;
+            if (onEnded) onEnded();
         });
     }
 

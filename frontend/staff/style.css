@@ -475,6 +475,15 @@ input:focus, select:focus, textarea:focus {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
+.btn-line {
+    background-color: #06C755;
+    color: white;
+}
+
+.btn-line:hover {
+    background-color: #05b04b;
+}
+
 .btn-success {
     background-color: var(--success);
     color: white;

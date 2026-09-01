@@ -18,6 +18,12 @@ backend/audio_temp/
 .vscode/
 .idea/
 
+# Environment & secret files
+.env
+
+# Temporary workspace files
+-media-*.txt
+
 # OS files
 .DS_Store
 Thumbs.db

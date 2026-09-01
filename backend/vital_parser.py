@@ -49,7 +49,7 @@ JSONスキーマ:
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(url, json=payload, timeout=60)
         response.raise_for_status()
         raw_output = response.json().get("response", "").strip()
         
