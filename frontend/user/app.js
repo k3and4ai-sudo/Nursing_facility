@@ -289,7 +289,6 @@ document.addEventListener("DOMContentLoaded", () => {
         draw();
     }
 
-    function stopMicrophone() {
         if (isRecording) {
             isRecording = false;
             if (recorder) {
