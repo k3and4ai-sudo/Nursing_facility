@@ -119,6 +119,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     triggerVitalAlert(data.user_name, data.room_number, data.reason, data.timestamp);
                     break;
 
+                case "pii_alert":
+                    triggerPIIAlert(data.user_name, data.room_number, data.detail, data.timestamp);
+                    break;
+
                 case "intercom_audio":
                     if (isIntercomCallActive && selectedTerminalId === data.source) {
                         playIntercomChunk(data.audio);
@@ -328,12 +332,23 @@ document.addEventListener("DOMContentLoaded", () => {
     function triggerVitalAlert(name, room, reason, timestamp) {
         // Active Alert List update
         const id = "alert_" + Date.now();
-        activeAlerts.unshift({ id, name, room, reason, timestamp });
+        activeAlerts.unshift({ id, name, room, reason, timestamp, isPii: false });
         
         // Render alert UI
         renderAlertsList();
         
         // Show indicator and sound
+        alertBadge.classList.remove("hidden");
+        try {
+            alertSound.play().catch(e => console.log("Sound play blocked until user interaction."));
+        } catch(e) {}
+    }
+
+    function triggerPIIAlert(name, room, detail, timestamp) {
+        const id = "pii_alert_" + Date.now();
+        const reason = `【個人情報保護アラート】${detail || "会話中に実名・住所・番号が検知されGemini Liveを停止しました。"}`;
+        activeAlerts.unshift({ id, name, room, reason, timestamp, isPii: true });
+        renderAlertsList();
         alertBadge.classList.remove("hidden");
         try {
             alertSound.play().catch(e => console.log("Sound play blocked until user interaction."));

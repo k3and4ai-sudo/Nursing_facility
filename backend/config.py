@@ -7,6 +7,24 @@ DB_PATH = os.path.join(BASE_DIR, "nursing_facility.db")
 AUDIO_DIR = os.path.join(BASE_DIR, "audio_temp")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+# Load .env file automatically
+for env_path in [
+    os.path.join(os.path.dirname(BASE_DIR), ".env"),
+    os.path.join(BASE_DIR, ".env"),
+    os.path.expanduser("~/.env")
+]:
+    if os.path.exists(env_path):
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path, override=True)
+        except ImportError:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
 # Ollama settings
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:2b")
@@ -19,7 +37,7 @@ TTS_ENGINE = os.getenv("TTS_ENGINE", "gtts")  # "gtts" or "local" (mock/system)
 
 # Gemini API / Gemini Live Settings (Debug Mode)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest")
 
 # Release Flag: Set ENABLE_DEBUG_MODE=false in production to completely abolish debug features
 ENABLE_DEBUG_MODE = os.getenv("ENABLE_DEBUG_MODE", "true").lower() == "true"

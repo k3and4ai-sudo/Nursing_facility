@@ -50,38 +50,29 @@
             </div>
             
             <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
-
-            <!-- Processing Status Indicator (STT, LLM, TTS) -->
-            <div id="processing-indicator" class="processing-container hidden">
-                <div class="indicator-row">
-                    <div class="row-left">
-                        <span id="lamp-stt" class="lamp-dot idle"></span>
-                        <span class="lamp-label">音声認識</span>
-                    </div>
-                    <span id="time-stt" class="time-label">-</span>
-                </div>
-                <div class="indicator-row">
-                    <div class="row-left">
-                        <span id="lamp-llm" class="lamp-dot idle"></span>
-                        <span class="lamp-label">テキスト生成</span>
-                    </div>
-                    <span id="time-llm" class="time-label">-</span>
-                </div>
-                <div class="indicator-row">
-                    <div class="row-left">
-                        <span id="lamp-tts" class="lamp-dot idle"></span>
-                        <span class="lamp-label">音声作成(TTS)</span>
-                    </div>
-                    <span id="time-tts" class="time-label">-</span>
-                </div>
-            </div>
         </main>
 
         <!-- Two Separate Text Displays: User Speech vs Gemini Live Response -->
-        <footer class="footer">
-            <div class="speech-display-container">
+        <footer class="footer" style="width: 100% !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; gap: 16px !important; margin-top: 16px !important; box-sizing: border-box !important;">
+            <!-- Gemini Live Real-time Status Lamps Bar -->
+            <div id="status-lamps-bar" class="status-lamps-container">
+                <div id="lamp-sending" class="status-lamp">
+                    <span class="lamp-dot"></span>
+                    <span class="lamp-label">🎤 「あなたの声」送信中</span>
+                </div>
+                <div id="lamp-thinking" class="status-lamp">
+                    <span class="lamp-dot"></span>
+                    <span class="lamp-label">🧠 Gemini考え中...</span>
+                </div>
+                <div id="lamp-speaking" class="status-lamp">
+                    <span class="lamp-dot"></span>
+                    <span class="lamp-label">🔊 Gemini応答中</span>
+                </div>
+            </div>
+
+            <div class="speech-display-container" style="display: flex !important; flex-direction: row !important; gap: 16px !important; width: 100% !important; max-width: 580px !important; margin: 0 auto !important; box-sizing: border-box !important;">
                 <!-- User Speech (Microphone STT Result) -->
-                <div class="speech-box user-box">
+                <div class="speech-box user-box" style="flex: 1 1 50% !important; min-width: 0 !important; display: flex !important; flex-direction: column !important; gap: 8px !important; padding: 16px 20px !important; box-sizing: border-box !important;">
                     <div class="box-title">
                         <span class="box-icon">🎤</span>
                         <span>あなたの声 (マイク認識結果)</span>
@@ -90,7 +81,7 @@
                 </div>
                 
                 <!-- Gemini Live Response -->
-                <div class="speech-box ai-box">
+                <div class="speech-box ai-box" style="flex: 1 1 50% !important; min-width: 0 !important; display: flex !important; flex-direction: column !important; gap: 8px !important; padding: 16px 20px !important; box-sizing: border-box !important;">
                     <div class="box-title">
                         <span class="box-icon">✨</span>
                         <span>Gemini Live からの返答</span>
@@ -131,6 +122,19 @@
                 <div class="call-actions">
                     <button id="hangup-btn" class="call-btn hangup">切る</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- PII Guardrail Warning Overlay -->
+        <div id="pii-warning-overlay" class="modal-overlay hidden">
+            <div class="modal-card pii-card" style="text-align: center; padding: 30px;">
+                <div style="font-size: 3rem; margin-bottom: 10px;">🛡️</div>
+                <h2 style="color: #e53e3e; margin-bottom: 12px; font-size: 1.6rem;">プライバシー保護のため一時停止</h2>
+                <p id="pii-warning-text" style="font-size: 1.15rem; line-height: 1.7; color: #2d3748; margin-bottom: 24px;">
+                    会話の中に実名やお電話番号などの個人情報が含まれている可能性を検知したため、Gemini Liveとの会話を安全に一時停止しました。<br>
+                    個人情報は話さないようお願いいたします。
+                </p>
+                <button id="resume-pii-btn" class="modal-btn" style="background: linear-gradient(135deg, #3182ce, #2b6cb0); color: #fff; font-size: 1.25rem; font-weight: bold; padding: 14px 36px; border-radius: 30px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(49,130,206,0.3);">会話を再開する</button>
             </div>
         </div>
     </div>

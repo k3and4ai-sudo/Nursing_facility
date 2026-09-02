@@ -92,7 +92,8 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 36px;
+    gap: 16px;
+    margin-bottom: 12px;
 }
 
 /* Avatar / Wave Animations */
@@ -296,13 +297,108 @@ body {
     text-align: center;
 }
 
+/* Gemini Live Real-time Status Lamps */
+.status-lamps-container {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 12px 0 !important;
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+}
+
+.status-lamp {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 6px 12px !important;
+    border-radius: 30px !important;
+    background: #ffffff !important;
+    border: 2px solid #cbd5e1 !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.status-lamp .lamp-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    transition: all 0.25s ease;
+}
+
+/* Lamp States */
+/* 1. Sending: Blue Pulse */
+#lamp-sending.lamp-active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25);
+}
+#lamp-sending.lamp-active .lamp-dot {
+    background: #3b82f6;
+    box-shadow: 0 0 12px #3b82f6;
+    animation: lampPulseBlue 1.0s infinite ease-in-out;
+}
+
+/* 2. Thinking: Amber / Yellow Pulse */
+#lamp-thinking.lamp-active {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #b45309;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+}
+#lamp-thinking.lamp-active .lamp-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 12px #f59e0b;
+    animation: lampPulseAmber 0.8s infinite ease-in-out;
+}
+
+/* 3. Speaking: Emerald Green Glow */
+#lamp-speaking.lamp-active {
+    background: #ecfdf5;
+    border-color: #10b981;
+    color: #047857;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+#lamp-speaking.lamp-active .lamp-dot {
+    background: #10b981;
+    box-shadow: 0 0 12px #10b981;
+    animation: lampPulseGreen 1.0s infinite ease-in-out;
+}
+
+@keyframes lampPulseBlue {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+@keyframes lampPulseAmber {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.35); }
+}
+
+@keyframes lampPulseGreen {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
 /* Subtitle box (Footer) */
 .footer {
     width: 100%;
-    min-height: 80px;
     display: flex;
+    flex-direction: column !important;
     justify-content: center;
     align-items: center;
+    gap: 16px;
+    margin-top: 10px;
 }
 
 .subtitle-box {
@@ -521,79 +617,124 @@ body {
     gap: 12px;
 }
 
-.lamp-dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    display: inline-block;
-    transition: all 0.3s ease;
+/* Real-time Status Lamps Full Pill Background Glow System */
+.status-lamps-container {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 12px !important;
+    margin: 0 0 12px 0 !important;
+    width: 100% !important;
+    max-width: 650px !important;
+    box-sizing: border-box !important;
 }
 
-.lamp-dot.idle {
-    background-color: #cbd5e1;
-    box-shadow: none;
+.status-lamp {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 10px 18px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    border-radius: 30px !important;
+    background: rgba(255, 255, 255, 0.85) !important;
+    border: 2px solid rgba(203, 213, 225, 0.8) !important;
+    color: #64748b !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    backdrop-filter: blur(8px) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
 }
 
-.lamp-dot.active-stt {
-    background-color: #3b82f6;
-    box-shadow: 0 0 10px #3b82f6;
-    animation: blink 1s infinite alternate;
+.status-lamp .lamp-dot {
+    width: 10px !important;
+    height: 10px !important;
+    border-radius: 50% !important;
+    background-color: #cbd5e1 !important;
+    transition: all 0.3s ease !important;
 }
 
-.lamp-dot.active-llm {
-    background-color: #a855f7;
-    box-shadow: 0 0 10px #a855f7;
-    animation: blink 1s infinite alternate;
+/* Active State 1: 「あなたの声」送信中 (Vibrant Green Full Background Glow) */
+#lamp-sending.lamp-active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    border-color: #059669 !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.55), 0 0 12px rgba(16, 185, 129, 0.35) !important;
+    transform: translateY(-2px) scale(1.05) !important;
+    animation: pulse-green 1.2s infinite alternate !important;
+}
+#lamp-sending.lamp-active .lamp-dot {
+    background-color: #ffffff !important;
+    box-shadow: 0 0 8px #ffffff !important;
 }
 
-.lamp-dot.active-tts {
-    background-color: #ec4899;
-    box-shadow: 0 0 10px #ec4899;
-    animation: blink 1s infinite alternate;
+/* Active State 2: Gemini考え中... (Vibrant Amber/Yellow Full Background Glow) */
+#lamp-thinking.lamp-active {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    border-color: #d97706 !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.55), 0 0 12px rgba(245, 158, 11, 0.35) !important;
+    transform: translateY(-2px) scale(1.05) !important;
+    animation: pulse-amber 1.2s infinite alternate !important;
+}
+#lamp-thinking.lamp-active .lamp-dot {
+    background-color: #ffffff !important;
+    box-shadow: 0 0 8px #ffffff !important;
 }
 
-.lamp-label {
-    font-weight: 700;
+/* Active State 3: Gemini応答中 (Vibrant Blue Full Background Glow) */
+#lamp-speaking.lamp-active {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    border-color: #2563eb !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.55), 0 0 12px rgba(59, 130, 246, 0.35) !important;
+    transform: translateY(-2px) scale(1.05) !important;
+    animation: pulse-blue 1.2s infinite alternate !important;
+}
+#lamp-speaking.lamp-active .lamp-dot {
+    background-color: #ffffff !important;
+    box-shadow: 0 0 8px #ffffff !important;
 }
 
-.time-label {
-    font-family: 'Outfit', monospace;
-    font-weight: 800;
-    color: var(--text-muted);
+@keyframes pulse-green {
+    0% { box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45); }
+    100% { box-shadow: 0 8px 24px rgba(16, 185, 129, 0.75); }
 }
 
-@keyframes blink {
-    from { opacity: 0.4; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1.1); }
+@keyframes pulse-amber {
+    0% { box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45); }
+    100% { box-shadow: 0 8px 24px rgba(245, 158, 11, 0.75); }
+}
+
+@keyframes pulse-blue {
+    0% { box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45); }
+    100% { box-shadow: 0 8px 24px rgba(59, 130, 246, 0.75); }
 }
 
 /* Two Separate Speech Display Cards */
 .speech-display-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    width: 92%;
-    max-width: 1000px;
-    margin: 0 auto 20px;
-}
-
-@media (max-width: 768px) {
-    .speech-display-container {
-        grid-template-columns: 1fr;
-    }
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 16px !important;
+    width: 100% !important;
+    max-width: 600px !important;
+    margin: 0 auto !important;
 }
 
 .speech-box {
+    flex: 1 !important;
     background: rgba(255, 255, 255, 0.85);
     border-radius: 20px;
-    padding: 18px 24px;
+    padding: 14px 18px !important;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
     border: 2px solid transparent;
     backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-height: 110px;
+    gap: 6px;
+    min-height: 100px;
 }
 
 .speech-box.user-box {

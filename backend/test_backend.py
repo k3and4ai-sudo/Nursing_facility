@@ -247,5 +247,24 @@ class TestNursingFacilityBackend(unittest.TestCase):
         self.assertNotIn("意図的に", cleaned)
         self.assertTrue(len(cleaned) > 0)
 
+    def test_pii_guardrail_monitor(self):
+        """Test parallel background PII Guardrail Monitor prohibited terms detection."""
+        from backend.gemini_live import PIIGuardrailMonitor
+        
+        pii_triggered = []
+        def on_pii(cat, detail):
+            pii_triggered.append((cat, detail))
+
+        test_user = {"name": "山田 太郎"}
+        monitor = PIIGuardrailMonitor(user=test_user, on_pii_detected=on_pii)
+        
+        self.assertIn("山田 太郎", monitor.prohibited_terms)
+        self.assertIn("山田", monitor.prohibited_terms)
+        
+        # Test simulated PII detection trigger
+        monitor.on_pii_detected("real_name", "実名（山田）が含まれていました。")
+        self.assertEqual(len(pii_triggered), 1)
+        self.assertEqual(pii_triggered[0][0], "real_name")
+
 if __name__ == "__main__":
     unittest.main()

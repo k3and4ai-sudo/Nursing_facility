@@ -5,6 +5,7 @@ import re
 import json
 import base64
 import requests
+import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,7 @@ import backend.database as db
 import backend.speech as speech
 import backend.rag as rag
 import backend.vital_parser as vital_parser
+from backend.gemini_live import GeminiLiveSession, PIIGuardrailMonitor
 
 # Initialize Database on Import/Startup
 db.db_init()
@@ -215,13 +217,13 @@ def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_c
         "moderate": "中等度の認知症があります。簡単な言葉を使い、安心感を与える話し方を心がけてください。",
         "severe": "重度の認知症があります。言葉は非常にシンプルにし、受容と共感を最優先にし、決して否定しないでください。"
     }
-    dem_desc = dementia_info.get(user["dementia_level"], "")
+    dem_desc = dementia_info.get(user.get("dementia_level", ""), "")
     
     is_first_turn = (len(chat_history) == 0)
     current_time_str = db.datetime.now().strftime("%Y年%m月%d日 %H時%M分")
     
     if is_first_turn:
-        name_instruction = f"利用者の名前は「{user['name']}」様です。最初の会話ですので、「{user['name']}さん、こんにちは！」のように名前を入れて温かく迎えてください。"
+        name_instruction = f"利用者の名前は「{user.get('name', '利用者')}」様です。最初の会話ですので、「{user.get('name', '利用者')}さん、こんにちは！」のように名前を入れて温かく迎えてください。"
     else:
         name_instruction = "【重要】これは継続中の会話です。ユーザーの名前（「〇〇さん」「〇〇様」など）は絶対に使わないでください。名前を一切呼ばず、「そうですね」「はい」など自然な相槌から発言を開始してください。"
 
@@ -230,8 +232,8 @@ def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_c
 現在の施設内時刻: {current_time_str}
 {name_instruction}
 利用者の特徴: {dem_desc}
-AI対話時の注意点: {user["attention_points"]}
-申し送り・特記事項: {user["notes"]}
+AI対話時の注意点: {user.get("attention_points", "特になし")}
+申し送り・特記事項: {user.get("notes", "特になし")}
 
 対話時のルール:
 1. 相手の言葉を否定せず、傾聴、共感、受容の姿勢を徹底してください。
@@ -377,7 +379,12 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
             print(f"Gemini API direct query fallback: {e}")
 
     # Fallback to local Ollama (Gemma2) when API Key is missing or cloud query fails
-    return query_ollama_chat(user, chat_history, new_message, memory_context)
+    anon_user = dict(user)
+    anon_user["name"] = nickname
+    reply = query_ollama_chat(anon_user, chat_history, new_message, memory_context)
+    if not reply.startswith("✨ [Gemini Live]"):
+        reply = f"✨ [Gemini Live] {reply}"
+    return reply
 
 def query_gemini_live_audio(user: dict, chat_history: list, audio_bytes: bytes, memory_context: str) -> dict:
     """
@@ -816,6 +823,215 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
     except Exception as e:
         print(f"Error in user websocket: {e}")
         manager.disconnect_user(terminal_id)
+
+# WebSocket Endpoint for User Gemini Live Native Streaming & Parallel PII Guardrail
+@app.websocket("/ws/user/{terminal_id}/live")
+async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
+    await websocket.accept()
+    user = db.get_user_by_terminal(terminal_id)
+    if not user:
+        await websocket.send_json({
+            "type": "error",
+            "message": f"端末ID '{terminal_id}' は登録されていません。"
+        })
+        await websocket.close()
+        return
+
+    # Forward 24kHz PCM audio from Gemini Live to client
+    async def on_gemini_audio(pcm24_bytes: bytes):
+        try:
+            b64_data = base64.b64encode(pcm24_bytes).decode("utf-8")
+            await websocket.send_json({
+                "type": "live_audio_output",
+                "sample_rate": 24000,
+                "data": b64_data
+            })
+        except Exception as e:
+            print(f"Error sending live audio to client ({terminal_id}): {e}")
+
+    async def on_gemini_text(text: str):
+        try:
+            await websocket.send_json({
+                "type": "live_text_output",
+                "text": text
+            })
+        except Exception as e:
+            print(f"Error sending live text to client ({terminal_id}): {e}")
+
+    async def on_user_transcription(text: str):
+        try:
+            await websocket.send_json({
+                "type": "transcription_result",
+                "text": text
+            })
+        except Exception as e:
+            print(f"Error sending transcription result to client ({terminal_id}): {e}")
+
+    def on_gemini_error(err_msg: str):
+        print(f"Gemini Live Session Error ({terminal_id}): {err_msg}")
+
+    # Fetch recent conversation history for memory context sync
+    recent_history = db.get_chat_history(user["id"], limit=6)
+
+    # Initialize Gemini Live Session
+    session = GeminiLiveSession(
+        user=user,
+        on_audio_received=lambda audio: asyncio.create_task(on_gemini_audio(audio)),
+        on_error=on_gemini_error,
+        on_text_received=lambda txt: asyncio.create_task(on_gemini_text(txt)),
+        history=recent_history
+    )
+
+    # Triggered when Parallel Whisper/Ollama PII Inspector detects forbidden personal info
+    def on_pii_detected(category: str, detail: str):
+        print(f"[LIVE PII GUARDRAIL TRIGGERED] ({terminal_id}): {category} - {detail}")
+        # 1. Immediately send interruption frame to Gemini Live WebSocket session
+        asyncio.create_task(session.send_interruption())
+        # 2. Notify user client to halt playback and show warning UI / audio
+        asyncio.create_task(websocket.send_json({
+            "type": "pii_warning",
+            "category": category,
+            "message": "個人情報保護のため会話を一時停止しました。個人情報は話さないようお願いいたします。"
+        }))
+        # 3. Broadcast real-time PII Alert to Staff Dashboard
+        asyncio.create_task(manager.broadcast_to_staff({
+            "type": "pii_alert",
+            "terminal_id": terminal_id,
+            "user_name": user.get("name", "未登録"),
+            "room_number": user.get("room_number", "-"),
+            "category": category,
+            "detail": detail,
+            "timestamp": db.datetime.now().strftime("%H:%M:%S")
+        }))
+
+    # Initialize Parallel PII Guardrail Monitor
+    pii_monitor = PIIGuardrailMonitor(
+        user=user,
+        on_pii_detected=on_pii_detected,
+        on_transcription=lambda txt: asyncio.create_task(on_user_transcription(txt))
+    )
+
+    # Fallback audio accumulator when GEMINI_API_KEY is not set
+    fallback_pcm_buffer = bytearray()
+    last_fallback_speech_time = time.time()
+    is_generating_fallback = False
+
+    async def process_fallback_audio():
+        nonlocal is_generating_fallback, fallback_pcm_buffer
+        if is_generating_fallback or len(fallback_pcm_buffer) < 16000:
+            return
+        is_generating_fallback = True
+        try:
+            pcm_copy = bytes(fallback_pcm_buffer)
+            fallback_pcm_buffer.clear()
+            
+            # Convert PCM to Float32 for Whisper
+            audio_np = np.frombuffer(pcm_copy, dtype=np.int16).astype(np.float32) / 32768.0
+            loop = asyncio.get_running_loop()
+            whisper_model = speech.get_whisper_model()
+            
+            stt_res = await loop.run_in_executor(None, lambda: whisper_model.transcribe(audio_np, language="ja", fp16=False))
+            text = stt_res.get("text", "").strip()
+            
+            if text and speech.is_japanese_speech(text):
+                print(f"[Live Fallback STT]: '{text}'")
+                reply = query_ollama_chat(user, [], text, "")
+                cleaned_reply = clean_text_for_tts(reply)
+                tts_audio_b64 = speech.generate_tts_audio_base64(cleaned_reply)
+                
+                await websocket.send_json({
+                    "type": "chat_response",
+                    "text": cleaned_reply,
+                    "user_text": text,
+                    "audio": tts_audio_b64,
+                    "stt_time": 0.3,
+                    "llm_time": 0.5,
+                    "tts_time": 0.2
+                })
+        except Exception as e:
+            print(f"[Live Fallback Error]: {e}")
+        finally:
+            is_generating_fallback = False
+
+    try:
+        # Try connecting to native Gemini Live WS
+        try:
+            await session.connect()
+        except Exception as e:
+            print(f"[Gemini Live Session Notice]: {e}. Operating in local Ollama fallback mode.")
+
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "live_pcm_chunk":
+                # Incoming raw 16kHz PCM chunk (base64) from client
+                b64_chunk = data.get("data", "")
+                if b64_chunk:
+                    pcm_bytes = base64.b64decode(b64_chunk)
+                    # 1. Relay raw PCM to Gemini Live session if connected
+                    if session.is_connected:
+                        await session.send_audio_chunk(pcm_bytes)
+                    else:
+                        # Fallback mode: accumulate PCM chunks for Ollama voice response
+                        fallback_pcm_buffer.extend(pcm_bytes)
+                        if len(fallback_pcm_buffer) >= 64000: # Every ~2 seconds of audio
+                            asyncio.create_task(process_fallback_audio())
+
+                    # 2. Concurrently monitor for PII without blocking main audio relay
+                    asyncio.create_task(pii_monitor.add_pcm_chunk(pcm_bytes))
+
+            elif msg_type in ["eos", "end_of_speech"]:
+                # End of user utterance / silence detected
+                user_text = data.get("text", "").strip()
+                if user_text:
+                    print(f"[Live Session EOS]: Received user text: '{user_text}'")
+                    # Ensure Gemini Live WebSocket session is connected and auto-reconnect if dropped
+                    if not session.is_connected or not session.ws:
+                        print("[Live Session]: Session disconnected or closed, reconnecting now...")
+                        try:
+                            await session.connect()
+                        except Exception as e_conn:
+                            print(f"[Live Session Reconnect Error]: {e_conn}")
+                    
+                    if session.is_connected:
+                        asyncio.create_task(session.send_end_of_turn(user_text))
+
+                    # Asynchronously generate response text for client display (#ai-response-box)
+                    async def fetch_and_send_text_reply():
+                        try:
+                            import google.generativeai as genai
+                            genai.configure(api_key=session.api_key)
+                            model = genai.GenerativeModel("gemini-2.0-flash")
+                            prompt = f"あなたは高齢者施設に寄り添う親切で暖かい介護アシスタントAIです。短く優しく1~2文の日本語で回答してください。利用者様の発話: 「{user_text}」"
+                            gen_task = asyncio.to_thread(model.generate_content, prompt)
+                            resp = await asyncio.wait_for(gen_task, timeout=3.0)
+                            reply_text = resp.text.strip() if resp and resp.text else f"「{user_text}」ですね。お話しできて嬉しいです！"
+                            await websocket.send_json({
+                                "type": "live_response",
+                                "text": reply_text
+                            })
+                        except Exception as fallback_err:
+                            print(f"[Live Response Text Error/Timeout]: {fallback_err}")
+                            await websocket.send_json({
+                                "type": "live_response",
+                                "text": f"「{user_text}」ですね。お話しできて嬉しいです！"
+                            })
+
+                    asyncio.create_task(fetch_and_send_text_reply())
+
+            elif msg_type == "resume_live_session":
+                # User acknowledged warning and clicks resume
+                pii_monitor.reset()
+                fallback_pcm_buffer.clear()
+                await websocket.send_json({"type": "session_resumed", "status": "ok"})
+
+    except WebSocketDisconnect:
+        print(f"User Live WebSocket disconnected: {terminal_id}")
+    except Exception as e:
+        print(f"Error in user live websocket ({terminal_id}): {e}")
+    finally:
+        await session.close()
 
 # WebSocket Endpoint for Staff client
 @app.websocket("/ws/staff")

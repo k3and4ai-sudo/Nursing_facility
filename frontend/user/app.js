@@ -1,10 +1,17 @@
 // main application logic for user client
 document.addEventListener("DOMContentLoaded", () => {
     const urlParams = new URLSearchParams(window.location.search);
-    let terminalId = urlParams.get("terminal_id") || localStorage.getItem("nursing_terminal_id");
+    let isDebugMode = urlParams.get("debug") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+
+    let terminalId = urlParams.get("terminal_id");
     if (!terminalId) {
-        // Generate random terminal ID
-        terminalId = "user_tablet_" + Math.floor(1000 + Math.random() * 9000);
+        const savedId = localStorage.getItem("nursing_terminal_id");
+        if (savedId && savedId === "user_tablet_1") {
+            terminalId = savedId;
+        } else {
+            // Default to demo registered terminal user_tablet_1
+            terminalId = "user_tablet_1";
+        }
     }
     localStorage.setItem("nursing_terminal_id", terminalId);
     
@@ -40,17 +47,78 @@ document.addEventListener("DOMContentLoaded", () => {
     checkSystemInfo();
 
     // Debug Mode (Gemini Live) Toggle Logic
-    let isDebugMode = urlParams.get("debug") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+    // Web Speech API for instant client-side text rendering & automatic EOS trigger
+    let speechRec = null;
+    let currentUtteranceText = "";
+    let speechDebounceTimer = null;
+    let isAISpeaking = false;
+
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+        const SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+        speechRec = new SpeechRecClass();
+        speechRec.continuous = true;
+        speechRec.interimResults = true;
+        speechRec.lang = "ja-JP";
+
+        speechRec.onresult = (event) => {
+            // Ignore microphone input while AI is speaking (prevents speaker echo feedback loop)
+            if (isAISpeaking || isPlayingPCM24) {
+                return;
+            }
+
+            let transcript = "";
+            for (let i = event.results.length - 1; i >= 0; i--) {
+                if (event.results[i] && event.results[i][0]) {
+                    transcript = event.results[i][0].transcript;
+                    break;
+                }
+            }
+            const clean = transcript.trim();
+            if (clean && userSpeechBox) {
+                userSpeechBox.textContent = clean;
+                currentUtteranceText = clean;
+                setLiveLampState("sending");
+
+                if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
+                speechDebounceTimer = setTimeout(() => {
+                    if (!isAISpeaking && !isPlayingPCM24 && currentUtteranceText && currentUtteranceText !== lastSentSpeechText) {
+                        lastSentSpeechText = currentUtteranceText;
+                        const textToSend = currentUtteranceText;
+                        currentUtteranceText = "";
+                        setLiveLampState("thinking");
+                        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                            console.log("[SpeechRec] Sending EOS text to Gemini Live:", textToSend);
+                            liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));
+                        }
+                    }
+                }, 300);
+            }
+        };
+
+        speechRec.onend = () => {
+            if (isRecording) {
+                try { speechRec.start(); } catch(e){}
+            }
+        };
+
+        speechRec.onerror = (e) => {
+            console.log("SpeechRec error:", e);
+        };
+    }
+
+    isDebugMode = urlParams.get("debug") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
     function updateDebugUI() {
         if (isDebugMode && systemInfo.enable_debug_mode) {
-            debugBadge.classList.remove("hidden");
+            if (debugBadge) debugBadge.classList.remove("hidden");
             localStorage.setItem("nursing_debug_mode", "true");
+            if (typeof connectLiveWS === "function" && (!liveWs || liveWs.readyState !== WebSocket.OPEN)) {
+                connectLiveWS();
+            }
         } else {
-            debugBadge.classList.add("hidden");
+            if (debugBadge) debugBadge.classList.add("hidden");
             localStorage.setItem("nursing_debug_mode", "false");
         }
     }
-    updateDebugUI();
 
     if (debugBadge) {
         debugBadge.addEventListener("click", () => {
@@ -115,6 +183,13 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await fetch(`/api/users/terminal/${terminalId}`);
             if (response.status === 404) {
+                if (isDebugMode && terminalId !== "user_tablet_1") {
+                    console.log("Unregistered terminal in debug mode, auto-fallback to user_tablet_1");
+                    terminalId = "user_tablet_1";
+                    localStorage.setItem("nursing_terminal_id", terminalId);
+                    if (displayTerminalId) displayTerminalId.textContent = terminalId;
+                    return await checkRegistration();
+                }
                 showRegisterScreen();
                 return false;
             }
@@ -222,14 +297,246 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
+    // PII Warning Elements
+    const piiWarningOverlay = document.getElementById("pii-warning-overlay");
+    const resumePiiBtn = document.getElementById("resume-pii-btn");
+    const piiWarningText = document.getElementById("pii-warning-text");
+
+    let liveWs = null;
+    let liveAudioCtx = null;
+
+    function connectLiveWS() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws/user/${terminalId}/live`;
+        liveWs = new WebSocket(wsUrl);
+
+        liveWs.onopen = () => {
+            console.log("Gemini Live WS connected");
+        };
+
+        liveWs.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === "live_audio_output") {
+                playPCM24Chunk(data.data, data.sample_rate || 24000);
+            } else if (data.type === "live_response" || data.type === "live_text_output") {
+                if (aiResponseBox && data.text) {
+                    if (data.type === "live_text_output") {
+                        if (!aiResponseBox.textContent || aiResponseBox.textContent.includes("表示されます") || aiResponseBox.textContent.includes("待っています") || aiResponseBox.textContent.includes("リアルタイム音声応答中")) {
+                            aiResponseBox.textContent = data.text;
+                        } else if (!aiResponseBox.textContent.endsWith(data.text)) {
+                            aiResponseBox.textContent += data.text;
+                        }
+                    } else {
+                        aiResponseBox.textContent = data.text;
+                        playTTSVoice(data.text);
+                    }
+                    setLiveLampState("speaking");
+                    setAvatarState("speaking");
+                }
+            } else if (data.type === "transcription_result") {
+                if (userSpeechBox && data.text) {
+                    userSpeechBox.textContent = data.text;
+                }
+            } else if (data.type === "chat_response") {
+                if (userSpeechBox && data.user_text) userSpeechBox.textContent = data.user_text;
+                if (aiResponseBox && data.text) aiResponseBox.textContent = data.text;
+                if (data.audio) playBase64Audio(data.audio);
+            } else if (data.type === "pii_warning") {
+                handlePIIWarning(data.message);
+            }
+        };
+
+        liveWs.onclose = () => {
+            console.log("Gemini Live WS disconnected");
+            setTimeout(connectLiveWS, 3000);
+        };
+    }
+
+    const lampSending = document.getElementById("lamp-sending");
+    const lampThinking = document.getElementById("lamp-thinking");
+    const lampSpeaking = document.getElementById("lamp-speaking");
+
+    let silenceTimeout = null;
+    let thinkingTimeoutTimer = null;
+
+    function setLiveLampState(state) {
+        if (silenceTimeout) {
+            clearTimeout(silenceTimeout);
+            silenceTimeout = null;
+        }
+        if (thinkingTimeoutTimer) {
+            clearTimeout(thinkingTimeoutTimer);
+            thinkingTimeoutTimer = null;
+        }
+
+        if (state === "sending" && lampSending) {
+            lampSending.classList.add("lamp-active");
+            if (lampThinking) lampThinking.classList.remove("lamp-active");
+            if (lampSpeaking) lampSpeaking.classList.remove("lamp-active");
+            silenceTimeout = setTimeout(() => {
+                if (lampSending) lampSending.classList.remove("lamp-active");
+            }, 600);
+        } else if (state === "thinking" && lampThinking) {
+            lampThinking.classList.add("lamp-active");
+            if (lampSending) lampSending.classList.remove("lamp-active");
+            if (lampSpeaking) lampSpeaking.classList.remove("lamp-active");
+            thinkingTimeoutTimer = setTimeout(() => {
+                if (lampThinking) lampThinking.classList.remove("lamp-active");
+                setAvatarState("idle");
+                if (statusText) statusText.textContent = "お話しする準備ができました";
+            }, 4000);
+        } else if (state === "speaking" && lampSpeaking) {
+            lampSpeaking.classList.add("lamp-active");
+            if (lampSending) lampSending.classList.remove("lamp-active");
+            if (lampThinking) lampThinking.classList.remove("lamp-active");
+        } else if (state === "idle") {
+            if (lampSending) lampSending.classList.remove("lamp-active");
+            if (lampThinking) lampThinking.classList.remove("lamp-active");
+            if (lampSpeaking) lampSpeaking.classList.remove("lamp-active");
+        }
+    }
+
+    let nextAudioStartTime = 0;
+    let isPlayingPCM24 = false;
+    let pcm24EndTimer = null;
+
+    function playPCM24Chunk(base64Data, sampleRate) {
+        if (!liveAudioCtx) {
+            liveAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
+        }
+        if (liveAudioCtx.state === "suspended") {
+            liveAudioCtx.resume();
+        }
+        try {
+            const binaryStr = atob(base64Data);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+            const int16Array = new Int16Array(bytes.buffer);
+            const float32Array = new Float32Array(int16Array.length);
+            for (let i = 0; i < int16Array.length; i++) {
+                float32Array[i] = int16Array[i] / 32768.0;
+            }
+
+            const buffer = liveAudioCtx.createBuffer(1, float32Array.length, sampleRate);
+            buffer.getChannelData(0).set(float32Array);
+
+            const source = liveAudioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(liveAudioCtx.destination);
+
+            const currentTime = liveAudioCtx.currentTime;
+            if (nextAudioStartTime < currentTime) {
+                nextAudioStartTime = currentTime + 0.02;
+            }
+            source.start(nextAudioStartTime);
+            nextAudioStartTime += buffer.duration;
+
+            isAISpeaking = true;
+            isPlayingPCM24 = true;
+            setLiveLampState("speaking");
+
+            if (pcm24EndTimer) clearTimeout(pcm24EndTimer);
+            pcm24EndTimer = setTimeout(() => {
+                isAISpeaking = false;
+                isPlayingPCM24 = false;
+                setLiveLampState("idle");
+                setAvatarState("idle");
+                if (statusText) statusText.textContent = "お話しする準備ができました";
+            }, (nextAudioStartTime - currentTime) * 1000 + 300);
+
+            setAvatarState("speaking");
+            statusText.textContent = "Gemini Live と対話中...";
+
+            if (aiResponseBox && (!aiResponseBox.textContent || aiResponseBox.textContent.includes("表示されます") || aiResponseBox.textContent.includes("待っています"))) {
+                aiResponseBox.textContent = "🔊 リアルタイム音声でお返答中...";
+            }
+        } catch (e) {
+            console.error("PCM24 playback error:", e);
+        }
+    }
+
+    function playTTSVoice(text) {
+        if (!text || !window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+
+        isAISpeaking = true;
+        setLiveLampState("speaking");
+        setAvatarState("speaking");
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "ja-JP";
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        utterance.onend = () => {
+            setTimeout(() => {
+                isAISpeaking = false;
+                setLiveLampState("idle");
+                setAvatarState("idle");
+                if (statusText) statusText.textContent = "お話しする準備ができました";
+            }, 300);
+        };
+
+        utterance.onerror = () => {
+            isAISpeaking = false;
+            setLiveLampState("idle");
+            setAvatarState("idle");
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function float32ToInt16Base64(float32Array) {
+        const int16Array = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32Array[i]));
+            int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        const bytes = new Uint8Array(int16Array.buffer);
+        let binary = "";
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    function handlePIIWarning(message) {
+        console.warn("PII Warning received:", message);
+        if (liveAudioCtx) {
+            liveAudioCtx.suspend();
+        }
+        if (piiWarningOverlay) {
+            if (piiWarningText) piiWarningText.textContent = message || "個人情報保護のため会話を一時停止しました。";
+            piiWarningOverlay.classList.remove("hidden");
+        }
+        setAvatarState("idle");
+        statusText.textContent = "⚠️ プライバシー保護による一時停止中";
+        playTTSVoice("個人情報保護のため、会話を一時停止しました。個人情報は話さないようお願いいたします。");
+    }
+
+    if (resumePiiBtn) {
+        resumePiiBtn.addEventListener("click", () => {
+            if (piiWarningOverlay) piiWarningOverlay.classList.add("hidden");
+            if (liveAudioCtx && liveAudioCtx.state === "suspended") {
+                liveAudioCtx.resume();
+            }
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                liveWs.send(JSON.stringify({ type: "resume_live_session" }));
+            }
+            statusText.textContent = "お話しする準備ができました";
+        });
+    }
+
     // Dialogue Interaction (Full-Duplex Gemini Live Streaming)
     micBtn.addEventListener("click", toggleDialogueRecording);
 
     let chunkAccumulator = [];
     let lastChunkSendTime = 0;
 
-    async function toggleDialogueRecording() {
-        console.log("toggleDialogueRecording called. isRecording:", isRecording);
     let waveformAnimId = null;
 
     function startWaveformVisualizer(analyser) {
@@ -289,10 +596,17 @@ document.addEventListener("DOMContentLoaded", () => {
         draw();
     }
 
+    micBtn.addEventListener("click", toggleDialogueRecording);
+
+    async function toggleDialogueRecording() {
+        console.log("toggleDialogueRecording called. isRecording:", isRecording);
         if (isRecording) {
             isRecording = false;
             if (recorder) {
                 recorder.stop();
+            }
+            if (speechRec) {
+                try { speechRec.stop(); } catch(e){}
             }
             if (activeAudio) {
                 activeAudio.pause();
@@ -317,68 +631,34 @@ document.addEventListener("DOMContentLoaded", () => {
             
             try {
                 isRecording = true;
-                let isSpeaking = false;
-                let silenceStartTime = 0;
-                let speechBuffer = [];
-                const VOICE_THRESHOLD = 0.0025;
-                const SILENCE_DURATION_MS = 500; // 500ms of silence indicates end of utterance
+                
+                // Ensure Gemini Live WebSocket is active
+                if (!liveWs || liveWs.readyState !== WebSocket.OPEN) {
+                    connectLiveWS();
+                }
+
+                if (speechRec) {
+                    try { speechRec.start(); } catch(e){}
+                }
+
+                let vadSilenceFrames = 0;
+                let isSpeakingUtterance = false;
+                let speechChunkCount = 0;
+                let lastSentSpeechText = "";
 
                 recorder.onChunkCallback = (resampledChunk) => {
-                    if (activeAudio && !activeAudio.paused && !activeAudio.ended) {
-                        speechBuffer = [];
-                        isSpeaking = false;
-                        silenceStartTime = 0;
+                    // Mute mic streaming while Gemini AI is actively speaking back to avoid feedback loop
+                    if (isPlayingPCM24) {
                         return;
                     }
-                    
-                    let sum = 0;
-                    for (let i = 0; i < resampledChunk.length; i++) {
-                        sum += resampledChunk[i] * resampledChunk[i];
-                    }
-                    const rms = Math.sqrt(sum / resampledChunk.length);
-                    const now = Date.now();
 
-                    if (rms > VOICE_THRESHOLD) {
-                        if (!isSpeaking) {
-                            isSpeaking = true;
-                            speechBuffer = [];
-                        }
-                        speechBuffer.push(resampledChunk);
-                        silenceStartTime = 0;
-                    } else if (isSpeaking) {
-                        // Pad silence trailing edge
-                        speechBuffer.push(resampledChunk);
-                        if (silenceStartTime === 0) {
-                            silenceStartTime = now;
-                        } else if (now - silenceStartTime >= SILENCE_DURATION_MS || speechBuffer.length >= 30) {
-                            // End of Speech (EOS) detected! Send complete utterance
-                            let totalLen = 0;
-                            for (let c of speechBuffer) totalLen += c.length;
-                            const merged = new Float32Array(totalLen);
-                            let offset = 0;
-                            for (let c of speechBuffer) {
-                                merged.set(c, offset);
-                                offset += c.length;
-                            }
-                            speechBuffer = [];
-                            isSpeaking = false;
-                            silenceStartTime = 0;
-                            
-                            const wavBlob = recorder.encodeChunkToWav(merged);
-                            const reader = new FileReader();
-                            reader.readAsDataURL(wavBlob);
-                            reader.onloadend = () => {
-                                const b64 = reader.result.split(',')[1];
-                                if (ws && ws.readyState === WebSocket.OPEN && isRecording) {
-                                    ws.send(JSON.stringify({
-                                        type: "bidi_audio",
-                                        audio: b64,
-                                        eos: true,
-                                        debug_mode: isDebugMode
-                                    }));
-                                }
-                            };
-                        }
+                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                        // Unconditionally stream raw PCM audio chunks to Gemini Live while microphone is active
+                        const b64Pcm = float32ToInt16Base64(resampledChunk);
+                        liveWs.send(JSON.stringify({
+                            type: "live_pcm_chunk",
+                            data: b64Pcm
+                        }));
                     }
                 };
 
@@ -386,10 +666,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 startWaveformVisualizer(recorder.analyser);
                 micBtn.classList.add("recording", "full-duplex-on");
                 setAvatarState("listening");
-                statusText.textContent = "全二重リアルタイム対話中 (お話しください)";
+                statusText.textContent = "⚡ Gemini Live ネイティブリアルタイム接続中 (お話しください)";
                 guideText.textContent = "トークボタンはONのままです（終了するにはもう1回押します）";
-                if (userSpeechBox) userSpeechBox.textContent = "マイクがあなたの声を待っています...";
-                if (aiResponseBox) aiResponseBox.textContent = "ここにGeminiのお返事が表示されます...";
+                if (userSpeechBox) userSpeechBox.textContent = "マイク音声がリアルタイムでGemini Liveへ直ストリーミングされています...";
+                if (aiResponseBox) aiResponseBox.textContent = "Gemini Liveのネイティブ音声応答を待っています...";
             } catch (err) {
                 statusText.textContent = "マイクが使えません";
                 console.error("Microphone start error:", err);
@@ -633,5 +913,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Initialize application connection
-    connectWS();
+    async function initApp() {
+        try {
+            await checkSystemInfo();
+            updateDebugUI();
+            await checkRegistration();
+            connectWS();
+            if (isDebugMode) {
+                connectLiveWS();
+            }
+        } catch (e) {
+            console.error("App init error:", e);
+        }
+    }
+    initApp();
 });
