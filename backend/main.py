@@ -908,50 +908,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     pii_monitor = PIIGuardrailMonitor(
         user=user,
         on_pii_detected=on_pii_detected,
-        on_transcription=lambda txt: asyncio.create_task(on_user_transcription(txt))
+        on_transcription=None
     )
-
-    # Fallback audio accumulator when GEMINI_API_KEY is not set
-    fallback_pcm_buffer = bytearray()
-    last_fallback_speech_time = time.time()
-    is_generating_fallback = False
-
-    async def process_fallback_audio():
-        nonlocal is_generating_fallback, fallback_pcm_buffer
-        if is_generating_fallback or len(fallback_pcm_buffer) < 16000:
-            return
-        is_generating_fallback = True
-        try:
-            pcm_copy = bytes(fallback_pcm_buffer)
-            fallback_pcm_buffer.clear()
-            
-            # Convert PCM to Float32 for Whisper
-            audio_np = np.frombuffer(pcm_copy, dtype=np.int16).astype(np.float32) / 32768.0
-            loop = asyncio.get_running_loop()
-            whisper_model = speech.get_whisper_model()
-            
-            stt_res = await loop.run_in_executor(None, lambda: whisper_model.transcribe(audio_np, language="ja", fp16=False))
-            text = stt_res.get("text", "").strip()
-            
-            if text and speech.is_japanese_speech(text):
-                print(f"[Live Fallback STT]: '{text}'")
-                reply = query_ollama_chat(user, [], text, "")
-                cleaned_reply = clean_text_for_tts(reply)
-                tts_audio_b64 = speech.generate_tts_audio_base64(cleaned_reply)
-                
-                await websocket.send_json({
-                    "type": "chat_response",
-                    "text": cleaned_reply,
-                    "user_text": text,
-                    "audio": tts_audio_b64,
-                    "stt_time": 0.3,
-                    "llm_time": 0.5,
-                    "tts_time": 0.2
-                })
-        except Exception as e:
-            print(f"[Live Fallback Error]: {e}")
-        finally:
-            is_generating_fallback = False
 
     try:
         # Try connecting to native Gemini Live WS
@@ -969,17 +927,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 b64_chunk = data.get("data", "")
                 if b64_chunk:
                     pcm_bytes = base64.b64decode(b64_chunk)
-                    # 1. Relay raw PCM to Gemini Live session if connected
+                    # 1. Ensure Gemini Live WebSocket session is active and relay PCM
+                    if not session.is_connected:
+                        await session.ensure_connected()
                     if session.is_connected:
                         await session.send_audio_chunk(pcm_bytes)
-                    else:
-                        # Fallback mode: accumulate PCM chunks for Ollama voice response
-                        fallback_pcm_buffer.extend(pcm_bytes)
-                        if len(fallback_pcm_buffer) >= 64000: # Every ~2 seconds of audio
-                            asyncio.create_task(process_fallback_audio())
 
-                    # 2. Concurrently monitor for PII without blocking main audio relay
-                    asyncio.create_task(pii_monitor.add_pcm_chunk(pcm_bytes))
+                    # 2. Synchronously update PII buffer without task creation overhead
+                    pii_monitor.add_pcm_chunk_sync(pcm_bytes)
 
             elif msg_type in ["eos", "end_of_speech"]:
                 # End of user utterance / silence detected
@@ -996,29 +951,6 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     
                     if session.is_connected:
                         asyncio.create_task(session.send_end_of_turn(user_text))
-
-                    # Asynchronously generate response text for client display (#ai-response-box)
-                    async def fetch_and_send_text_reply():
-                        try:
-                            import google.generativeai as genai
-                            genai.configure(api_key=session.api_key)
-                            model = genai.GenerativeModel("gemini-2.0-flash")
-                            prompt = f"あなたは高齢者施設に寄り添う親切で暖かい介護アシスタントAIです。短く優しく1~2文の日本語で回答してください。利用者様の発話: 「{user_text}」"
-                            gen_task = asyncio.to_thread(model.generate_content, prompt)
-                            resp = await asyncio.wait_for(gen_task, timeout=3.0)
-                            reply_text = resp.text.strip() if resp and resp.text else f"「{user_text}」ですね。お話しできて嬉しいです！"
-                            await websocket.send_json({
-                                "type": "live_response",
-                                "text": reply_text
-                            })
-                        except Exception as fallback_err:
-                            print(f"[Live Response Text Error/Timeout]: {fallback_err}")
-                            await websocket.send_json({
-                                "type": "live_response",
-                                "text": f"「{user_text}」ですね。お話しできて嬉しいです！"
-                            })
-
-                    asyncio.create_task(fetch_and_send_text_reply())
 
             elif msg_type == "resume_live_session":
                 # User acknowledged warning and clicks resume

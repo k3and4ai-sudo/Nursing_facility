@@ -54,22 +54,24 @@ class PIIGuardrailMonitor:
             re.compile(r'(東京都|大阪府|京都府|北海道|.{2,3}県).{1,5}(市|区|町|村)'), # Address
         ]
 
-    async def add_pcm_chunk(self, chunk: bytes):
-        """Appends raw 16kHz 16bit PCM audio chunk and checks for PII if buffer threshold reached."""
+    def add_pcm_chunk_sync(self, chunk: bytes):
+        """Synchronously appends raw 16kHz 16bit PCM audio chunk without async lock overhead."""
         if not self.is_active or not chunk:
             return
             
-        async with self.lock:
-            self.audio_buffer.extend(chunk)
-            # Check every ~1.0 second of audio (16000 Hz * 2 bytes * 1.0s = 32000 bytes)
-            if len(self.audio_buffer) - self.last_check_len >= 32000:
-                self.last_check_len = len(self.audio_buffer)
-                # Run inspection in background task to avoid blocking main audio relay
-                asyncio.create_task(self._inspect_buffer())
+        self.audio_buffer.extend(chunk)
+        # Check every ~3.0 seconds of audio (16000 Hz * 2 bytes * 3.0s = 96000 bytes)
+        if len(self.audio_buffer) - self.last_check_len >= 96000:
+            self.last_check_len = len(self.audio_buffer)
+            # Run inspection in background task to avoid blocking main audio relay
+            asyncio.create_task(self._inspect_buffer())
+
+    async def add_pcm_chunk(self, chunk: bytes):
+        self.add_pcm_chunk_sync(chunk)
 
     async def _inspect_buffer(self):
         """Runs Whisper STT in threadpool and validates text for PII."""
-        if self.is_processing or not self.is_active or len(self.audio_buffer) < 32000:
+        if self.is_processing or not self.is_active or len(self.audio_buffer) < 96000:
             return
             
         self.is_processing = True
@@ -158,81 +160,95 @@ class GeminiLiveSession:
         self.ws = None
         self.is_connected = False
         self.is_closing = False
+        self.pending_chunks = []
+        self._connect_lock = asyncio.Lock()
         self.api_key = os.getenv("GEMINI_API_KEY", getattr(config, "GEMINI_API_KEY", ""))
 
     async def connect(self):
         """Establishes WebSocket connection to Gemini Live API and sends setup frame with history context."""
-        self.api_key = os.getenv("GEMINI_API_KEY", "") or getattr(config, "GEMINI_API_KEY", "")
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY is not configured.")
-            
-        url = f"{GEMINI_WS_URL}?key={self.api_key}"
-        try:
-            self.ws = await websockets.connect(url)
-            self.is_connected = True
-            
-            # Send BidiGenerateContentSetup frame
-            nickname = self.user.get("name", "利用者")
-            # Avoid full name in setup prompt
-            if " " in nickname:
-                nickname = nickname.split()[1] + "さん"
-            elif len(nickname) > 2:
-                nickname = nickname[1:] + "さん"
+        async with self._connect_lock:
+            if self.is_connected and self.ws and getattr(self.ws, "open", True):
+                return
+            self.api_key = os.getenv("GEMINI_API_KEY", "") or getattr(config, "GEMINI_API_KEY", "")
+            if not self.api_key:
+                raise ValueError("GEMINI_API_KEY is not configured.")
                 
-            # Target official Gemini Multimodal Live API model ID
-            model_name = getattr(config, "GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest")
-            if not model_name.startswith("models/"):
-                model_name = f"models/{model_name}"
+            url = f"{GEMINI_WS_URL}?key={self.api_key}"
+            try:
+                self.ws = await websockets.connect(url)
+                self.is_connected = True
                 
-            # Format recent chat history if available
-            history_text = ""
-            if self.history:
-                recent_turns = []
-                for h in self.history[-6:]:
-                    sender_label = "利用者" if h.get("sender") == "user" else "Gemini"
-                    msg = h.get("message", "").strip()
-                    if msg:
-                        recent_turns.append(f"{sender_label}: {msg}")
-                if recent_turns:
-                    history_text = "\n【直近の会話履歴】\n" + "\n".join(recent_turns)
+                # Send BidiGenerateContentSetup frame
+                nickname = self.user.get("name", "利用者")
+                if " " in nickname:
+                    nickname = nickname.split()[1] + "さん"
+                elif len(nickname) > 2:
+                    nickname = nickname[1:] + "さん"
+                    
+                model_name = getattr(config, "GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest")
+                if not model_name.startswith("models/"):
+                    model_name = f"models/{model_name}"
+                    
+                history_text = ""
+                if self.history:
+                    recent_turns = []
+                    for h in self.history[-6:]:
+                        sender_label = "利用者" if h.get("sender") == "user" else "Gemini"
+                        msg = h.get("message", "").strip()
+                        if msg:
+                            recent_turns.append(f"{sender_label}: {msg}")
+                    if recent_turns:
+                        history_text = "\n【直近の会話履歴】\n" + "\n".join(recent_turns)
 
-            setup_frame = {
-                "setup": {
-                    "model": model_name,
-                    "generationConfig": {
-                        "responseModalities": ["AUDIO"],
-                        "speechConfig": {
-                            "voiceConfig": {
-                                "prebuiltVoiceConfig": {
-                                    "voiceName": "Puck"
+                setup_frame = {
+                    "setup": {
+                        "model": model_name,
+                        "generationConfig": {
+                            "responseModalities": ["AUDIO"],
+                            "speechConfig": {
+                                "voiceConfig": {
+                                    "prebuiltVoiceConfig": {
+                                        "voiceName": "Puck"
+                                    }
                                 }
                             }
+                        },
+                        "systemInstruction": {
+                            "parts": [
+                                {
+                                    "text": (
+                                        f"あなたは介護施設の高齢者ケアに特化したGemini Live会話AIアシスタントです。"
+                                        f"利用者のニックネームは「{nickname}」様です。温かく優しく短い日本語で相槌を打ちながら会話してください。"
+                                        f"否定せず受容・共感の姿勢を徹底し、思考解説や英語テキストは一切出力せず、即座に利用者様への短い1〜2文の日本語返答のみを音声出力してください。"
+                                        f"{history_text}"
+                                    )
+                                }
+                            ]
                         }
-                    },
-                    "systemInstruction": {
-                        "parts": [
-                            {
-                                "text": (
-                                    f"あなたは介護施設の高齢者ケアに特化したGemini Live会話AIアシスタントです。"
-                                    f"利用者のニックネームは「{nickname}」様です。温かく優しく短い日本語で相槌を打ちながら会話してください。"
-                                    f"否定せず受容・共感の姿勢を徹底し、思考解説や英語テキストは一切出力せず、即座に利用者様への短い1〜2文の日本語返答のみを音声出力してください。"
-                                    f"{history_text}"
-                                )
-                            }
-                        ]
                     }
                 }
-            }
-            await self.ws.send(json.dumps(setup_frame, ensure_ascii=False))
-            
-            # Start background listener loop for incoming Gemini responses
-            asyncio.create_task(self._receive_loop())
-            print(f"[Gemini Live Session]: Connected using model '{model_name}' with history ({len(self.history)} items). Setup frame sent.")
-        except Exception as e:
-            self.is_connected = False
-            print(f"[Gemini Live Session Connection Error]: {e}")
-            if self.on_error:
-                self.on_error(str(e))
+                await self.ws.send(json.dumps(setup_frame, ensure_ascii=False))
+                
+                # Flush any pending PCM audio chunks buffered during reconnect
+                if self.pending_chunks:
+                    print(f"[Gemini Live Session]: Flushing {len(self.pending_chunks)} buffered audio chunks after reconnect...")
+                    for chunk_b64 in self.pending_chunks:
+                        media_frame = {
+                            "realtimeInput": {
+                                "mediaChunks": [{"mimeType": "audio/pcm;rate=16000", "data": chunk_b64}]
+                            }
+                        }
+                        await self.ws.send(json.dumps(media_frame))
+                    self.pending_chunks.clear()
+
+                # Start background listener loop for incoming Gemini responses
+                asyncio.create_task(self._receive_loop())
+                print(f"[Gemini Live Session]: Connected using model '{model_name}' with history ({len(self.history)} items). Setup frame sent.")
+            except Exception as e:
+                self.is_connected = False
+                print(f"[Gemini Live Session Connection Error]: {e}")
+                if self.on_error:
+                    self.on_error(str(e))
 
     async def ensure_connected(self) -> bool:
         """Ensures WebSocket connection is active, automatically reconnecting if disconnected."""
@@ -250,11 +266,16 @@ class GeminiLiveSession:
 
     async def send_audio_chunk(self, pcm_16k_bytes: bytes):
         """Sends raw 16kHz PCM audio chunk to Gemini Live API as realtime_input."""
+        b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
         if not self.is_connected or not self.ws:
+            # Buffer chunk while reconnecting (keep last 50 chunks = ~2.5s)
+            self.pending_chunks.append(b64_audio)
+            if len(self.pending_chunks) > 50:
+                self.pending_chunks.pop(0)
+            asyncio.create_task(self.ensure_connected())
             return
             
         try:
-            b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
             media_frame = {
                 "realtimeInput": {
                     "mediaChunks": [
@@ -269,22 +290,22 @@ class GeminiLiveSession:
         except Exception as e:
             print(f"[Gemini Live Send Error]: {e}")
             self.is_connected = False
+            self.pending_chunks.append(b64_audio)
+            asyncio.create_task(self.ensure_connected())
 
     async def send_end_of_turn(self, text: str = ""):
-        """Signals end of user utterance to trigger Gemini Live response generation."""
+        """Signals end of user utterance to trigger Gemini Live response generation (always sends turnComplete)."""
         if not await self.ensure_connected():
             return
             
         transcription = text.strip()
-        if not transcription:
-            print("[Gemini Live Session]: Skipping empty end_of_turn trigger (no spoken text).")
-            return
-
-        # Truncate long repeated text if accumulated by Web Speech API
-        if len(transcription) > 80:
-            parts = [p.strip() for p in re.split(r'[。！？?\n]', transcription) if p.strip()]
-            if parts:
-                transcription = parts[-1]
+        parts = []
+        if transcription:
+            if len(transcription) > 80:
+                subparts = [p.strip() for p in re.split(r'[。！？?\n]', transcription) if p.strip()]
+                if subparts:
+                    transcription = subparts[-1]
+            parts.append({"text": transcription})
 
         try:
             client_content = {
@@ -292,14 +313,14 @@ class GeminiLiveSession:
                     "turns": [
                         {
                             "role": "user",
-                            "parts": [{"text": transcription}]
+                            "parts": parts
                         }
-                    ],
+                    ] if parts else [],
                     "turnComplete": True
                 }
             }
             await self.ws.send(json.dumps(client_content))
-            print(f"[Gemini Live Session]: End of turn signal sent with text: '{transcription}'")
+            print(f"[Gemini Live Session]: End of turn signal sent (text: '{transcription}').")
         except Exception as e:
             print(f"[Gemini Live End of Turn Error]: {e}")
             self.is_connected = False
@@ -325,6 +346,8 @@ class GeminiLiveSession:
     async def _receive_loop(self):
         """Receives audio and text response frames from Gemini Live API and forwards to output callbacks."""
         try:
+            if not self.ws or not (hasattr(self.ws, "__aiter__") or hasattr(self.ws, "__iter__")):
+                return
             async for msg in self.ws:
                 data = json.loads(msg)
                 if "error" in data:
@@ -358,6 +381,20 @@ class GeminiLiveSession:
             print(f"[Gemini Live Receive Loop Error]: {e}")
         finally:
             self.is_connected = False
+            if not self.is_closing:
+                asyncio.create_task(self._auto_reconnect())
+
+    async def _auto_reconnect(self):
+        """Automatically reconnects in background when WebSocket closes unexpectedly."""
+        if self.is_closing:
+            return
+        await asyncio.sleep(0.3)
+        if not self.is_connected and not self.is_closing:
+            print("[Gemini Live Session]: Auto-healing disconnected session in background...")
+            try:
+                await self.connect()
+            except Exception as e:
+                print(f"[Gemini Live Auto-Healing Error]: {e}")
 
     async def close(self):
         """Closes the Gemini Live WebSocket connection."""

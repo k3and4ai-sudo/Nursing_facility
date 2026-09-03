@@ -77,21 +77,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (clean && userSpeechBox) {
                 userSpeechBox.textContent = clean;
                 currentUtteranceText = clean;
+                window.isSpeechRecActive = true;
                 setLiveLampState("sending");
-
-                if (speechDebounceTimer) clearTimeout(speechDebounceTimer);
-                speechDebounceTimer = setTimeout(() => {
-                    if (!isAISpeaking && !isPlayingPCM24 && currentUtteranceText && currentUtteranceText !== lastSentSpeechText) {
-                        lastSentSpeechText = currentUtteranceText;
-                        const textToSend = currentUtteranceText;
-                        currentUtteranceText = "";
-                        setLiveLampState("thinking");
-                        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                            console.log("[SpeechRec] Sending EOS text to Gemini Live:", textToSend);
-                            liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));
-                        }
-                    }
-                }, 300);
             }
         };
 
@@ -328,7 +315,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                     } else {
                         aiResponseBox.textContent = data.text;
-                        playTTSVoice(data.text);
                     }
                     setLiveLampState("speaking");
                     setAvatarState("speaking");
@@ -340,7 +326,6 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (data.type === "chat_response") {
                 if (userSpeechBox && data.user_text) userSpeechBox.textContent = data.user_text;
                 if (aiResponseBox && data.text) aiResponseBox.textContent = data.text;
-                if (data.audio) playBase64Audio(data.audio);
             } else if (data.type === "pii_warning") {
                 handlePIIWarning(data.message);
             }
@@ -647,18 +632,44 @@ document.addEventListener("DOMContentLoaded", () => {
                 let lastSentSpeechText = "";
 
                 recorder.onChunkCallback = (resampledChunk) => {
-                    // Mute mic streaming while Gemini AI is actively speaking back to avoid feedback loop
-                    if (isPlayingPCM24) {
-                        return;
+                    // 1. Calculate instant RMS volume of mic input
+                    let sum = 0;
+                    for (let i = 0; i < resampledChunk.length; i++) {
+                        sum += resampledChunk[i] * resampledChunk[i];
                     }
+                    const rms = Math.sqrt(sum / resampledChunk.length);
 
+                    // 2. True full-duplex: continuously stream raw 16kHz PCM chunks to Gemini Live WebSocket
                     if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                        // Unconditionally stream raw PCM audio chunks to Gemini Live while microphone is active
                         const b64Pcm = float32ToInt16Base64(resampledChunk);
                         liveWs.send(JSON.stringify({
                             type: "live_pcm_chunk",
                             data: b64Pcm
                         }));
+                    }
+
+                    // 3. Hardware-level instant VAD for 0ms lamp transitions & rapid EOS turn completion
+                    if (!isPlayingPCM24 && !isAISpeaking) {
+                        const isSpeechActive = rms > 0.0015 || window.isSpeechRecActive;
+                        if (isSpeechActive) {
+                            isSpeakingUtterance = true;
+                            vadSilenceFrames = 0;
+                            setLiveLampState("sending");
+                        } else if (isSpeakingUtterance) {
+                            vadSilenceFrames++;
+                            // ~150ms of silence (~3 chunks of 50ms)
+                            if (vadSilenceFrames >= 3) {
+                                isSpeakingUtterance = false;
+                                window.isSpeechRecActive = false;
+                                vadSilenceFrames = 0;
+                                setLiveLampState("thinking");
+                                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                                    console.log("[Mic VAD] Speech pause detected. Sending instant EOS to Gemini Live:", currentUtteranceText);
+                                    liveWs.send(JSON.stringify({ type: "eos", text: currentUtteranceText }));
+                                    currentUtteranceText = "";
+                                }
+                            }
+                        }
                     }
                 };
 
