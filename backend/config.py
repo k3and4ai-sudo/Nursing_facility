@@ -27,9 +27,9 @@ for env_path in [
 
 # Ollama settings
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:2b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 # By default, use the main model for embeddings, or nomic-embed-text for high performance
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "gemma2:2b")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "qwen2.5:7b")
 
 # Speech Processing
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "tiny")  # "small", "base", "medium" etc.
