@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // UI Elements
     const roomBadge = document.getElementById("room-badge");
+    const recordingStatusBadge = document.getElementById("recording-status-badge");
     const debugBadge = document.getElementById("debug-badge");
     const connectionStatus = document.getElementById("connection-status");
     const aiAvatar = document.getElementById("ai-avatar");
@@ -26,6 +27,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const subtitleBox = document.getElementById("subtitle-box");
     const userSpeechBox = document.getElementById("user-speech-box");
     const aiResponseBox = document.getElementById("ai-response-box");
+    const mimamoriPopup = document.getElementById("mimamori-popup");
+    const mimamoriPopupIcon = document.getElementById("mimamori-popup-icon");
+    const mimamoriPopupTitle = document.getElementById("mimamori-popup-title");
+    const mimamoriPopupDesc = document.getElementById("mimamori-popup-desc");
+    const btnResumeRecording = document.getElementById("btn-resume-recording");
+    const btnCloseMimamoriPopup = document.getElementById("btn-close-mimamori-popup");
 
     // System Config & Release Flags
     let systemInfo = { enable_debug_mode: true };
@@ -52,6 +59,15 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentUtteranceText = "";
     let speechDebounceTimer = null;
     let isAISpeaking = false;
+    let isModalOpen = false;
+    let isTTSAnnouncing = false;
+
+    const SYSTEM_ECHO_KEYWORDS = [
+        "個人情報保護", "会話を一時停止", "個人情報は話さない",
+        "スタッフに連絡する場合は", "ボタンを押してください", "会話が終了します",
+        "安心してお待ちください", "スタッフに連絡しました", "今後もお会いしましょう",
+        "動画をご覧", "チャンネル登録"
+    ];
 
     if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -61,8 +77,8 @@ document.addEventListener("DOMContentLoaded", () => {
         speechRec.lang = "ja-JP";
 
         speechRec.onresult = (event) => {
-            // Ignore microphone input while AI is speaking (prevents speaker echo feedback loop)
-            if (isAISpeaking || isPlayingPCM24) {
+            // Ignore microphone input while AI is speaking, modal is open, or system is announcing
+            if (isAISpeaking || isPlayingPCM24 || isModalOpen || isTTSAnnouncing) {
                 return;
             }
 
@@ -74,11 +90,43 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
             const clean = transcript.trim();
-            if (clean && userSpeechBox) {
+            if (!clean) return;
+
+            // Reject system prompt voice echoes
+            if (SYSTEM_ECHO_KEYWORDS.some(k => clean.includes(k))) {
+                console.log("[SpeechRec]: Discarded system prompt echo:", clean);
+                return;
+            }
+
+            if (userSpeechBox) {
                 userSpeechBox.textContent = clean;
                 currentUtteranceText = clean;
                 window.isSpeechRecActive = true;
-                setLiveLampState("sending");
+                if (window.speechRecTimer) clearTimeout(window.speechRecTimer);
+                window.speechRecTimer = setTimeout(() => {
+                    window.isSpeechRecActive = false;
+                }, 400);
+                if (currentLampState !== "thinking" && currentLampState !== "speaking") {
+                    setLiveLampState("sending");
+                }
+            }
+
+            // Instant client-side trigger for confidential recording stop/resume
+            const STOP_KEYWORDS = ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで"];
+            const RESUME_KEYWORDS = ["記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻", "普通の会話に戻"];
+
+            if (STOP_KEYWORDS.some(k => clean.includes(k))) {
+                console.log("[SpeechRec Confidential Mode]: Instant client stop trigger:", clean);
+                handleRecordingStatus(false, "会話記録停止");
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify({ type: "stop_recording", text: clean }));
+                }
+            } else if (RESUME_KEYWORDS.some(k => clean.includes(k))) {
+                console.log("[SpeechRec Confidential Mode]: Instant client resume trigger:", clean);
+                handleRecordingStatus(true, "会話記録再開");
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify({ type: "resume_recording", text: clean }));
+                }
             }
         };
 
@@ -263,6 +311,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     handleStaffOverride(data.text, data.audio);
                     break;
 
+                case "guardrail_result":
+                    handleGuardrailResult(data);
+                    break;
+
                 case "incoming_call": // Intercom Call requested (Pattern A)
                     handleIncomingCall();
                     break;
@@ -304,6 +356,8 @@ document.addEventListener("DOMContentLoaded", () => {
         liveWs.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === "live_audio_output") {
+                setLiveLampState("speaking");
+                setAvatarState("speaking");
                 playPCM24Chunk(data.data, data.sample_rate || 24000);
             } else if (data.type === "live_response" || data.type === "live_text_output") {
                 if (aiResponseBox && data.text) {
@@ -320,7 +374,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     setAvatarState("speaking");
                 }
             } else if (data.type === "transcription_result") {
-                if (userSpeechBox && data.text) {
+                // If Web Speech API is already providing instant text, do not overwrite with delayed buffer
+                if (userSpeechBox && data.text && (!window.isSpeechRecActive || !userSpeechBox.textContent)) {
                     userSpeechBox.textContent = data.text;
                 }
             } else if (data.type === "chat_response") {
@@ -328,6 +383,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (aiResponseBox && data.text) aiResponseBox.textContent = data.text;
             } else if (data.type === "pii_warning") {
                 handlePIIWarning(data.message);
+            } else if (data.type === "gemini_thinking") {
+                setLiveLampState("thinking");
+                setAvatarState("thinking");
+                if (statusText) statusText.textContent = "🧠 Gemini考え中...";
+            } else if (data.type === "guardrail_result") {
+                handleGuardrailResult(data);
+            } else if (data.type === "recording_status") {
+                handleRecordingStatus(data.active, data.message);
             }
         };
 
@@ -337,10 +400,296 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
+    // 🔒 Mimamori-san Recording Status & Popup Handler
+    function handleRecordingStatus(isActive, message) {
+        console.log("[Mimamori Recording Status]:", isActive, message);
+        if (recordingStatusBadge) {
+            if (isActive) {
+                recordingStatusBadge.className = "badge recording-active-badge";
+                recordingStatusBadge.textContent = "🟢 記録中";
+            } else {
+                recordingStatusBadge.className = "badge recording-paused-badge";
+                recordingStatusBadge.textContent = "🔒 記録停止中";
+            }
+        }
+
+        if (mimamoriPopup) {
+            clearTimeout(window.mimamoriPopupTimer);
+            if (!isActive) {
+                // 🔒 会話記録停止のポップアップ表示
+                if (mimamoriPopupIcon) mimamoriPopupIcon.textContent = "🔒";
+                if (mimamoriPopupTitle) {
+                    mimamoriPopupTitle.textContent = "会話記録を停止しました";
+                    mimamoriPopupTitle.style.color = "#6d28d9";
+                }
+                if (mimamoriPopupDesc) {
+                    mimamoriPopupDesc.innerHTML = "「ここだけの秘密のお話として、安心してお話しくださいね。<br>この会話は記録や日誌には一切残りません。」";
+                }
+                if (btnResumeRecording) btnResumeRecording.style.display = "flex";
+                if (btnCloseMimamoriPopup) {
+                    const span = btnCloseMimamoriPopup.querySelector("span:last-child");
+                    if (span) span.textContent = "閉じて話す";
+                }
+                mimamoriPopup.classList.remove("hidden");
+                // 8秒後に自動で閉じる（閉じた後も記録停止状態は継続）
+                window.mimamoriPopupTimer = setTimeout(() => {
+                    if (mimamoriPopup) mimamoriPopup.classList.add("hidden");
+                }, 8000);
+            } else {
+                // 🟢 会話記録再開のポップアップ表示
+                if (mimamoriPopupIcon) mimamoriPopupIcon.textContent = "🟢";
+                if (mimamoriPopupTitle) {
+                    mimamoriPopupTitle.textContent = "会話記録を再開しました";
+                    mimamoriPopupTitle.style.color = "#059669";
+                }
+                if (mimamoriPopupDesc) {
+                    mimamoriPopupDesc.innerHTML = "「いつもの見守り記録を再開しますね。<br>引き続き安心してお話しください。」";
+                }
+                if (btnResumeRecording) btnResumeRecording.style.display = "none";
+                if (btnCloseMimamoriPopup) {
+                    const span = btnCloseMimamoriPopup.querySelector("span:last-child");
+                    if (span) span.textContent = "了解";
+                }
+                mimamoriPopup.classList.remove("hidden");
+                // 3.5秒後に自動で閉じる
+                window.mimamoriPopupTimer = setTimeout(() => {
+                    if (mimamoriPopup) mimamoriPopup.classList.add("hidden");
+                }, 3500);
+            }
+        }
+    }
+
+    if (btnResumeRecording) {
+        btnResumeRecording.addEventListener("click", () => {
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                liveWs.send(JSON.stringify({ type: "resume_recording" }));
+            }
+            if (mimamoriPopup) mimamoriPopup.classList.add("hidden");
+        });
+    }
+
+    if (btnCloseMimamoriPopup) {
+        btnCloseMimamoriPopup.addEventListener("click", () => {
+            if (mimamoriPopup) mimamoriPopup.classList.add("hidden");
+        });
+    }
+
+    // Safety Guardrail Monitor & Emergency Modal Elements
+    const guardrailBanner = document.getElementById("guardrail-monitor-banner");
+    const guardrailBadge = document.getElementById("guardrail-badge");
+    const guardrailLatency = document.getElementById("guardrail-latency");
+    const guardrailDetail = document.getElementById("guardrail-detail");
+    const guardrailModel = document.getElementById("guardrail-model");
+    const guardrailInlineCallBtn = document.getElementById("guardrail-inline-call-btn");
+
+    const emergencyAssistModal = document.getElementById("emergency-assist-modal");
+    const emergencyModalTitle = document.getElementById("emergency-modal-title");
+    const emergencyModalDesc = document.getElementById("emergency-modal-desc");
+    const callStaffNowBtn = document.getElementById("call-staff-now-btn");
+    const dismissEmergencyBtn = document.getElementById("dismiss-emergency-btn");
+
+    let alertLockTimer = null;
+    let isAlertLocked = false;
+
+    function showEmergencyModal(title, desc, voicePrompt = "スタッフに連絡しますか？", isAutoCalled = false) {
+        isModalOpen = true;
+        currentUtteranceText = "";
+        stopLiveAudioPlayback();
+        if (emergencyModalTitle && title) emergencyModalTitle.textContent = title;
+        if (emergencyModalDesc && desc) emergencyModalDesc.innerHTML = desc;
+        if (emergencyAssistModal) {
+            emergencyAssistModal.classList.remove("hidden");
+            emergencyAssistModal.style.display = "flex";
+        }
+        if (guardrailInlineCallBtn) guardrailInlineCallBtn.classList.remove("hidden");
+        if (callStaffNowBtn) {
+            if (isAutoCalled) {
+                callStaffNowBtn.style.background = "#059669";
+                callStaffNowBtn.innerHTML = '<span style="font-size: 2.5rem; line-height: 1;">✅</span><span>自動連絡済み（お待ちください）</span>';
+                callStaffNowBtn.disabled = true;
+            } else {
+                callStaffNowBtn.style.background = "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)";
+                callStaffNowBtn.innerHTML = '<span style="font-size: 2.5rem; line-height: 1;">🚨</span><span>スタッフに連絡</span>';
+                callStaffNowBtn.disabled = false;
+            }
+        }
+        if (voicePrompt) {
+            playTTSVoice(voicePrompt);
+        }
+    }
+
+    function sendStaffEmergencyCall(reason) {
+        console.log("[Emergency Call Triggered]:", reason);
+        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+            liveWs.send(JSON.stringify({
+                type: "user_emergency_call",
+                reason: reason || "利用者様が画面の「スタッフに連絡」ボタンを押しました"
+            }));
+        }
+        if (emergencyModalTitle) emergencyModalTitle.textContent = "✅ スタッフに連絡しました";
+        if (emergencyModalDesc) emergencyModalDesc.innerHTML = "スタッフステーションへ直ちにお知らせしました。<br>スタッフが参りますので、そのまま安心してお待ちください。";
+        if (callStaffNowBtn) {
+            callStaffNowBtn.style.background = "#059669";
+            callStaffNowBtn.innerHTML = '<span style="font-size: 2.5rem; line-height: 1;">✅</span><span>連絡完了（お待ちください）</span>';
+            callStaffNowBtn.disabled = true;
+        }
+        if (guardrailBadge) {
+            guardrailBadge.className = "guardrail-badge badge-emergency";
+            guardrailBadge.textContent = "🚨 スタッフ連絡済み";
+        }
+        if (guardrailDetail) {
+            guardrailDetail.textContent = "スタッフへ緊急通報を送信しました。スタッフの到着をお待ちください。";
+        }
+        playTTSVoice("スタッフに連絡しました。スタッフが向かいますので、安心してお待ちください。");
+    }
+
+    if (callStaffNowBtn) {
+        callStaffNowBtn.addEventListener("click", () => {
+            sendStaffEmergencyCall("画面のポップアップ「スタッフに連絡」ボタンが押されました");
+        });
+    }
+
+    if (guardrailInlineCallBtn) {
+        guardrailInlineCallBtn.addEventListener("click", () => {
+            sendStaffEmergencyCall("バナーの「スタッフ呼出」ボタンが押されました");
+        });
+    }
+
+    if (dismissEmergencyBtn) {
+        dismissEmergencyBtn.addEventListener("click", () => {
+            isModalOpen = false;
+            currentUtteranceText = "";
+            if (emergencyAssistModal) {
+                emergencyAssistModal.classList.add("hidden");
+                emergencyAssistModal.style.display = "none";
+            }
+            if (liveAudioCtx && liveAudioCtx.state === "suspended") {
+                liveAudioCtx.resume();
+            }
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                liveWs.send(JSON.stringify({ type: "resume_live_session" }));
+            }
+            if (statusText) statusText.textContent = "お話しする準備ができました";
+        });
+    }
+
+    function handleGuardrailResult(data) {
+        if (!guardrailBanner) return;
+
+        if (guardrailModel && data.model) {
+            guardrailModel.textContent = data.model;
+        }
+        if (guardrailLatency && data.latency !== undefined) {
+            guardrailLatency.textContent = `⏱️ ${data.latency}s`;
+        }
+
+        const status = (data.status || "NORMAL").toUpperCase();
+        const stage = data.stage !== undefined ? data.stage : (status === "EMERGENCY" ? 3 : (status === "ALERT" ? 2 : (status === "CAUTION" ? 1 : 0)));
+        const summary = data.summary || "";
+        const detail = data.detail || "";
+        console.log("[Guardrail Result Received]:", status, "stage:", stage, data);
+
+        // Check for personal information (PII) - ONLY trigger when status is strictly ALERT
+        const isPII = (status === "ALERT" || stage === 2) && (
+            summary.includes("個人情報") || summary.includes("口座") || summary.includes("住所") || 
+            summary.includes("電話") || summary.includes("名前") || summary.includes("氏名") || 
+            detail.includes("口座番号") || detail.includes("電話番号") || detail.includes("実名")
+        );
+        if (isPII) {
+            console.warn("[Guardrail PII Detected]: Halting conversation and displaying overlay.");
+            handlePIIWarning(data.detail || "個人情報保護のため会話を一時停止しました。個人情報は話さないようお願いいたします。");
+            return;
+        }
+
+        if (status === "EMERGENCY" || stage === 3) {
+            // 第三段階: 重度・緊急事態（即時自動通報＋全画面通知＋音声案内）
+            if (alertLockTimer) clearTimeout(alertLockTimer);
+            isAlertLocked = true;
+            guardrailBanner.className = "guardrail-banner status-emergency";
+            if (guardrailBadge) {
+                guardrailBadge.className = "guardrail-badge badge-emergency";
+                guardrailBadge.textContent = "🚨 緊急事態 (第三段階)";
+            }
+            if (guardrailDetail) {
+                guardrailDetail.textContent = `【第三段階: 緊急事態】${data.summary || ""} - ${data.detail || ""}`;
+            }
+            if (guardrailInlineCallBtn) guardrailInlineCallBtn.classList.remove("hidden");
+
+            showEmergencyModal(
+                "🚨 スタッフへ緊急連絡しました",
+                `急変や強い苦痛を検知しました（${data.summary || "緊急事態"}）。<br>スタッフステーションへ直ちに自動連絡しました。<br>スタッフが参りますので、そのまま安心してお待ちください。`,
+                "スタッフに連絡しました。スタッフが向かいますので、安心してお待ちください。",
+                true
+            );
+
+            alertLockTimer = setTimeout(() => {
+                isAlertLocked = false;
+            }, 30000);
+        } else if (status === "ALERT" || stage === 2) {
+            // 第二段階: 中度・要確認（警告表示 ＋ 音声「スタッフに連絡しますか？」＋ 特大ボタン確認）
+            if (alertLockTimer) clearTimeout(alertLockTimer);
+            isAlertLocked = true;
+            guardrailBanner.className = "guardrail-banner status-alert";
+            if (guardrailBadge) {
+                guardrailBadge.className = "guardrail-badge badge-alert";
+                guardrailBadge.textContent = "🔔 要確認 (第二段階)";
+            }
+            if (guardrailDetail) {
+                guardrailDetail.textContent = `【第二段階: スタッフ確認】${data.summary || ""} - ${data.detail || ""}`;
+            }
+            if (guardrailInlineCallBtn) guardrailInlineCallBtn.classList.remove("hidden");
+
+            showEmergencyModal(
+                "🔔 スタッフに連絡しますか？",
+                `体調の異常またはスタッフ連絡の要請を検知しました（${data.summary || "要確認"}）。<br>スタッフに連絡する場合はボタンを押してください。`,
+                "スタッフに連絡しますか？",
+                false
+            );
+
+            alertLockTimer = setTimeout(() => {
+                isAlertLocked = false;
+            }, 20000);
+        } else if (status === "CAUTION" || stage === 1) {
+            // 第一段階: 軽度・注意（警告表示のみ、何もしない、会話継続）
+            if (alertLockTimer) clearTimeout(alertLockTimer);
+            isAlertLocked = true;
+            guardrailBanner.className = "guardrail-banner status-caution";
+            if (guardrailBadge) {
+                guardrailBadge.className = "guardrail-badge badge-caution";
+                guardrailBadge.textContent = "⚠️ 注意 (第一段階)";
+            }
+            if (guardrailDetail) {
+                guardrailDetail.textContent = `【第一段階: 軽度注意】${data.summary || ""} - ${data.detail || ""}`;
+            }
+            if (guardrailInlineCallBtn) guardrailInlineCallBtn.classList.remove("hidden");
+
+            // 第一段階はモーダルや音声は出さず、会話をそのまま継続
+            alertLockTimer = setTimeout(() => {
+                isAlertLocked = false;
+            }, 12000);
+        } else {
+            // 通常 NORMAL (日常会話・雑談)
+            if (!isAlertLocked) {
+                guardrailBanner.className = "guardrail-banner status-normal";
+                if (guardrailBadge) {
+                    guardrailBadge.className = "guardrail-badge badge-normal";
+                    guardrailBadge.textContent = "🟢 正常";
+                }
+                if (guardrailDetail) {
+                    guardrailDetail.textContent = data.detail ? `${data.summary ? data.summary + "： " : ""}${data.detail}` : "正常に監視中 (発話の安全を確認しました)";
+                }
+                if (guardrailInlineCallBtn) guardrailInlineCallBtn.classList.add("hidden");
+            } else {
+                console.log("[Guardrail]: Skipping NORMAL update because previous alert lock is active.");
+            }
+        }
+    }
+
     const lampSending = document.getElementById("lamp-sending");
     const lampThinking = document.getElementById("lamp-thinking");
     const lampSpeaking = document.getElementById("lamp-speaking");
 
+    let currentLampState = "idle";
     let silenceTimeout = null;
     let thinkingTimeoutTimer = null;
 
@@ -354,26 +703,40 @@ document.addEventListener("DOMContentLoaded", () => {
             thinkingTimeoutTimer = null;
         }
 
-        if (state === "sending" && lampSending) {
-            lampSending.classList.add("lamp-active");
+        currentLampState = state;
+
+        if (state === "sending") {
+            if (lampSending) lampSending.classList.add("lamp-active");
             if (lampThinking) lampThinking.classList.remove("lamp-active");
             if (lampSpeaking) lampSpeaking.classList.remove("lamp-active");
+            if (statusText && !isModalOpen) statusText.textContent = "🎙️ 音声送信中...";
             silenceTimeout = setTimeout(() => {
-                if (lampSending) lampSending.classList.remove("lamp-active");
-            }, 600);
-        } else if (state === "thinking" && lampThinking) {
-            lampThinking.classList.add("lamp-active");
+                if (currentLampState === "sending") {
+                    setLiveLampState("thinking");
+                }
+            }, 400);
+        } else if (state === "thinking") {
+            if (lampThinking) lampThinking.classList.add("lamp-active");
             if (lampSending) lampSending.classList.remove("lamp-active");
             if (lampSpeaking) lampSpeaking.classList.remove("lamp-active");
+            if (statusText && !isModalOpen) statusText.textContent = "🧠 Gemini考え中...";
+            if (guardrailBadge && !isAlertLocked) {
+                guardrailBadge.textContent = "🔍 判定中...";
+                if (guardrailDetail) guardrailDetail.textContent = "発話内容の安全性をローカルLLMで検査中...";
+            }
+            // Auto fallback to idle if no response after 12s
             thinkingTimeoutTimer = setTimeout(() => {
-                if (lampThinking) lampThinking.classList.remove("lamp-active");
-                setAvatarState("idle");
-                if (statusText) statusText.textContent = "お話しする準備ができました";
-            }, 4000);
-        } else if (state === "speaking" && lampSpeaking) {
-            lampSpeaking.classList.add("lamp-active");
+                if (currentLampState === "thinking") {
+                    setLiveLampState("idle");
+                    setAvatarState("idle");
+                    if (statusText && !isModalOpen) statusText.textContent = "お話しする準備ができました";
+                }
+            }, 12000);
+        } else if (state === "speaking") {
+            if (lampSpeaking) lampSpeaking.classList.add("lamp-active");
             if (lampSending) lampSending.classList.remove("lamp-active");
             if (lampThinking) lampThinking.classList.remove("lamp-active");
+            if (statusText && !isModalOpen) statusText.textContent = "Gemini Live と対話中...";
         } else if (state === "idle") {
             if (lampSending) lampSending.classList.remove("lamp-active");
             if (lampThinking) lampThinking.classList.remove("lamp-active");
@@ -384,9 +747,23 @@ document.addEventListener("DOMContentLoaded", () => {
     let nextAudioStartTime = 0;
     let isPlayingPCM24 = false;
     let pcm24EndTimer = null;
+    const JITTER_BUFFER_SEC = 0.12; // 120ms initial buffer for seamless stutter-free playback
+
+    function stopLiveAudioPlayback() {
+        if (pcm24EndTimer) clearTimeout(pcm24EndTimer);
+        isAISpeaking = false;
+        isPlayingPCM24 = false;
+        nextAudioStartTime = 0;
+        if (liveAudioCtx && liveAudioCtx.state !== "closed") {
+            try {
+                liveAudioCtx.close();
+                liveAudioCtx = null;
+            } catch (e) {}
+        }
+    }
 
     function playPCM24Chunk(base64Data, sampleRate) {
-        if (!liveAudioCtx) {
+        if (!liveAudioCtx || liveAudioCtx.state === "closed") {
             liveAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
         }
         if (liveAudioCtx.state === "suspended") {
@@ -413,8 +790,9 @@ document.addEventListener("DOMContentLoaded", () => {
             source.connect(liveAudioCtx.destination);
 
             const currentTime = liveAudioCtx.currentTime;
+            // When starting a new speech burst or after an underrun, anchor ahead by JITTER_BUFFER_SEC
             if (nextAudioStartTime < currentTime) {
-                nextAudioStartTime = currentTime + 0.02;
+                nextAudioStartTime = currentTime + JITTER_BUFFER_SEC;
             }
             source.start(nextAudioStartTime);
             nextAudioStartTime += buffer.duration;
@@ -429,11 +807,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 isPlayingPCM24 = false;
                 setLiveLampState("idle");
                 setAvatarState("idle");
-                if (statusText) statusText.textContent = "お話しする準備ができました";
-            }, (nextAudioStartTime - currentTime) * 1000 + 300);
+                if (statusText && !isModalOpen) statusText.textContent = "お話しする準備ができました";
+            }, Math.max(200, (nextAudioStartTime - currentTime) * 1000 + 200));
 
             setAvatarState("speaking");
-            statusText.textContent = "Gemini Live と対話中...";
+            if (statusText && !isModalOpen) statusText.textContent = "Gemini Live と対話中...";
 
             if (aiResponseBox && (!aiResponseBox.textContent || aiResponseBox.textContent.includes("表示されます") || aiResponseBox.textContent.includes("待っています"))) {
                 aiResponseBox.textContent = "🔊 リアルタイム音声でお返答中...";
@@ -448,6 +826,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.speechSynthesis.cancel();
 
         isAISpeaking = true;
+        isTTSAnnouncing = true;
         setLiveLampState("speaking");
         setAvatarState("speaking");
 
@@ -457,18 +836,25 @@ document.addEventListener("DOMContentLoaded", () => {
         utterance.pitch = 1.0;
 
         utterance.onend = () => {
+            // Keep microphone completely muted for 1000ms after TTS to eliminate room reverberation echo
             setTimeout(() => {
                 isAISpeaking = false;
-                setLiveLampState("idle");
-                setAvatarState("idle");
-                if (statusText) statusText.textContent = "お話しする準備ができました";
-            }, 300);
+                isTTSAnnouncing = false;
+                if (!isModalOpen) {
+                    setLiveLampState("idle");
+                    setAvatarState("idle");
+                    if (statusText) statusText.textContent = "お話しする準備ができました";
+                }
+            }, 1000);
         };
 
         utterance.onerror = () => {
             isAISpeaking = false;
-            setLiveLampState("idle");
-            setAvatarState("idle");
+            isTTSAnnouncing = false;
+            if (!isModalOpen) {
+                setLiveLampState("idle");
+                setAvatarState("idle");
+            }
         };
 
         window.speechSynthesis.speak(utterance);
@@ -491,12 +877,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function handlePIIWarning(message) {
         console.warn("PII Warning received:", message);
-        if (liveAudioCtx) {
-            liveAudioCtx.suspend();
-        }
+        isModalOpen = true;
+        currentUtteranceText = "";
+        stopLiveAudioPlayback();
         if (piiWarningOverlay) {
             if (piiWarningText) piiWarningText.textContent = message || "個人情報保護のため会話を一時停止しました。";
             piiWarningOverlay.classList.remove("hidden");
+            piiWarningOverlay.style.display = "flex";
         }
         setAvatarState("idle");
         statusText.textContent = "⚠️ プライバシー保護による一時停止中";
@@ -505,7 +892,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (resumePiiBtn) {
         resumePiiBtn.addEventListener("click", () => {
-            if (piiWarningOverlay) piiWarningOverlay.classList.add("hidden");
+            isModalOpen = false;
+            currentUtteranceText = "";
+            if (piiWarningOverlay) {
+                piiWarningOverlay.classList.add("hidden");
+                piiWarningOverlay.style.display = "none";
+            }
             if (liveAudioCtx && liveAudioCtx.state === "suspended") {
                 liveAudioCtx.resume();
             }
@@ -628,10 +1020,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 let vadSilenceFrames = 0;
                 let isSpeakingUtterance = false;
-                let speechChunkCount = 0;
-                let lastSentSpeechText = "";
+                let voiceHangoverFrames = 0;
+                let preSpeechRingBuffer = []; // ring buffer of last 3 chunks (~150ms) to preserve initial consonants
+                const NOISE_GATE_THRESHOLD = 0.0075; // Cut off mic hiss, room fan, air conditioner, rustling
 
                 recorder.onChunkCallback = (resampledChunk) => {
+                    // Mute microphone completely when AI is speaking, modal is open, or system is announcing
+                    if (isPlayingPCM24 || isAISpeaking || isModalOpen || isTTSAnnouncing) {
+                        preSpeechRingBuffer = [];
+                        voiceHangoverFrames = 0;
+                        return;
+                    }
+
                     // 1. Calculate instant RMS volume of mic input
                     let sum = 0;
                     for (let i = 0; i < resampledChunk.length; i++) {
@@ -639,35 +1039,77 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     const rms = Math.sqrt(sum / resampledChunk.length);
 
-                    // 2. True full-duplex: continuously stream raw 16kHz PCM chunks to Gemini Live WebSocket
-                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                        const b64Pcm = float32ToInt16Base64(resampledChunk);
-                        liveWs.send(JSON.stringify({
-                            type: "live_pcm_chunk",
-                            data: b64Pcm
-                        }));
-                    }
+                    // 2. Hardware-level instant VAD with noise-gate
+                    const speechThreshold = (currentLampState === "thinking") ? 0.016 : NOISE_GATE_THRESHOLD;
+                    const isVoiceActive = rms > speechThreshold || window.isSpeechRecActive;
+                    const b64Pcm = float32ToInt16Base64(resampledChunk);
 
-                    // 3. Hardware-level instant VAD for 0ms lamp transitions & rapid EOS turn completion
-                    if (!isPlayingPCM24 && !isAISpeaking) {
-                        const isSpeechActive = rms > 0.0015 || window.isSpeechRecActive;
-                        if (isSpeechActive) {
-                            isSpeakingUtterance = true;
-                            vadSilenceFrames = 0;
+                    if (isVoiceActive) {
+                        // User started speaking or is actively speaking
+                        if (voiceHangoverFrames <= 0 && preSpeechRingBuffer.length > 0) {
+                            // Flush pre-speech buffer so leading consonants are intact
+                            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                                for (const preChunk of preSpeechRingBuffer) {
+                                    liveWs.send(JSON.stringify({
+                                        type: "live_pcm_chunk",
+                                        data: preChunk
+                                    }));
+                                }
+                            }
+                            preSpeechRingBuffer = [];
+                        }
+
+                        voiceHangoverFrames = 8; // ~400ms hangover to cover inter-syllable micro-pauses
+                        isSpeakingUtterance = true;
+                        vadSilenceFrames = 0;
+
+                        if (currentLampState !== "thinking" || rms > 0.018) {
                             setLiveLampState("sending");
-                        } else if (isSpeakingUtterance) {
+                        }
+
+                        // Stream active voice chunk to Gemini Live
+                        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                            liveWs.send(JSON.stringify({
+                                type: "live_pcm_chunk",
+                                data: b64Pcm
+                            }));
+                        }
+                    } else if (voiceHangoverFrames > 0) {
+                        // Trailing speech hangover window: stream chunk to avoid cutting word endings
+                        voiceHangoverFrames--;
+                        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                            liveWs.send(JSON.stringify({
+                                type: "live_pcm_chunk",
+                                data: b64Pcm
+                            }));
+                        }
+                    } else {
+                        // Below noise floor: DO NOT SEND to Gemini Live! (Room noise completely blocked)
+                        // Store in pre-speech ring buffer (keep last 3 chunks = ~150ms)
+                        preSpeechRingBuffer.push(b64Pcm);
+                        if (preSpeechRingBuffer.length > 3) {
+                            preSpeechRingBuffer.shift();
+                        }
+
+                        if (isSpeakingUtterance) {
                             vadSilenceFrames++;
-                            // ~150ms of silence (~3 chunks of 50ms)
-                            if (vadSilenceFrames >= 3) {
+                            // ~600ms of true silence (~12 frames of 50ms) for natural Japanese pause detection
+                            if (vadSilenceFrames >= 12) {
                                 isSpeakingUtterance = false;
                                 window.isSpeechRecActive = false;
                                 vadSilenceFrames = 0;
                                 setLiveLampState("thinking");
-                                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                                    console.log("[Mic VAD] Speech pause detected. Sending instant EOS to Gemini Live:", currentUtteranceText);
-                                    liveWs.send(JSON.stringify({ type: "eos", text: currentUtteranceText }));
-                                    currentUtteranceText = "";
+                                const cleanText = (currentUtteranceText || "").trim();
+                                const isEcho = SYSTEM_ECHO_KEYWORDS.some(k => cleanText.includes(k));
+                                if (cleanText && !isEcho) {
+                                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                                        console.log("[Mic VAD] Speech concluded. Sending EOS with text:", cleanText);
+                                        liveWs.send(JSON.stringify({ type: "eos", text: cleanText }));
+                                    }
+                                } else {
+                                    console.log("[Mic VAD] Audio pause detected. Gemini server-side VAD handles turn completion.");
                                 }
+                                currentUtteranceText = "";
                             }
                         }
                     }

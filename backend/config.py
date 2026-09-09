@@ -32,7 +32,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "qwen2.5:7b")
 
 # Speech Processing
-WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "tiny")  # "small", "base", "medium" etc.
+WHISPER_BACKEND = os.getenv("WHISPER_BACKEND", "faster-whisper")  # "faster-whisper" or "openai-whisper"
+WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL_NAME", "medium")  # "medium", "small", "base", "tiny"
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8_float16")  # "int8_float16", "float16"
 TTS_ENGINE = os.getenv("TTS_ENGINE", "gtts")  # "gtts" or "local" (mock/system)
 
 # Gemini API / Gemini Live Settings (Debug Mode)

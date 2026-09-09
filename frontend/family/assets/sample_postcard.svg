@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff8f0"/>
+      <stop offset="50%" stop-color="#faeee1"/>
+      <stop offset="100%" stop-color="#f5e1ce"/>
+    </linearGradient>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fce7d2"/>
+      <stop offset="40%" stop-color="#fdd5b1"/>
+      <stop offset="100%" stop-color="#e8f0fe"/>
+    </linearGradient>
+    <linearGradient id="sunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7b54"/>
+      <stop offset="100%" stop-color="#ffb26b"/>
+    </linearGradient>
+    <linearGradient id="mountainFar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#93a5cf"/>
+      <stop offset="100%" stop-color="#e4efe9"/>
+    </linearGradient>
+    <linearGradient id="mountainMid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#70877f"/>
+      <stop offset="100%" stop-color="#a2b9af"/>
+    </linearGradient>
+    <linearGradient id="mountainNear" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4f6d63"/>
+      <stop offset="100%" stop-color="#829b90"/>
+    </linearGradient>
+    <filter id="washiFilter" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise"/>
+      <feDiffuseLighting in="noise" lighting-color="#ffffff" surfaceScale="1" result="light">
+        <feDistantLight azimuth="45" elevation="60"/>
+      </feDiffuseLighting>
+      <feBlend mode="multiply" in="SourceGraphic" in2="light"/>
+    </filter>
+  </defs>
+
+  <!-- 和紙風テクスチャ背景 -->
+  <rect x="0" y="0" width="800" height="560" rx="16" fill="url(#bgGrad)"/>
+  
+  <!-- 内枠フレーム（絵手紙風） -->
+  <rect x="25" y="25" width="750" height="510" rx="12" fill="#ffffff" opacity="0.85" stroke="#d5c7b7" stroke-width="2" stroke-dasharray="4 2"/>
+
+  <!-- 空のグラデーション -->
+  <path d="M 35 35 L 765 35 L 765 370 Q 500 390 35 370 Z" fill="url(#skyGrad)" opacity="0.6"/>
+
+  <!-- 朝日・夕日 -->
+  <circle cx="210" cy="170" r="55" fill="url(#sunGrad)" opacity="0.85"/>
+
+  <!-- 遠くの山々 (富士・連峰) -->
+  <path d="M 120 360 L 260 190 L 320 250 L 440 140 L 580 360 Z" fill="url(#mountainFar)" opacity="0.75"/>
+  <polygon points="410,165 440,140 470,165 450,175 440,168 430,175" fill="#ffffff" opacity="0.9"/>
+
+  <!-- 中景の山 -->
+  <path d="M 35 370 Q 180 260 380 310 Q 580 270 765 370 L 765 420 L 35 420 Z" fill="url(#mountainMid)" opacity="0.7"/>
+
+  <!-- 近景の丘と小川 -->
+  <path d="M 35 390 Q 250 340 500 390 Q 650 360 765 400 L 765 480 L 35 480 Z" fill="url(#mountainNear)" opacity="0.85"/>
+  
+  <!-- 和みの小川 -->
+  <path d="M 280 480 Q 320 430 380 410 Q 420 400 450 480" fill="none" stroke="#89b0ae" stroke-width="14" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- 桜・梅の枝と花びら -->
+  <path d="M 35 120 Q 90 140 130 110 T 210 125" fill="none" stroke="#5a3d31" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 90 135 Q 120 180 150 170" fill="none" stroke="#5a3d31" stroke-width="3" stroke-linecap="round"/>
+  
+  <circle cx="130" cy="110" r="14" fill="#ffb7b2" opacity="0.9"/>
+  <circle cx="130" cy="110" r="6" fill="#ff7582"/>
+  <circle cx="165" cy="120" r="12" fill="#ffccd5" opacity="0.9"/>
+  <circle cx="205" cy="125" r="15" fill="#ffb7b2" opacity="0.9"/>
+  <circle cx="150" cy="170" r="13" fill="#ffccd5" opacity="0.9"/>
+  <circle cx="110" cy="155" r="10" fill="#ffb7b2" opacity="0.8"/>
+
+  <!-- 舞い散る花びら -->
+  <ellipse cx="280" cy="160" rx="8" ry="4" transform="rotate(30 280 160)" fill="#ffb7b2" opacity="0.8"/>
+  <ellipse cx="360" cy="220" rx="7" ry="3" transform="rotate(-20 360 220)" fill="#ffccd5" opacity="0.75"/>
+  <ellipse cx="460" cy="290" rx="9" ry="4" transform="rotate(45 460 290)" fill="#ffb7b2" opacity="0.7"/>
+
+  <!-- デジタル絵手紙 筆文字テキスト (右側・上部) -->
+  <g font-family="'Zen Maru Gothic', 'Hiragino Mincho ProN', 'Yu Mincho', serif" font-weight="bold">
+    <text x="560" y="110" font-size="28" fill="#3d2c29" letter-spacing="4">ふるさとの山</text>
+    <text x="560" y="155" font-size="28" fill="#3d2c29" letter-spacing="4">笑顔が咲いて</text>
+    <text x="560" y="200" font-size="28" fill="#3d2c29" letter-spacing="4">今日もいい日</text>
+    
+    <!-- 添え書き -->
+    <text x="560" y="250" font-size="16" fill="#6d5852" font-weight="normal">AI会話「昔懐かしい故郷の思い出」より</text>
+  </g>
+
+  <!-- 落款印 (朱印) -->
+  <rect x="700" y="260" width="38" height="38" rx="6" fill="#c93a2b"/>
+  <text x="708" y="287" font-family="'Zen Maru Gothic', sans-serif" font-size="18" font-weight="bold" fill="#ffffff">和</text>
+
+  <!-- カード下部メッセージバー -->
+  <rect x="45" y="475" width="710" height="45" rx="8" fill="#f4ebd9" opacity="0.95"/>
+  <text x="65" y="504" font-family="'Zen Maru Gothic', sans-serif" font-size="15" font-weight="bold" fill="#5a453f">
+    🌸 ケア・リンク AI見守り・デジタル絵手紙カード | 山田 太郎 様 (101号室)
+  </text>
+  <text x="670" y="504" font-family="'Zen Maru Gothic', sans-serif" font-size="13" fill="#8c7067">本日作成</text>
+</svg>

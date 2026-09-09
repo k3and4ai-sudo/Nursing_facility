@@ -188,7 +188,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (user.role === "staff") {
             initStaffMode(user);
         } else if (user.role === "family") {
-            initFamilyMode(user);
+            // Seamlessly redirect to dedicated family portal
+            window.location.href = "/family/";
+            return;
         } else if (user.role === "barber") {
             initBarberMode(user);
         }

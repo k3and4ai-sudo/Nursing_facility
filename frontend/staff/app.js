@@ -123,6 +123,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     triggerPIIAlert(data.user_name, data.room_number, data.detail, data.timestamp);
                     break;
 
+                case "nurse_call":
+                    triggerNurseCall(data.user_name, data.room_number, data.reason, data.timestamp);
+                    break;
+
+                case "guardrail_alert":
+                    triggerGuardrailAlert(data.user_name, data.terminal_id, data.status, data.summary, data.detail, data.timestamp);
+                    break;
+
                 case "intercom_audio":
                     if (isIntercomCallActive && selectedTerminalId === data.source) {
                         playIntercomChunk(data.audio);
@@ -355,6 +363,43 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch(e) {}
     }
 
+    function triggerNurseCall(name, room, reason, timestamp) {
+        const id = "nurse_call_" + Date.now();
+        const fullReason = `【🚨 緊急呼出（ナースコール）】${reason || "利用者様が画面の「スタッフに連絡」ボタンを押しました。"}`;
+        activeAlerts.unshift({ id, name, room, reason: fullReason, timestamp, isEmergency: true });
+        renderAlertsList();
+        alertBadge.classList.remove("hidden");
+        try {
+            alertSound.play().catch(e => console.log("Sound play blocked."));
+        } catch(e) {}
+    }
+
+    function triggerGuardrailAlert(name, room, status, summary, detail, timestamp) {
+        const id = "guardrail_" + Date.now();
+        const isEmergency = status === "EMERGENCY";
+        let icon = "⚠️";
+        let stagePrefix = "【⚠️ AI注意 (第一段階)】";
+        if (status === "EMERGENCY") {
+            icon = "🚨";
+            stagePrefix = "【🚨 緊急事態 (第三段階)】";
+        } else if (status === "ALERT") {
+            icon = "🔔";
+            stagePrefix = "【🔔 要確認 (第二段階)】";
+        } else if (status === "CAUTION") {
+            icon = "⚠️";
+            stagePrefix = "【⚠️ 体調注意 (第一段階)】";
+        }
+        const fullReason = `${stagePrefix} ${summary ? summary + " - " : ""}${detail || ""}`;
+        activeAlerts.unshift({ id, name, room, reason: fullReason, timestamp, isEmergency });
+        renderAlertsList();
+        alertBadge.classList.remove("hidden");
+        if (status === "EMERGENCY" || status === "ALERT") {
+            try {
+                alertSound.play().catch(e => console.log("Sound play blocked."));
+            } catch(e) {}
+        }
+    }
+
     function renderAlertsList() {
         if (activeAlerts.length === 0) {
             alertList.innerHTML = `<div class="no-alerts-msg">現在、異常値アラートは発生していません。</div>`;
@@ -369,9 +414,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const div = document.createElement("div");
             div.className = "alert-card-item";
             const time = new Date(a.timestamp).toLocaleTimeString("ja-JP");
+            const badgeIcon = a.isEmergency ? "🚨" : (a.reason.includes("🔔") ? "🔔" : "⚠️");
             div.innerHTML = `
                 <div class="details">
-                    <h4>🚨 異常検知: ${a.room ? a.room + '号室 ' : ''}${a.name}様</h4>
+                    <h4>${badgeIcon} 異常検知: ${a.room ? a.room + '号室 ' : ''}${a.name}様</h4>
                     <p>理由: ${a.reason}</p>
                 </div>
                 <div class="alert-actions" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">

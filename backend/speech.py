@@ -1,8 +1,27 @@
 import os
 import io
 import wave
+import ctypes
 import numpy as np
-from backend.config import WHISPER_MODEL_NAME, TTS_ENGINE, AUDIO_DIR
+from backend.config import WHISPER_BACKEND, WHISPER_MODEL_NAME, WHISPER_COMPUTE_TYPE, TTS_ENGINE, AUDIO_DIR
+
+# Ensure libcublas.so.12 is found for CTranslate2 (faster-whisper)
+def _ensure_cublas_loaded():
+    candidates = [
+        "/usr/local/lib/ollama/cuda_v12/libcublas.so.12",
+        "/usr/local/lib/ollama/cuda_v13/libcublas.so.13",
+        "/usr/local/cuda-13.0/targets/x86_64-linux/lib/libcublas.so.13",
+        "/usr/lib/x86_64-linux-gnu/libcublas.so.12"
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                break
+            except Exception:
+                pass
+
+_ensure_cublas_loaded()
 
 # Lazy load whisper to speed up startup
 _whisper_model = None
@@ -10,12 +29,25 @@ _whisper_model = None
 def get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
-        import whisper
         import torch
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Loading Whisper model '{WHISPER_MODEL_NAME}' on device '{device}'...")
+        
+        if WHISPER_BACKEND == "faster-whisper":
+            try:
+                from faster_whisper import WhisperModel
+                compute_type = WHISPER_COMPUTE_TYPE if device == "cuda" else "int8"
+                print(f"Loading faster-whisper model '{WHISPER_MODEL_NAME}' ({compute_type}) on device '{device}'...")
+                _whisper_model = WhisperModel(WHISPER_MODEL_NAME, device=device, compute_type=compute_type)
+                print(f"faster-whisper model '{WHISPER_MODEL_NAME}' loaded successfully on {device}.")
+                return _whisper_model
+            except Exception as e:
+                print(f"Failed to load faster-whisper ({e}), falling back to openai-whisper...")
+        
+        # Fallback to standard whisper
+        import whisper
+        print(f"Loading standard Whisper model '{WHISPER_MODEL_NAME}' on device '{device}'...")
         _whisper_model = whisper.load_model(WHISPER_MODEL_NAME, device=device)
-        print(f"Whisper model '{WHISPER_MODEL_NAME}' loaded successfully on {device}.")
+        print(f"Standard Whisper model '{WHISPER_MODEL_NAME}' loaded successfully on {device}.")
     return _whisper_model
 
 def decode_wav_to_float32(audio_bytes: bytes) -> np.ndarray:
@@ -76,6 +108,23 @@ def decode_wav_to_float32(audio_bytes: bytes) -> np.ndarray:
 
 import re
 
+def has_repetitive_loop(text: str) -> bool:
+    """
+    Detects Whisper hallucination loops (e.g. repeated phrase or word loops like '東京都市の東京都市の...').
+    """
+    if not text:
+        return False
+    cleaned = re.sub(r'[\s、,。!！?？]+', '', text)
+    if len(cleaned) < 6:
+        return False
+    # Check for short patterns (2 chars repeated >= 4 times: e.g. トントントントン)
+    if re.search(r'(.{2}?)\1{3,}', cleaned):
+        return True
+    # Check for patterns of 3 to 25 chars repeated >= 3 times: e.g. 東京都市東京都市東京都市
+    if re.search(r'(.{3,25}?)\1{2,}', cleaned):
+        return True
+    return False
+
 def is_japanese_speech(text: str) -> bool:
     """
     Validates if transcribed text is valid Japanese speech and filters out Whisper hallucinations.
@@ -87,6 +136,10 @@ def is_japanese_speech(text: str) -> bool:
         "capacity", "ogels", "マキム", "チンコ", "http", "www", "ごらんくだ", "ご覧くだ"
     ]
     if any(black in text.lower() for black in hallucination_blacklist):
+        return False
+
+    # Check for repetitive loop hallucinations (e.g. '東京都市の東京都市の...')
+    if has_repetitive_loop(text):
         return False
     
     # Filter out repetitive loop hallucinations (e.g., "お食事、散歩" or "散歩、散歩" repeated over and over)
@@ -108,33 +161,51 @@ def is_japanese_speech(text: str) -> bool:
         
     return True
 
-def transcribe_audio(audio_bytes: bytes) -> str:
+def transcribe_numpy_array(audio_array: np.ndarray, initial_prompt: str = "介護施設での会話。") -> str:
     """
-    Transcribes audio bytes (WAV format) using Whisper on CUDA/CPU.
+    Transcribes a 16kHz float32 mono numpy array using Faster-Whisper or standard Whisper.
     """
-    if not audio_bytes:
+    if len(audio_array) == 0:
         return ""
     try:
         import torch
         model = get_whisper_model()
-        audio_array = decode_wav_to_float32(audio_bytes)
         
         # Audio energy check: if peak or RMS is near zero (silence), return empty
-        if len(audio_array) == 0 or np.max(np.abs(audio_array)) < 0.015:
+        if np.max(np.abs(audio_array)) < 0.015:
             return ""
 
         use_fp16 = torch.cuda.is_available()
-        initial_prompt = "介護施設での会話。"
-        result = model.transcribe(
-            audio_array, 
-            language="ja", 
-            fp16=use_fp16,
-            initial_prompt=initial_prompt,
-            temperature=0.0,
-            no_speech_threshold=0.6,
-            condition_on_previous_text=False
-        )
-        text = result.get("text", "").strip()
+        
+        # Branch between faster-whisper and standard whisper
+        if hasattr(model, "feature_extractor") and hasattr(model, "model"):
+            # faster-whisper WhisperModel (CTranslate2) with VAD filter and repetition penalty
+            segments, info = model.transcribe(
+                audio_array,
+                language="ja",
+                initial_prompt=initial_prompt,
+                beam_size=1,
+                temperature=0.0,
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=400),
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.6
+            )
+            text = "".join(seg.text for seg in segments).strip()
+        else:
+            # standard openai-whisper
+            result = model.transcribe(
+                audio_array, 
+                language="ja", 
+                fp16=use_fp16,
+                initial_prompt=initial_prompt,
+                temperature=0.0,
+                no_speech_threshold=0.6,
+                condition_on_previous_text=False
+            )
+            text = result.get("text", "").strip()
         
         if not is_japanese_speech(text):
             print(f"Filtered out Whisper hallucinated text: '{text}'")
@@ -142,8 +213,17 @@ def transcribe_audio(audio_bytes: bytes) -> str:
             
         return text
     except Exception as e:
-        print(f"Error during audio transcription: {e}")
+        print(f"Error during audio array transcription: {e}")
         return ""
+
+def transcribe_audio(audio_bytes: bytes) -> str:
+    """
+    Transcribes audio bytes (WAV format) using Whisper on CUDA/CPU.
+    """
+    if not audio_bytes:
+        return ""
+    audio_array = decode_wav_to_float32(audio_bytes)
+    return transcribe_numpy_array(audio_array)
 
 import re
 

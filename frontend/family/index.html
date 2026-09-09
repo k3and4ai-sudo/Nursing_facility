@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ケア・リンク - ご家族見守りポータル (Care-Link Family)</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Zen+Maru+Gothic:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@400;600;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js for Vital Trend Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body class="family-theme">
+
+    <!-- Top Navigation Bar -->
+    <header class="family-navbar">
+        <div class="nav-brand-area">
+            <div class="app-symbol">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="heart-icon">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+            </div>
+            <div class="brand-titles">
+                <h1 class="brand-title">ケア・リンク</h1>
+                <span class="brand-subtitle">ご家族見守りポータル</span>
+            </div>
+        </div>
+
+        <div class="nav-user-meta">
+            <div class="patient-pill">
+                <span class="pill-label">見守り対象:</span>
+                <strong id="patient-name-header">読み込み中...</strong>
+                <span id="patient-room-header" class="room-tag">-</span>
+            </div>
+            <div class="family-user-pill">
+                <span id="family-user-name">ご家族様</span>
+            </div>
+            <button id="logout-btn" class="btn-logout" title="ログアウト">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="logout-icon"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span>ログアウト</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="family-container">
+
+        <!-- Top Summary Cards (Today's Quick Health & Mood) -->
+        <section class="summary-hero-card">
+            <div class="hero-left">
+                <div class="hero-avatar">
+                    <span class="avatar-emoji">👴</span>
+                </div>
+                <div class="hero-info">
+                    <div class="hero-title-row">
+                        <h2 id="patient-name-hero" class="patient-name-title">- 様</h2>
+                        <span id="vital-status-badge" class="badge-status badge-stable">🟢 安定・良好</span>
+                    </div>
+                    <p id="patient-demographics" class="patient-sub">-</p>
+                </div>
+            </div>
+
+            <div class="hero-right">
+                <div class="quick-vital-metric">
+                    <span class="metric-name">最新 体温</span>
+                    <strong id="quick-temp" class="metric-value">--.- <span class="unit">℃</span></strong>
+                </div>
+                <div class="quick-vital-metric">
+                    <span class="metric-name">最新 血圧</span>
+                    <strong id="quick-bp" class="metric-value">---/-- <span class="unit">mmHg</span></strong>
+                </div>
+                <div class="quick-vital-metric">
+                    <span class="metric-name">ご機嫌の様子</span>
+                    <strong id="quick-mood" class="metric-value mood-text">穏やか</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Navigation Bar -->
+        <nav class="family-tabs">
+            <button class="tab-btn active" data-tab="tab-moments">
+                <span class="tab-icon">🌸</span>
+                <span class="tab-text">本日のご様子・絵手紙</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-vitals">
+                <span class="tab-icon">📈</span>
+                <span class="tab-text">バイタル推移グラフ</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-visitation">
+                <span class="tab-icon">📅</span>
+                <span class="tab-text">面会予約 (カレンダー)</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-movie">
+                <span class="tab-icon">🎬</span>
+                <span class="tab-text">思い出ショート動画</span>
+            </button>
+        </nav>
+
+        <!-- Tab Content 1: Moments & Digital Postcard -->
+        <section id="tab-moments" class="tab-panel active">
+            <div class="panel-grid-2">
+                <!-- Left: Daily Episode Summary & Recent Chat -->
+                <div class="card card-moments">
+                    <div class="card-header">
+                        <div class="header-icon-wrap">🌸</div>
+                        <div>
+                            <h3>本日のAI会話エピソード</h3>
+                            <p class="card-sub">AI傾聴パートナーとの日常対話から温かい様子をお届けします</p>
+                        </div>
+                    </div>
+                    
+                    <div class="episode-bubble">
+                        <div class="bubble-header">
+                            <span class="bubble-tag">✨ 本日のサマリー</span>
+                            <span id="episode-time" class="bubble-time">本日 15:30 記録</span>
+                        </div>
+                        <p id="episode-summary-text" class="bubble-body">
+                            データを読み込み中...
+                        </p>
+                    </div>
+
+                    <div class="chat-highlights-box">
+                        <h4 class="highlight-title">💬 お話しされた会話の一コマ</h4>
+                        <div id="recent-chat-list" class="recent-chat-list">
+                            <div class="chat-loading">会話履歴を取得中...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Digital Postcard (絵手紙) & Audio -->
+                <div class="card card-postcard">
+                    <div class="card-header">
+                        <div class="header-icon-wrap">🎨</div>
+                        <div>
+                            <h3 id="postcard-title">【デジタル絵手紙】思い出カード</h3>
+                            <p class="card-sub">会話のキーワードから自動生成された昭和レトロ水彩画カード</p>
+                        </div>
+                    </div>
+
+                    <!-- Season Selector Bar -->
+                    <div class="postcard-season-bar" id="postcard-season-bar">
+                        <button type="button" class="btn-season active" data-season="autumn">🍁 秋（コスモス）</button>
+                        <button type="button" class="btn-season" data-season="spring">🌸 春（桜の庭）</button>
+                        <button type="button" class="btn-season" data-season="summer">🌻 夏（朝顔と風鈴）</button>
+                        <button type="button" class="btn-season" data-season="winter">❄️ 冬（雪庭と椿）</button>
+                    </div>
+
+                    <div class="postcard-frame">
+                        <img id="postcard-img" src="assets/sample_postcard.jpg" alt="デジタル絵手紙" class="postcard-artwork">
+                    </div>
+
+                    <!-- Postcard Caption & Meta -->
+                    <div class="postcard-caption-box">
+                        <div class="postcard-meta-row">
+                            <span class="postcard-recipient" id="postcard-recipient">山田 太郎 様</span>
+                            <span class="postcard-date" id="postcard-date">令和8年9月9日</span>
+                        </div>
+                        <p class="postcard-greeting" id="postcard-greeting">おだやかな秋の日に… お元気で。秋の庭より</p>
+                        <div class="postcard-action-row">
+                            <button type="button" id="postcard-download-btn" class="btn-postcard-action">📥 絵手紙を保存</button>
+                            <button type="button" id="postcard-print-btn" class="btn-postcard-action">🖨️ 印刷</button>
+                        </div>
+                    </div>
+
+                    <!-- Ambient BGM Player Box -->
+                    <div class="bgm-player-box">
+                        <div class="bgm-info">
+                            <span class="bgm-icon">🎵</span>
+                            <div>
+                                <strong id="bgm-title" class="bgm-name">のどかな和風アンビエント BGM (15秒)</strong>
+                                <span class="bgm-desc">穏やかなアコースティック琴・笛の音色</span>
+                            </div>
+                        </div>
+                        <button id="bgm-play-btn" class="btn-play-bgm">
+                            <span class="play-icon">▶</span>
+                            <span class="play-label">音声を再生</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Content 2: Vital Trend Charts -->
+        <section id="tab-vitals" class="tab-panel">
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="header-icon-wrap">📈</div>
+                    <div>
+                        <h3>バイタルサイン 7日間〜14日間推移グラフ</h3>
+                        <p class="card-sub">日々の体温および血圧の測定推移をグラフでご確認いただけます</p>
+                    </div>
+                </div>
+
+                <!-- Chart Grid -->
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <div class="chart-header-row">
+                            <h4>🌡️ 体温推移 (℃)</h4>
+                            <span class="normal-range-hint">基準値目安: 36.0℃ 〜 37.0℃</span>
+                        </div>
+                        <div class="chart-canvas-wrapper">
+                            <canvas id="tempChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header-row">
+                            <h4>💓 血圧推移 (収縮期 / 拡張期 mmHg)</h4>
+                            <span class="normal-range-hint">基準値目安: 収縮期 90〜135 / 拡張期 60〜85</span>
+                        </div>
+                        <div class="chart-canvas-wrapper">
+                            <canvas id="bpChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Records Table -->
+                <div class="history-table-area">
+                    <h4>📋 直近のバイタル測定履歴</h4>
+                    <div class="table-responsive">
+                        <table class="family-table">
+                            <thead>
+                                <tr>
+                                    <th>測定日時</th>
+                                    <th>体温</th>
+                                    <th>血圧 (上 / 下)</th>
+                                    <th>体重</th>
+                                    <th>状態判定</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vitals-table-body">
+                                <tr><td colspan="5" class="text-center">データを読み込み中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Content 3: Visitation Booking -->
+        <section id="tab-visitation" class="tab-panel">
+            <div class="panel-grid-2">
+                <!-- Left: Booking Form -->
+                <div class="card card-booking">
+                    <div class="card-header">
+                        <div class="header-icon-wrap">📝</div>
+                        <div>
+                            <h3>施設面会のご予約申請</h3>
+                            <p class="card-sub">ご希望の日時を入力して送信すると施設スタッフに自動共有されます</p>
+                        </div>
+                    </div>
+
+                    <form id="visitation-form" class="family-form">
+                        <div class="form-group">
+                            <label for="visit-date-input">📅 希望面会日時 <span class="req">*</span></label>
+                            <input type="datetime-local" id="visit-date-input" required class="form-input">
+                            <span class="field-hint">面会可能時間帯: 10:00 〜 17:00</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="visit-count-input">👥 ご来訪人数 <span class="req">*</span></label>
+                            <select id="visit-count-input" class="form-input">
+                                <option value="1">1 名様</option>
+                                <option value="2" selected>2 名様</option>
+                                <option value="3">3 名様</option>
+                                <option value="4">4 名様以上 (要相談)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="visit-msg-input">💬 連絡事項・メッセージ</label>
+                            <textarea id="visit-msg-input" rows="3" class="form-input" placeholder="例: 長女と孫の2名で伺います。お茶菓子を持参予定です。"></textarea>
+                        </div>
+
+                        <button type="submit" id="submit-booking-btn" class="btn-primary-large">
+                            <span>📅 面会予約を送信する</span>
+                        </button>
+                        
+                        <div id="booking-alert" class="booking-alert hidden"></div>
+                    </form>
+                </div>
+
+                <!-- Right: Reservation History & Google Calendar Status -->
+                <div class="card card-reservation-list">
+                    <div class="card-header">
+                        <div class="header-icon-wrap">🗓️</div>
+                        <div>
+                            <h3>面会予約の状況・一覧</h3>
+                            <p class="card-sub">Googleカレンダーとの自動連携ステータスを確認できます</p>
+                        </div>
+                    </div>
+
+                    <div class="calendar-sync-banner">
+                        <div class="sync-icon">🔄</div>
+                        <div>
+                            <strong>Googleカレンダー自動連携中</strong>
+                            <p>予約確定時に施設のスケジュールに自動登録されます</p>
+                        </div>
+                    </div>
+
+                    <div id="reservation-cards-container" class="reservation-cards-list">
+                        <div class="loading-text">予約情報を取得中...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Content 4: AI Short Video Preview -->
+        <section id="tab-movie" class="tab-panel">
+            <div class="card full-width card-movie">
+                <div class="card-header">
+                    <div class="header-icon-wrap">🎬</div>
+                    <div>
+                        <h3 id="movie-title">今週の様子ショートムービー</h3>
+                        <p class="card-sub">イラスト画像・会話要約字幕・安らぎBGMを合成した心温まるスライドショームービー</p>
+                    </div>
+                </div>
+
+                <div class="movie-player-container">
+                    <div class="movie-viewport">
+                        <!-- Animated Canvas Movie -->
+                        <canvas id="movieCanvas" width="800" height="450" class="movie-canvas"></canvas>
+                        
+                        <div id="movie-play-overlay" class="movie-overlay">
+                            <button id="movie-start-btn" class="btn-movie-play">
+                                <span class="play-big-icon">▶</span>
+                                <span>動画を再生する (25秒)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="movie-controls-bar">
+                        <button id="movie-toggle-btn" class="btn-control">再生</button>
+                        <div class="progress-bar-container">
+                            <div id="movie-progress" class="progress-bar-fill"></div>
+                        </div>
+                        <span id="movie-time-display" class="movie-time">00:00 / 00:25</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Security & Encryption Footer Banner -->
+        <footer class="family-footer">
+            <div class="security-badge">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="lock-icon"><path d="M12 2C9.243 2 7 4.243 7 7v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7c0-2.757-2.243-5-5-5zm-3 5c0-1.654 1.346-3 3-3s3 1.346 3 3v3H9V7zm3 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+                <span><strong>AES-256-GCM リモート暗号化通信</strong> | グループ境界セキュリティにより、他の利用者のデータは厳格に隔離されています。</span>
+            </div>
+            <p class="copyright">© 2026 ケア・リンク (Care-Link) - 施設統合AIシステム</p>
+        </footer>
+
+    </main>
+
+    <!-- Application Logic -->
+    <script src="app.js?v=1"></script>
+</body>
+</html>

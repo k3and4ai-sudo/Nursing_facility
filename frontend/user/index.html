@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260908_9">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -14,6 +14,7 @@
         <!-- Top status bar -->
         <header class="header">
             <div id="room-badge" class="badge">確認中...</div>
+            <div id="recording-status-badge" class="badge recording-active-badge">🟢 記録中</div>
             <div id="debug-badge" class="badge debug-badge hidden">🛠️ デバッグモード (Gemini Live)</div>
             <div id="connection-status" class="status-dot offline"></div>
         </header>
@@ -53,7 +54,25 @@
         </main>
 
         <!-- Two Separate Text Displays: User Speech vs Gemini Live Response -->
-        <footer class="footer" style="width: 100% !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; gap: 16px !important; margin-top: 16px !important; box-sizing: border-box !important;">
+        <footer class="footer" style="width: 100% !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; gap: 14px !important; margin-top: 14px !important; box-sizing: border-box !important;">
+            <!-- 🛡️ LLM Safety Guardrail Monitor Banner -->
+            <div id="guardrail-monitor-banner" class="guardrail-banner status-normal">
+                <div class="guardrail-top">
+                    <div class="guardrail-title">
+                        <span class="guardrail-icon">🛡️</span>
+                        <span class="guardrail-name">ローカル安全監視 (<span id="guardrail-model">Qwen 2.5:7B</span>)</span>
+                    </div>
+                    <div class="guardrail-meta">
+                        <span id="guardrail-badge" class="guardrail-badge badge-normal">🟢 監視中: 安全</span>
+                        <span id="guardrail-latency" class="guardrail-latency">0.00秒</span>
+                    </div>
+                </div>
+                <div class="guardrail-bottom" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <div id="guardrail-detail" class="guardrail-detail" style="flex: 1;">発話のプライバシーと生命安全をローカルGPUで常時監視しています</div>
+                    <button id="guardrail-inline-call-btn" class="hidden" style="background: #dc2626; color: #fff; font-weight: bold; border: none; padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);">🚨 スタッフ呼出</button>
+                </div>
+            </div>
+
             <!-- Gemini Live Real-time Status Lamps Bar -->
             <div id="status-lamps-bar" class="status-lamps-container">
                 <div id="lamp-sending" class="status-lamp">
@@ -125,20 +144,71 @@
             </div>
         </div>
 
+        <!-- Emergency & Staff Contact Modal (Full Screen Overlay Triggered by Local LLM Verdict) -->
+        <div id="emergency-assist-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card emergency-card" style="text-align: center; padding: 40px 32px; max-width: 680px; width: 95%; border: 4px solid #ef4444; border-radius: 36px; background: #ffffff; box-shadow: 0 25px 60px rgba(239, 68, 68, 0.45); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div id="emergency-icon" style="font-size: 4.5rem; margin-bottom: 8px; line-height: 1;">🚨</div>
+                <h2 id="emergency-modal-title" style="color: #dc2626; margin-bottom: 12px; font-size: 2.2rem; font-weight: 900; letter-spacing: 0.03em;">スタッフに連絡しますか？</h2>
+                <p id="emergency-modal-desc" style="font-size: 1.35rem; line-height: 1.7; color: #1f2937; margin-bottom: 32px; font-weight: 700;">
+                    スタッフへの連絡や体調の変化を検知しました。<br>
+                    スタッフに連絡する場合はボタンを押してください。
+                </p>
+                <!-- Side-by-side Large Action Buttons (Same Scale as Talk Button) -->
+                <div style="display: flex; flex-direction: row; gap: 20px; justify-content: center; align-items: stretch; width: 100%;">
+                    <button id="call-staff-now-btn" class="modal-btn emergency-huge-btn" style="flex: 1; min-height: 130px; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #ffffff; font-size: 1.45rem; font-weight: 900; padding: 16px 20px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(239, 68, 68, 0.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: transform 0.15s, box-shadow 0.15s;">
+                        <span style="font-size: 2.5rem; line-height: 1;">🚨</span>
+                        <span>スタッフに連絡</span>
+                    </button>
+                    <button id="dismiss-emergency-btn" class="modal-btn resume-huge-btn" style="flex: 1; min-height: 130px; background: linear-gradient(135deg, #10b981 0%, #047857 100%); color: #ffffff; font-size: 1.45rem; font-weight: 900; padding: 16px 20px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(16, 185, 129, 0.45); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: transform 0.15s, box-shadow 0.15s;">
+                        <span style="font-size: 2.5rem; line-height: 1;">💬</span>
+                        <span>会話をつづける</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- PII Guardrail Warning Overlay -->
-        <div id="pii-warning-overlay" class="modal-overlay hidden">
-            <div class="modal-card pii-card" style="text-align: center; padding: 30px;">
-                <div style="font-size: 3rem; margin-bottom: 10px;">🛡️</div>
-                <h2 style="color: #e53e3e; margin-bottom: 12px; font-size: 1.6rem;">プライバシー保護のため一時停止</h2>
-                <p id="pii-warning-text" style="font-size: 1.15rem; line-height: 1.7; color: #2d3748; margin-bottom: 24px;">
-                    会話の中に実名やお電話番号などの個人情報が含まれている可能性を検知したため、Gemini Liveとの会話を安全に一時停止しました。<br>
+        <div id="pii-warning-overlay" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card pii-card" style="text-align: center; padding: 40px 32px; max-width: 640px; width: 95%; border: 4px solid #3b82f6; border-radius: 36px; background: #ffffff; box-shadow: 0 25px 60px rgba(59, 130, 246, 0.4); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div style="font-size: 4.5rem; margin-bottom: 8px; line-height: 1;">🛡️</div>
+                <h2 style="color: #1d4ed8; margin-bottom: 12px; font-size: 2.2rem; font-weight: 900;">プライバシー保護のため一時停止</h2>
+                <p id="pii-warning-text" style="font-size: 1.3rem; line-height: 1.7; color: #1f2937; margin-bottom: 32px; font-weight: 700;">
+                    お名前や口座番号などの個人情報が含まれていたため、会話を安全に一時停止しました。<br>
                     個人情報は話さないようお願いいたします。
                 </p>
-                <button id="resume-pii-btn" class="modal-btn" style="background: linear-gradient(135deg, #3182ce, #2b6cb0); color: #fff; font-size: 1.25rem; font-weight: bold; padding: 14px 36px; border-radius: 30px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(49,130,206,0.3);">会話を再開する</button>
+                <div style="display: flex; justify-content: center; width: 100%;">
+                    <button id="resume-pii-btn" class="modal-btn resume-huge-btn" style="width: 100%; max-width: 380px; min-height: 100px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.5rem; font-weight: 900; padding: 16px 28px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.45); display: flex; align-items: center; justify-content: center; gap: 12px;">
+                        <span style="font-size: 2.2rem; line-height: 1;">💬</span>
+                        <span>会話を再開する</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔒 みまもりさん 会話記録停止・再開 ポップアップモーダル -->
+        <div id="mimamori-popup" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(30, 27, 46, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card mimamori-card" style="text-align: center; padding: 36px 28px; max-width: 580px; width: 95%; border: 4px solid #8b5cf6; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(139, 92, 246, 0.4); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div id="mimamori-popup-icon" style="font-size: 4.2rem; margin-bottom: 8px; line-height: 1;">🔒</div>
+                <div style="display: inline-block; background: #f3e8ff; color: #7c3aed; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 1rem; margin-bottom: 12px;">🛡️ ローカルAI「みまもりさん」より</div>
+                <h2 id="mimamori-popup-title" style="color: #6d28d9; margin-bottom: 12px; font-size: 2.1rem; font-weight: 900;">会話記録を停止しました</h2>
+                <p id="mimamori-popup-desc" style="font-size: 1.25rem; line-height: 1.7; color: #1f2937; margin-bottom: 28px; font-weight: 700;">
+                    「ここだけの秘密のお話として、安心してお話しくださいね。<br>
+                    この会話は記録や日誌には一切残りません。」
+                </p>
+                <div id="mimamori-popup-actions" style="display: flex; flex-direction: row; gap: 14px; justify-content: center; width: 100%;">
+                    <button id="btn-resume-recording" class="modal-btn" style="flex: 1; min-height: 80px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.25rem; font-weight: 900; padding: 12px 18px; border-radius: 24px; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>▶️</span>
+                        <span>記録を再開する</span>
+                    </button>
+                    <button id="btn-close-mimamori-popup" class="modal-btn" style="flex: 1; min-height: 80px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #ffffff; font-size: 1.25rem; font-weight: 900; padding: 12px 18px; border-radius: 24px; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>💬</span>
+                        <span>閉じて話す</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-    <script src="wav_encoder.js"></script>
-    <script src="app.js"></script>
+    <script src="wav_encoder.js?v=20260909_2"></script>
+    <script src="app.js?v=20260909_2"></script>
 </body>
 </html>

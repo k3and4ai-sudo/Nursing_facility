@@ -2,6 +2,7 @@ import sqlite3
 import json
 import numpy as np
 from datetime import datetime
+from typing import Optional, List
 from backend.config import DB_PATH, encrypt_data, decrypt_data
 from backend.auth import hash_password, verify_password
 
@@ -140,6 +141,35 @@ def db_init():
             )
         """)
         
+        # 11. Visitation Reservations table (ご家族面会予約)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS visitation_reservations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                family_user_code TEXT NOT NULL,
+                visit_datetime TEXT NOT NULL,
+                visitors_count INTEGER DEFAULT 1,
+                message TEXT,                      -- Encrypted
+                status TEXT DEFAULT 'pending',     -- 'pending', 'confirmed', 'cancelled'
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # 12. Generated Image & Postcard Prompts table (画像生成・絵手紙メタデータ)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS generated_image_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                terminal_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                theme TEXT,
+                season TEXT,
+                payload_json TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+        
         conn.commit()
 
     # Seed default accounts and data if needed
@@ -230,6 +260,27 @@ def seed_default_accounts():
                     (key_name, title, content, category)
                 )
             conn.commit()
+
+        # Seed sample visitation reservation if empty
+        cursor.execute("SELECT COUNT(*) FROM visitation_reservations")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("SELECT id FROM users LIMIT 1")
+            first_user = cursor.fetchone()
+            if first_user:
+                cursor.execute(
+                    """INSERT INTO visitation_reservations (user_id, family_user_code, visit_datetime, visitors_count, message, status, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        first_user["id"],
+                        "family01",
+                        "2026-09-10 14:00",
+                        2,
+                        encrypt_data("長女と孫の2名で面会に伺います。お茶菓子を持参予定です。"),
+                        "confirmed",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    )
+                )
+                conn.commit()
 
 # Group Management
 def add_group(group_name: str, patient_id: int):
@@ -591,4 +642,109 @@ def check_group_access(account: dict, target_patient_id: int) -> bool:
         if group and group.get("patient_id") == target_patient_id:
             return True
     return False
+
+# Visitation Reservation Functions (ご家族面会予約)
+def create_visitation_reservation(user_id: int, family_user_code: str, visit_datetime: str, visitors_count: int = 1, message: str = "") -> int:
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO visitation_reservations (user_id, family_user_code, visit_datetime, visitors_count, message, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, family_user_code, visit_datetime, visitors_count, encrypt_data(message), "pending", created_at)
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def get_visitation_reservations(user_id: Optional[int] = None, limit: int = 50) -> list:
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if user_id is not None:
+            cursor.execute(
+                """SELECT r.id, r.user_id, r.family_user_code, r.visit_datetime, r.visitors_count, r.message, r.status, r.created_at, u.name as patient_name, u.room_number
+                   FROM visitation_reservations r
+                   JOIN users u ON r.user_id = u.id
+                   WHERE r.user_id = ?
+                   ORDER BY r.visit_datetime DESC
+                   LIMIT ?""",
+                (user_id, limit)
+            )
+        else:
+            cursor.execute(
+                """SELECT r.id, r.user_id, r.family_user_code, r.visit_datetime, r.visitors_count, r.message, r.status, r.created_at, u.name as patient_name, u.room_number
+                   FROM visitation_reservations r
+                   JOIN users u ON r.user_id = u.id
+                   ORDER BY r.visit_datetime DESC
+                   LIMIT ?""",
+                (limit,)
+            )
+        rows = cursor.fetchall()
+        reservations = []
+        for row in rows:
+            reservations.append({
+                "id": row["id"],
+                "user_id": row["user_id"],
+                "patient_name": decrypt_data(row["patient_name"]) if row["patient_name"] else "不明",
+                "room_number": row["room_number"],
+                "family_user_code": row["family_user_code"],
+                "visit_datetime": row["visit_datetime"],
+                "visitors_count": row["visitors_count"],
+                "message": decrypt_data(row["message"]) if row["message"] else "",
+                "status": row["status"],
+                "created_at": row["created_at"]
+            })
+        return reservations
+
+def update_visitation_status(reservation_id: int, status: str):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE visitation_reservations SET status = ? WHERE id = ?",
+            (status, reservation_id)
+        )
+        conn.commit()
+
+# Generated Image & Postcard Prompts Functions
+def save_image_prompt_payload(user_id: int, terminal_id: str, payload: dict) -> int:
+    """Saves structured image generation prompt and postcard metadata."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        timestamp = datetime.now().isoformat()
+        theme = payload.get("theme", "")
+        season = payload.get("season", "")
+        cursor.execute(
+            "INSERT INTO generated_image_prompts (user_id, terminal_id, timestamp, theme, season, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, terminal_id, timestamp, theme, season, json.dumps(payload, ensure_ascii=False))
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def get_latest_image_prompt_payload(terminal_id: str = None, user_id: int = None) -> Optional[dict]:
+    """Retrieves the most recent structured image generation payload for a terminal or user."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if terminal_id:
+            cursor.execute(
+                "SELECT * FROM generated_image_prompts WHERE terminal_id = ? ORDER BY id DESC LIMIT 1",
+                (terminal_id,)
+            )
+        elif user_id:
+            cursor.execute(
+                "SELECT * FROM generated_image_prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                (user_id,)
+            )
+        else:
+            cursor.execute("SELECT * FROM generated_image_prompts ORDER BY id DESC LIMIT 1")
+            
+        row = cursor.fetchone()
+        if not row:
+            return None
+            
+        res = dict(row)
+        try:
+            res["payload"] = json.loads(res["payload_json"])
+        except Exception:
+            res["payload"] = {}
+        return res
+
 
