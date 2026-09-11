@@ -1387,15 +1387,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Standard Call Mode
         if (callCard) callCard.classList.remove("emergency-force");
-        if (forceCallBanner) forceCallBanner.classList.add("hidden");
-        callStatus.textContent = `${callerName}から呼び出し中...`;
+        if (forceCallBanner) {
+            forceCallBanner.classList.add("hidden");
+            forceCallBanner.textContent = "";
+        }
+        
+        if (callerType === "family") {
+            callStatus.textContent = `📞 ${callerName}からお電話です`;
+        } else {
+            callStatus.textContent = `📞 ${callerName}から呼び出し中...`;
+        }
+
+        answerBtn.classList.remove("hidden");
+        answerBtn.textContent = "📞 でる";
+        hangupBtn.classList.remove("hidden");
 
         if (autoAnswer) {
             // Hands-free Auto Answer Mode
-            answerBtn.classList.remove("hidden");
-            answerBtn.textContent = "すぐに出る";
-            hangupBtn.classList.remove("hidden");
-
             if (remainingSeconds <= 0) {
                 callSubstatus.textContent = "自動で通話を開始します...";
                 startIntercomSession();
@@ -1421,64 +1429,87 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, remainingSeconds * 1000);
             }
         } else {
-            // Manual Answer Mode (Resident must tap '出る')
-            callSubstatus.textContent = "「出る」を押してお話しください";
-            answerBtn.classList.remove("hidden");
-            answerBtn.textContent = "出る";
-            hangupBtn.classList.remove("hidden");
+            // Manual Answer Mode (Resident must tap 'でる')
+            callSubstatus.textContent = "「でる」ボタンを押してお話しください";
         }
     }
+
+    let isRecordingIntercom = false;
 
     async function startIntercomSession() {
         clearAutoAnswerTimers();
         isCallActive = true;
+        isRecordingIntercom = true;
         reportTerminalStatus("intercom");
         callStatus.textContent = "通話中...";
-        callSubstatus.textContent = "";
+        callSubstatus.textContent = "お話しいただけます";
         answerBtn.classList.add("hidden"); // Hide answer button once connected
         audioQueue = [];
         isPlayingQueue = false;
 
         try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("getUserMedia not supported in this context");
+            }
+
             // Get microphone stream for intercom (low latency chunks)
             intercomStream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
 
-            // MediaRecorder for streaming
-            // We use standard container. Browser will record audio chunks.
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-            intercomRecorder = new MediaRecorder(intercomStream, { mimeType });
-            
-            intercomRecorder.ondataavailable = async (e) => {
-                if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(e.data);
-                    reader.onloadend = () => {
-                        const base64Chunk = reader.result.split(',')[1];
-                        ws.send(JSON.stringify({
-                            type: "audio_stream",
-                            audio: base64Chunk
-                        }));
-                    };
-                }
-            };
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                           : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
 
-            // Stream chunks every 250ms
-            intercomRecorder.start(250);
-            console.log("Intercom streaming started...");
+            // Self-contained independent audio slice recorder (each slice has valid container headers)
+            function recordNextSlice() {
+                if (!isCallActive || !isRecordingIntercom || !intercomStream) return;
+                try {
+                    const rec = new MediaRecorder(intercomStream, { mimeType });
+                    rec.ondataavailable = async (e) => {
+                        if (e.data && e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(e.data);
+                            reader.onloadend = () => {
+                                const base64Chunk = reader.result.split(',')[1];
+                                ws.send(JSON.stringify({
+                                    type: "audio_stream",
+                                    audio: base64Chunk
+                                }));
+                            };
+                        }
+                    };
+                    rec.start();
+                    setTimeout(() => {
+                        if (rec.state !== "inactive") {
+                            try { rec.stop(); } catch(err) {}
+                        }
+                        if (isCallActive && isRecordingIntercom) {
+                            recordNextSlice();
+                        }
+                    }, 500);
+                } catch (recErr) {
+                    console.error("Intercom slice recorder failed:", recErr);
+                }
+            }
+
+            recordNextSlice();
+            console.log("Intercom voice streaming started (header-valid slicing)...");
 
         } catch (err) {
-            console.error("Failed to start intercom mic stream:", err);
-            callStatus.textContent = "マイク接続に失敗しました";
-            callSubstatus.textContent = "";
-            setTimeout(() => endIntercomCall(true), 2000);
+            console.warn("Intercom mic stream not available or denied:", err);
+            callStatus.textContent = "相手の声を受信中";
+            callSubstatus.textContent = "（相手の声を聞くことができます）";
+            // Do NOT drop call - allow resident to hear family/staff voice
         }
     }
 
     function playIntercomChunk(base64Chunk) {
-        // Enqueue incoming staff/family voice chunks and play them sequentially
+        if (!base64Chunk) return;
         audioQueue.push("data:audio/webm;base64," + base64Chunk);
+        // Prevent queue backlog to keep low latency
+        if (audioQueue.length > 6) {
+            audioQueue.splice(0, audioQueue.length - 4);
+        }
         if (!isPlayingQueue) {
             playNextQueueItem();
         }
@@ -1494,15 +1525,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const nextSrc = audioQueue.shift();
         const aud = new Audio(nextSrc);
         aud.onended = playNextQueueItem;
-        aud.onerror = playNextQueueItem; // skip if error
+        aud.onerror = () => {
+            console.warn("Intercom chunk play skipped");
+            playNextQueueItem();
+        };
         aud.play().catch(err => {
-            console.warn("Queue play blocked:", err);
+            console.warn("Intercom chunk play blocked:", err);
             playNextQueueItem();
         });
     }
 
     function endIntercomCall(notifyServer = true) {
         clearAutoAnswerTimers();
+        isRecordingIntercom = false;
         const wasRingingOrActive = isCallActive || !intercomOverlay.classList.contains("hidden");
         if (!wasRingingOrActive) return;
         isCallActive = false;

@@ -584,11 +584,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }));
     }
 
+    let isRecordingFamilyIntercom = false;
+
     async function startFamilyAudioStream() {
         audioQueue = [];
         isPlayingQueue = false;
         intercomSeconds = 0;
         familyCallStateText.textContent = "通話中...";
+        isRecordingFamilyIntercom = true;
 
         // Timer
         if (intercomTimerInterval) clearInterval(intercomTimerInterval);
@@ -600,40 +603,66 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 1000);
 
         try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error("getUserMedia not available");
+            }
+
             intercomStream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
 
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-            intercomRecorder = new MediaRecorder(intercomStream, { mimeType });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                           : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
 
-            intercomRecorder.ondataavailable = async (e) => {
-                if (e.data.size > 0 && familyWs && familyWs.readyState === WebSocket.OPEN && patientData) {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(e.data);
-                    reader.onloadend = () => {
-                        const base64Chunk = reader.result.split(',')[1];
-                        familyWs.send(JSON.stringify({
-                            type: "audio_stream",
-                            target: patientData.patient.terminal_id,
-                            audio: base64Chunk
-                        }));
+            function recordFamilySlice() {
+                if (!isIntercomCallActive || !isRecordingFamilyIntercom || !intercomStream) return;
+                try {
+                    const rec = new MediaRecorder(intercomStream, { mimeType });
+                    rec.ondataavailable = async (e) => {
+                        if (e.data && e.data.size > 0 && familyWs && familyWs.readyState === WebSocket.OPEN && patientData && patientData.patient) {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(e.data);
+                            reader.onloadend = () => {
+                                const base64Chunk = reader.result.split(',')[1];
+                                familyWs.send(JSON.stringify({
+                                    type: "audio_stream",
+                                    target: patientData.patient.terminal_id,
+                                    audio: base64Chunk
+                                }));
+                            };
+                        }
                     };
+                    rec.start();
+                    setTimeout(() => {
+                        if (rec.state !== "inactive") {
+                            try { rec.stop(); } catch(err) {}
+                        }
+                        if (isIntercomCallActive && isRecordingFamilyIntercom) {
+                            recordFamilySlice();
+                        }
+                    }, 500);
+                } catch (recErr) {
+                    console.error("Family slice record failed:", recErr);
                 }
-            };
+            }
 
-            intercomRecorder.start(250);
-            console.log("Family intercom audio streaming started...");
+            recordFamilySlice();
+            console.log("Family intercom voice streaming started (header-valid slicing)...");
 
         } catch (err) {
-            console.error("Family mic stream failed:", err);
-            familyCallStateText.textContent = "マイクに接続できません";
-            setTimeout(() => endFamilyIntercomCall(true), 2000);
+            console.warn("Family mic stream failed or denied:", err);
+            familyCallStateText.textContent = "居室音声を受信中 (マイク無効)";
+            // Do NOT disconnect; allow family to listen to resident room
         }
     }
 
     function playIntercomChunk(base64Chunk) {
+        if (!base64Chunk) return;
         audioQueue.push("data:audio/webm;base64," + base64Chunk);
+        // Discard old chunks if queued too much to maintain real-time conversation
+        if (audioQueue.length > 6) {
+            audioQueue.splice(0, audioQueue.length - 4);
+        }
         if (!isPlayingQueue) {
             playNextQueueItem();
         }
@@ -648,7 +677,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const nextSrc = audioQueue.shift();
         const aud = new Audio(nextSrc);
         aud.onended = playNextQueueItem;
-        aud.onerror = playNextQueueItem;
+        aud.onerror = () => {
+            console.warn("Family audio play chunk skipped");
+            playNextQueueItem();
+        };
         aud.play().catch(err => {
             console.warn("Family queue play blocked:", err);
             playNextQueueItem();
@@ -658,6 +690,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function endFamilyIntercomCall(notifyServer = true) {
         if (!isIntercomCallActive) return;
         isIntercomCallActive = false;
+        isRecordingFamilyIntercom = false;
 
         if (intercomTimerInterval) {
             clearInterval(intercomTimerInterval);

@@ -1032,26 +1032,42 @@ document.addEventListener("DOMContentLoaded", () => {
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
 
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-            intercomRecorder = new MediaRecorder(intercomStream, { mimeType });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                           : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
 
-            intercomRecorder.ondataavailable = async (e) => {
-                if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(e.data);
-                    reader.onloadend = () => {
-                        const base64Chunk = reader.result.split(',')[1];
-                        ws.send(JSON.stringify({
-                            type: "audio_stream",
-                            target: selectedTerminalId,
-                            audio: base64Chunk
-                        }));
+            function recordStaffSlice() {
+                if (!isIntercomCallActive || !intercomStream) return;
+                try {
+                    const rec = new MediaRecorder(intercomStream, { mimeType });
+                    rec.ondataavailable = async (e) => {
+                        if (e.data && e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN && selectedTerminalId) {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(e.data);
+                            reader.onloadend = () => {
+                                const base64Chunk = reader.result.split(',')[1];
+                                ws.send(JSON.stringify({
+                                    type: "audio_stream",
+                                    target: selectedTerminalId,
+                                    audio: base64Chunk
+                                }));
+                            };
+                        }
                     };
+                    rec.start();
+                    setTimeout(() => {
+                        if (rec.state !== "inactive") {
+                            try { rec.stop(); } catch(err) {}
+                        }
+                        if (isIntercomCallActive) {
+                            recordStaffSlice();
+                        }
+                    }, 500);
+                } catch (recErr) {
+                    console.error("Staff slice record error:", recErr);
                 }
-            };
+            }
 
-            // Start streaming chunks every 250ms
-            intercomRecorder.start(250);
+            recordStaffSlice();
             
             // Start timer UI
             intercomTimerInterval = setInterval(() => {
@@ -1062,14 +1078,18 @@ document.addEventListener("DOMContentLoaded", () => {
             }, 1000);
 
         } catch (err) {
-            console.error("Microphone capture failed:", err);
-            callTimer.textContent = "エラー";
-            setTimeout(() => endIntercomSession(true), 2000);
+            console.warn("Staff microphone capture failed or denied:", err);
+            callTimer.textContent = "居室受話中";
+            // Do NOT drop call; allow staff to hear resident
         }
     }
 
     function playIntercomChunk(base64Chunk) {
+        if (!base64Chunk) return;
         audioQueue.push("data:audio/webm;base64," + base64Chunk);
+        if (audioQueue.length > 6) {
+            audioQueue.splice(0, audioQueue.length - 4);
+        }
         if (!isPlayingQueue) {
             playNextQueueItem();
         }
@@ -1085,9 +1105,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const nextSrc = audioQueue.shift();
         const aud = new Audio(nextSrc);
         aud.onended = playNextQueueItem;
-        aud.onerror = playNextQueueItem;
+        aud.onerror = () => {
+            console.warn("Staff audio chunk skipped");
+            playNextQueueItem();
+        };
         aud.play().catch(err => {
-            console.warn("Queue play blocked:", err);
+            console.warn("Staff queue play blocked:", err);
             playNextQueueItem();
         });
     }
