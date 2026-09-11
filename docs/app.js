@@ -517,22 +517,37 @@ document.addEventListener("DOMContentLoaded", () => {
                         updateFamilyCallUI();
                         break;
 
+                    case "call_ringing":
+                        isIntercomCallActive = true;
+                        isFamilyCallConnected = false;
+                        familyCallStateText.textContent = "居室を呼び出し中...";
+                        familyCallTimer.textContent = "呼出中";
+                        updateFamilyCallUI();
+                        break;
+
+                    case "call_answered":
                     case "call_started":
                         isIntercomCallActive = true;
+                        isFamilyCallConnected = true;
+                        familyCallStateText.textContent = "通話中...";
                         updateFamilyCallUI();
                         startFamilyAudioStream();
                         break;
 
                     case "intercom_audio":
-                        playIntercomChunk(data.audio);
+                        if (isFamilyCallConnected) {
+                            playIntercomChunk(data.audio);
+                        }
                         break;
 
                     case "intercom_hangup":
                     case "call_ended":
+                        isFamilyCallConnected = false;
                         endFamilyIntercomCall(false);
                         break;
 
                     case "call_rejected":
+                        isFamilyCallConnected = false;
                         endFamilyIntercomCall(false);
                         familyCallNotice.textContent = "⚠️ " + (data.message || "通話が拒否されました");
                         familyCallNotice.classList.remove("hidden");
@@ -540,6 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         break;
 
                     case "call_interrupted":
+                        isFamilyCallConnected = false;
                         endFamilyIntercomCall(false);
                         familyCallNotice.textContent = "🚨 " + (data.message || "スタッフ対応のため通話を終了しました");
                         familyCallNotice.classList.remove("hidden");
@@ -547,6 +563,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         break;
 
                     case "call_error":
+                        isFamilyCallConnected = false;
                         endFamilyIntercomCall(false);
                         showToast(data.message || "エラーが発生しました", false);
                         break;
@@ -556,6 +573,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         };
     }
+
+    let isFamilyCallConnected = false;
 
     async function startFamilyCall(isForce = false) {
         if (!patientData || !patientData.patient || !patientData.patient.terminal_id) {
@@ -573,8 +592,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         isIntercomCallActive = true;
-        familyCallStateText.textContent = isForce ? "緊急呼び出し中..." : "呼び出し中...";
-        familyCallTimer.textContent = "00:00";
+        isFamilyCallConnected = false;
+        familyCallStateText.textContent = isForce ? "緊急呼び出し中..." : "居室を呼び出し中...";
+        familyCallTimer.textContent = "呼出中";
         updateFamilyCallUI();
 
         familyWs.send(JSON.stringify({

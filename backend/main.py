@@ -53,7 +53,7 @@ class UserCreate(BaseModel):
     notes: str = ""
     attention_points: str = ""
     intercom_auto_answer: int = 1
-    intercom_auto_delay: int = 2
+    intercom_auto_delay: int = 10
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
 
@@ -66,7 +66,7 @@ class UserUpdate(BaseModel):
     notes: str = ""
     attention_points: str = ""
     intercom_auto_answer: int = 1
-    intercom_auto_delay: int = 2
+    intercom_auto_delay: int = 10
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
 
@@ -1184,6 +1184,24 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                         "audio": audio_chunk
                     })
                 
+            elif msg_type == "call_answer":
+                session = manager.get_session(terminal_id)
+                if session:
+                    session["answered"] = True
+                    caller_type = session.get("caller_type")
+                    caller_id = session.get("caller_id")
+                    if caller_type == "family":
+                        await manager.send_to_family(caller_id, {
+                            "type": "call_answered",
+                            "target": terminal_id
+                        })
+                    else:
+                        await manager.broadcast_to_staff({
+                            "type": "call_answered",
+                            "target": terminal_id
+                        })
+                    print(f"Intercom call answered by {terminal_id} for {caller_type}:{caller_id}")
+
             elif msg_type == "hangup":
                 session = manager.get_session(terminal_id)
                 await manager.update_status(terminal_id, "idle")
@@ -1753,10 +1771,16 @@ async def websocket_family_endpoint(websocket: WebSocket, user_code: str):
 
                 await manager.update_status(target, "intercom")
                 await websocket.send_json({
-                    "type": "call_started",
-                    "target": target
+                    "type": "call_ringing",
+                    "target": target,
+                    "auto_delay": int(auto_delay)
                 })
-                print(f"Family intercom call requested for: {target} by {user_code}")
+                if bool(force_mode and allow_force):
+                    await websocket.send_json({
+                        "type": "call_answered",
+                        "target": target
+                    })
+                print(f"Family intercom call requested for: {target} by {user_code} (ringing)")
 
             elif msg_type == "audio_stream":
                 target = data.get("target") or terminal_id

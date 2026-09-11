@@ -184,33 +184,36 @@
                                     <textarea id="p-notes" rows="3" placeholder="例: 高血圧のため塩分制限あり。右足に軽い関節痛。"></textarea>
                                 </div>
                                 <div class="intercom-settings-box">
-                                    <div class="intercom-settings-title">📞 インターホン通話・自動受話設定</div>
-                                    <div class="form-row" style="align-items: center;">
+                                    <div class="intercom-settings-title">📞 インターホン通話・「でる」待ち時間設定</div>
+                                    <div class="form-row" style="align-items: center; gap: 16px;">
                                         <div class="form-group" style="flex: 1;">
                                             <label class="checkbox-label" for="p-auto-answer">
                                                 <input type="checkbox" id="p-auto-answer" checked>
-                                                <span>ハンズフリー自動応答を有効にする</span>
+                                                <span style="font-weight: 700;">設定時間経過で自動的に「でる」にする</span>
                                             </label>
+                                            <div style="font-size: 11px; color: var(--text-light); margin-top: 3px; padding-left: 22px;">
+                                                ※居室で「でる」を押す前は会話は始まりません。この秒数を超えると強制的に「でる」になり通話が開始されます。
+                                            </div>
                                         </div>
-                                        <div class="form-group" style="width: 140px; flex: none;">
-                                            <label for="p-auto-delay">応答遅延秒数</label>
-                                            <div style="display: flex; align-items: center; gap: 6px;">
-                                                <input type="number" id="p-auto-delay" value="2" min="0" max="15" style="width: 70px; text-align: center;">
-                                                <span style="font-size: 13px; color: var(--text-light);">秒</span>
+                                        <div class="form-group" style="width: 170px; flex: none;">
+                                            <label for="p-auto-delay" style="font-weight: 600;">自動で「でる」までの時間</label>
+                                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                                                <input type="number" id="p-auto-delay" value="10" min="1" max="60" style="width: 70px; text-align: center; font-weight: 700; font-size: 15px;">
+                                                <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">秒後</span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="form-row">
+                                    <div class="form-row" style="margin-top: 10px; border-top: 1px dashed var(--border-color, #e2e8f0); padding-top: 8px;">
                                         <div class="form-group">
                                             <label class="checkbox-label" for="p-allow-force-staff">
                                                 <input type="checkbox" id="p-allow-force-staff" checked>
-                                                <span style="font-size: 12px;">スタッフの強制受話を許可</span>
+                                                <span style="font-size: 12px;">スタッフの緊急強制受話を許可</span>
                                             </label>
                                         </div>
                                         <div class="form-group">
                                             <label class="checkbox-label" for="p-allow-force-family">
                                                 <input type="checkbox" id="p-allow-force-family">
-                                                <span style="font-size: 12px;">ご家族の強制受話を許可</span>
+                                                <span style="font-size: 12px;">ご家族の緊急強制受話を許可</span>
                                             </label>
                                         </div>
                                     </div>

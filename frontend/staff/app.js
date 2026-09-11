@@ -588,8 +588,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const demLevels = { none: "なし", mild: "軽度", moderate: "中等度", severe: "重度" };
                 const demLabel = demLevels[p.dementia_level] || p.dementia_level;
                 const autoAnsBadge = (p.intercom_auto_answer !== 0)
-                    ? `<span class="badge" style="background:rgba(16, 185, 129, 0.15); color:#10b981; border:1px solid rgba(16, 185, 129, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 自動応答 (${p.intercom_auto_delay ?? 2}秒)</span>`
-                    : `<span class="badge" style="background:rgba(148, 163, 184, 0.15); color:#94a3b8; border:1px solid rgba(148, 163, 184, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 手動応答</span>`;
+                    ? `<span class="badge" style="background:rgba(16, 185, 129, 0.15); color:#10b981; border:1px solid rgba(16, 185, 129, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 自動で「でる」 (${p.intercom_auto_delay ?? 10}秒後)</span>`
+                    : `<span class="badge" style="background:rgba(148, 163, 184, 0.15); color:#94a3b8; border:1px solid rgba(148, 163, 184, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 手動応答のみ</span>`;
 
                 div.innerHTML = `
                     <div class="details">
@@ -637,7 +637,7 @@ document.addEventListener("DOMContentLoaded", () => {
             notes: pNotesInput.value,
             attention_points: pAttentionInput.value,
             intercom_auto_answer: pAutoAnswerInput.checked ? 1 : 0,
-            intercom_auto_delay: parseInt(pAutoDelayInput.value) || 2,
+            intercom_auto_delay: parseInt(pAutoDelayInput.value) || 10,
             allow_force_answer_staff: pAllowForceStaffInput.checked ? 1 : 0,
             allow_force_answer_family: pAllowForceFamilyInput.checked ? 1 : 0
         };
@@ -656,7 +656,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 patientForm.reset();
                 pIdInput.value = "";
                 pAutoAnswerInput.checked = true;
-                pAutoDelayInput.value = 2;
+                pAutoDelayInput.value = 10;
                 pAllowForceStaffInput.checked = true;
                 pAllowForceFamilyInput.checked = false;
                 formTitle.textContent = "➕ 利用者 新規登録";
@@ -688,7 +688,7 @@ document.addEventListener("DOMContentLoaded", () => {
             pAttentionInput.value = p.attention_points || "";
             pNotesInput.value = p.notes || "";
             pAutoAnswerInput.checked = p.intercom_auto_answer !== 0;
-            pAutoDelayInput.value = p.intercom_auto_delay ?? 2;
+            pAutoDelayInput.value = p.intercom_auto_delay ?? 10;
             pAllowForceStaffInput.checked = p.allow_force_answer_staff !== 0;
             pAllowForceFamilyInput.checked = p.allow_force_answer_family === 1;
 
@@ -704,7 +704,7 @@ document.addEventListener("DOMContentLoaded", () => {
         patientForm.reset();
         pIdInput.value = "";
         pAutoAnswerInput.checked = true;
-        pAutoDelayInput.value = 2;
+        pAutoDelayInput.value = 10;
         pAllowForceStaffInput.checked = true;
         pAllowForceFamilyInput.checked = false;
         formTitle.textContent = "➕ 利用者 新規登録";

@@ -1399,8 +1399,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         answerBtn.classList.remove("hidden");
+        answerBtn.style.display = "";
         answerBtn.textContent = "📞 でる";
         hangupBtn.classList.remove("hidden");
+        hangupBtn.style.display = "";
 
         if (autoAnswer) {
             // Hands-free Auto Answer Mode
@@ -1415,18 +1417,11 @@ document.addEventListener("DOMContentLoaded", () => {
                         callSubstatus.textContent = `（約${remainingSeconds}秒後に自動でつながります）`;
                     } else {
                         callSubstatus.textContent = "自動で通話を開始します...";
-                        if (autoAnswerCountdownTimer) {
-                            clearInterval(autoAnswerCountdownTimer);
-                            autoAnswerCountdownTimer = null;
-                        }
+                        clearAutoAnswerTimers();
+                        if (intercomOverlay.classList.contains("hidden")) return; // Call canceled
+                        startIntercomSession();
                     }
                 }, 1000);
-
-                autoAnswerTimer = setTimeout(() => {
-                    clearAutoAnswerTimers();
-                    if (intercomOverlay.classList.contains("hidden")) return; // Call canceled
-                    startIntercomSession();
-                }, remainingSeconds * 1000);
             }
         } else {
             // Manual Answer Mode (Resident must tap 'でる')
@@ -1443,9 +1438,17 @@ document.addEventListener("DOMContentLoaded", () => {
         reportTerminalStatus("intercom");
         callStatus.textContent = "通話中...";
         callSubstatus.textContent = "お話しいただけます";
-        answerBtn.classList.add("hidden"); // Hide answer button once connected
+        answerBtn.classList.add("hidden");
+        answerBtn.style.display = "none"; // Hide answer button once connected (only hangup remains)
+        hangupBtn.classList.remove("hidden");
+        hangupBtn.style.display = "";
         audioQueue = [];
         isPlayingQueue = false;
+
+        // Notify server that room resident answered the call
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "call_answer" }));
+        }
 
         try {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1504,7 +1507,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function playIntercomChunk(base64Chunk) {
-        if (!base64Chunk) return;
+        if (!base64Chunk || !isCallActive) return; // Do not play incoming audio before answering
         audioQueue.push("data:audio/webm;base64," + base64Chunk);
         // Prevent queue backlog to keep low latency
         if (audioQueue.length > 6) {

@@ -477,7 +477,15 @@ body {
     padding: 30px;
 }
 
+.hidden {
+    display: none !important;
+}
+
 .modal-overlay.hidden {
+    display: none !important;
+}
+
+.call-btn.hidden {
     display: none !important;
 }
 
