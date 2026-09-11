@@ -123,6 +123,17 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${protocol}//${window.location.host}${endpoint}`;
     }
 
+    function getAssetUrl(rawUrl) {
+        if (!rawUrl) return "assets/sample_postcard.jpg";
+        if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://") || rawUrl.startsWith("data:")) {
+            return rawUrl;
+        }
+        // Normalize /family/assets/... or /assets/... to assets/...
+        let cleaned = rawUrl.replace(/^\/?family\//, "");
+        if (cleaned.startsWith("/")) cleaned = cleaned.substring(1);
+        return cleaned;
+    }
+
     // Server Config UI Elements
     const serverSettingsBtn = document.getElementById("server-settings-btn");
     const serverConfigBanner = document.getElementById("server-config-banner");
@@ -605,7 +616,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (!rawUrl) rawUrl = "/family/assets/generated_relaxation_porch.jpg";
 
-            const downloadUrl = `/api/family/download_raw_postcard?image_url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(filename)}`;
+            const downloadUrl = getApiUrl(`/api/family/download_raw_postcard?image_url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(filename)}`);
             postcardDownloadBtn.setAttribute("href", downloadUrl);
             postcardDownloadBtn.setAttribute("download", filename);
         }
@@ -648,7 +659,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         postcardTitle.textContent = multimedia.card_title || "【デジタル絵手紙】思い出カード";
         if (multimedia.card_image_url) {
-            postcardImg.src = multimedia.card_image_url;
+            postcardImg.src = getAssetUrl(multimedia.card_image_url);
         }
         if (postcardRecipient) {
             postcardRecipient.textContent = `${patient.name} 様`;
@@ -762,7 +773,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (postcardTitle && card.title) postcardTitle.textContent = card.title;
         if (postcardImg && card.image_url) {
             postcardImg.style.opacity = "0.3";
-            postcardImg.src = card.image_url;
+            postcardImg.src = getAssetUrl(card.image_url);
             postcardImg.onload = () => { postcardImg.style.opacity = "1"; };
         }
         if (postcardDate && card.date_str) {
@@ -1072,25 +1083,25 @@ document.addEventListener("DOMContentLoaded", () => {
             bgm_mood: "autumn",
             slides: [
                 {
-                    image_url: "/family/assets/generated_relaxation_porch.jpg",
+                    image_url: "assets/generated_relaxation_porch.jpg",
                     date_tag: "9月9日 (夜)",
                     caption_title: "秋の夕暮れ 心静かに 和",
                     caption_desc: "「相手の表情を気にしてしまう…とお話しされ、温かいお茶でほっと一息つかれました」"
                 },
                 {
-                    image_url: "/family/assets/generated_undoukai_bento.jpg",
+                    image_url: "assets/generated_undoukai_bento.jpg",
                     date_tag: "9月9日 (昼)",
                     caption_title: "昭和懐かしの運動会とお弁当",
                     caption_desc: "「『おばあちゃんの煮物が美味しかった』と昔の運動会のお弁当を嬉しそうに語られました」"
                 },
                 {
-                    image_url: "/family/assets/generated_healing_sparrows.jpg",
+                    image_url: "assets/generated_healing_sparrows.jpg",
                     date_tag: "9月8日",
                     caption_title: "寄り添う小鳥と秋の風",
                     caption_desc: "「庭先を訪れる小鳥を眺めながら、心穏やかにリラックスした午後を過ごされました」"
                 },
                 {
-                    image_url: "/family/assets/sample_postcard.jpg",
+                    image_url: "assets/sample_postcard.jpg",
                     date_tag: "9月7日",
                     caption_title: "秋の訪れとコスモス庭園",
                     caption_desc: "「秋の訪れを感じながら、穏やかな笑顔でお元気に過ごされています」"
@@ -1107,19 +1118,19 @@ document.addEventListener("DOMContentLoaded", () => {
             bgm_mood: "autumn",
             slides: [
                 {
-                    image_url: "/family/assets/generated_undoukai_bento.jpg",
+                    image_url: "assets/generated_undoukai_bento.jpg",
                     date_tag: "9月2日",
                     caption_title: "家族で囲んだ手作り弁当",
                     caption_desc: "「家族みんなで応援した運動会の思い出を生き生きとお話しされました」"
                 },
                 {
-                    image_url: "/family/assets/sample_postcard.jpg",
+                    image_url: "assets/sample_postcard.jpg",
                     date_tag: "9月1日",
                     caption_title: "初秋の庭とコスモス",
                     caption_desc: "「涼しい風が吹き始め、心地よい季節の変わり目を楽しまれました」"
                 },
                 {
-                    image_url: "/family/assets/sample_postcard_summer.jpg",
+                    image_url: "assets/sample_postcard_summer.jpg",
                     date_tag: "8月31日",
                     caption_title: "夏の終わりの涼風と風鈴",
                     caption_desc: "「朝顔と風鈴の音色に癒され、ゆったりとした時間を過ごされました」"
@@ -1136,13 +1147,13 @@ document.addEventListener("DOMContentLoaded", () => {
             bgm_mood: "summer",
             slides: [
                 {
-                    image_url: "/family/assets/sample_postcard_summer.jpg",
+                    image_url: "assets/sample_postcard_summer.jpg",
                     date_tag: "8月28日",
                     caption_title: "涼風の朝顔と風鈴",
                     caption_desc: "「夏の爽やかな風に吹かれながら、スタッフと楽しそうに語らいました」"
                 },
                 {
-                    image_url: "/family/assets/sample_postcard_spring.jpg",
+                    image_url: "assets/sample_postcard_spring.jpg",
                     date_tag: "8月24日",
                     caption_title: "和みの回想録",
                     caption_desc: "「昔の楽しい思い出を振り返り、安心した表情を見せてくださいました」"
@@ -1157,10 +1168,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function preloadMovieImages() {
         WEEKLY_MOVIES.forEach(wm => {
             wm.slides.forEach(s => {
-                if (!preloadedMovieImages[s.image_url]) {
+                const assetUrl = getAssetUrl(s.image_url);
+                if (!preloadedMovieImages[assetUrl]) {
                     const img = new Image();
-                    img.src = s.image_url;
-                    preloadedMovieImages[s.image_url] = img;
+                    img.src = assetUrl;
+                    preloadedMovieImages[assetUrl] = img;
                 }
             });
         });
@@ -1290,7 +1302,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const currentSlide = slides[slideIdx];
-        const curImg = preloadedMovieImages[currentSlide.image_url] || postcardImg;
+        const assetUrl = getAssetUrl(currentSlide.image_url);
+        const curImg = preloadedMovieImages[assetUrl] || postcardImg;
 
         // Draw slide image with smooth Ken Burns Zoom & Pan
         if (curImg && curImg.complete && curImg.naturalWidth > 0) {
