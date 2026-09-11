@@ -34,9 +34,9 @@
 
         <div class="nav-user-meta">
             <!-- Backend & Tunnel Live Status Pill -->
-            <div id="backend-status-pill" class="backend-status-pill checking" title="施設サーバー接続状態（クリックで設定展開）">
+            <div id="backend-status-pill" class="backend-status-pill checking" title="バックエンドサーバー稼働状態（クリックで詳細展開）">
                 <span class="status-dot"></span>
-                <span id="backend-status-text" class="status-label">サーバー確認中...</span>
+                <span id="backend-status-text" class="status-label">バックエンド確認中...</span>
                 <span id="tunnel-url-tag" class="tunnel-url-tag" title="認識中のトンネルURL">-</span>
             </div>
 
@@ -65,12 +65,12 @@
             <div class="server-config-info">
                 <div class="server-status-row">
                     <span id="banner-backend-dot" class="status-dot online"></span>
-                    <span id="banner-backend-title" class="server-config-badge">🌐 施設サーバー連携</span>
-                    <span id="server-config-status-text">手元PC（施設側）のトンネルURLを設定してください</span>
+                    <span id="banner-backend-title" class="server-config-badge">🌐 施設バックエンド連携</span>
+                    <span id="server-config-status-text">手元PC（施設側バックエンドサーバー）の稼働状態とトンネルURLを確認できます</span>
                 </div>
                 <div class="server-diag-meta">
-                    <span>認識中URL: <strong id="server-diag-url">-</strong></span>
-                    <span>サーバー状態: <strong id="server-diag-health">未チェック</strong></span>
+                    <span>トンネル接続URL: <strong id="server-diag-url">-</strong></span>
+                    <span>サーバー起動状態: <strong id="server-diag-health">未チェック</strong></span>
                     <button id="btn-recheck-health" class="btn-sm-refresh" title="再チェック">🔄 再診断</button>
                 </div>
             </div>

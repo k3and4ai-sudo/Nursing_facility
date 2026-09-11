@@ -238,7 +238,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (status === "online") {
             isBackendOnline = true;
-            if (backendStatusText) backendStatusText.textContent = "施設サーバー稼働中";
+            if (backendStatusText) backendStatusText.textContent = "バックエンド稼働中";
             if (serverDiagHealth) {
                 serverDiagHealth.textContent = `🟢 正常稼働 (${message || "OK"})`;
                 serverDiagHealth.style.color = "#059669";
@@ -254,7 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } else if (status === "checking") {
             isBackendOnline = false;
-            if (backendStatusText) backendStatusText.textContent = "サーバー確認中...";
+            if (backendStatusText) backendStatusText.textContent = "バックエンド確認中...";
             if (serverDiagHealth) {
                 serverDiagHealth.textContent = "🟡 疎通確認中...";
                 serverDiagHealth.style.color = "#d97706";
@@ -265,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             // offline
             isBackendOnline = false;
-            if (backendStatusText) backendStatusText.textContent = "施設サーバー停止中";
+            if (backendStatusText) backendStatusText.textContent = "バックエンド停止中";
             if (serverDiagHealth) {
                 serverDiagHealth.textContent = `🔴 停止中 (${message || "応答なし"})`;
                 serverDiagHealth.style.color = "#dc2626";
@@ -274,14 +274,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 bannerBackendDot.className = "status-dot offline";
             }
             if (serverConfigStatusText) {
-                serverConfigStatusText.textContent = "⚠️ 施設サーバーまたはトンネルと通信できません";
+                serverConfigStatusText.textContent = "⚠️ バックエンドサーバーまたはトンネルと通信できません";
             }
             if (serverOfflineNotice) {
                 serverOfflineNotice.classList.remove("hidden");
                 if (offlineNoticeText) {
                     offlineNoticeText.textContent = fullUrl 
-                        ? `現在、施設サーバー (${shortUrl}) が停止しています。スタッフ側のPC起動をお待ちください。`
-                        : "現在、施設サーバーの接続先が未設定または停止しています。";
+                        ? `現在、施設側のバックエンドサーバー (${shortUrl}) が停止しています。スタッフ側の起動をお待ちください。`
+                        : "現在、施設バックエンドサーバーの接続先が未設定または停止しています。";
                 }
             }
         }
