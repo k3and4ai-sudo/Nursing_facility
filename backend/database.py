@@ -28,7 +28,7 @@ def db_init():
                 notes TEXT,                        -- Encrypted
                 attention_points TEXT,             -- Encrypted (AI interaction notes)
                 intercom_auto_answer INTEGER DEFAULT 1,     -- 1: Hands-free auto-answer, 0: Manual
-                intercom_auto_delay INTEGER DEFAULT 10,     -- Delay in seconds before auto-answer (default 10s)
+                intercom_auto_delay INTEGER DEFAULT 15,     -- Delay in seconds before auto-answer (default 15s)
                 allow_force_answer_staff INTEGER DEFAULT 1, -- Allow staff emergency force-answer
                 allow_force_answer_family INTEGER DEFAULT 0 -- Allow family emergency force-answer
             )
@@ -40,14 +40,14 @@ def db_init():
         if "intercom_auto_answer" not in existing_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN intercom_auto_answer INTEGER DEFAULT 1")
         if "intercom_auto_delay" not in existing_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN intercom_auto_delay INTEGER DEFAULT 10")
+            cursor.execute("ALTER TABLE users ADD COLUMN intercom_auto_delay INTEGER DEFAULT 15")
         if "allow_force_answer_staff" not in existing_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_staff INTEGER DEFAULT 1")
         if "allow_force_answer_family" not in existing_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_family INTEGER DEFAULT 0")
         
-        # Upgrade existing 2s delay to 10s for better user experience
-        cursor.execute("UPDATE users SET intercom_auto_delay = 10 WHERE intercom_auto_delay <= 2")
+        # Upgrade existing <= 10s delay to 15s as requested by user
+        cursor.execute("UPDATE users SET intercom_auto_delay = 15 WHERE intercom_auto_delay <= 10")
         conn.commit()
         
         # 2. Vital Records table
@@ -370,13 +370,13 @@ def _format_user_row(row):
     data["attention_points"] = decrypt_data(data["attention_points"])
     # Intercom settings default fallbacks
     data["intercom_auto_answer"] = 1 if data.get("intercom_auto_answer") is None else int(data["intercom_auto_answer"])
-    data["intercom_auto_delay"] = 10 if data.get("intercom_auto_delay") is None else int(data["intercom_auto_delay"])
+    data["intercom_auto_delay"] = 15 if data.get("intercom_auto_delay") is None else int(data["intercom_auto_delay"])
     data["allow_force_answer_staff"] = 1 if data.get("allow_force_answer_staff") is None else int(data["allow_force_answer_staff"])
     data["allow_force_answer_family"] = 0 if data.get("allow_force_answer_family") is None else int(data["allow_force_answer_family"])
     return data
 
 def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
-             intercom_auto_answer: int = 1, intercom_auto_delay: int = 10,
+             intercom_auto_answer: int = 1, intercom_auto_delay: int = 15,
              allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -394,7 +394,7 @@ def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_l
         return cursor.lastrowid
 
 def update_user(user_id: int, name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
-                intercom_auto_answer: int = 1, intercom_auto_delay: int = 2,
+                intercom_auto_answer: int = 1, intercom_auto_delay: int = 15,
                 allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
     with get_db_connection() as conn:
         cursor = conn.cursor()

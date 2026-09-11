@@ -53,7 +53,7 @@ class UserCreate(BaseModel):
     notes: str = ""
     attention_points: str = ""
     intercom_auto_answer: int = 1
-    intercom_auto_delay: int = 10
+    intercom_auto_delay: int = 15
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
 
@@ -66,7 +66,7 @@ class UserUpdate(BaseModel):
     notes: str = ""
     attention_points: str = ""
     intercom_auto_answer: int = 1
-    intercom_auto_delay: int = 10
+    intercom_auto_delay: int = 15
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
 
@@ -1607,7 +1607,7 @@ async def websocket_staff_endpoint(websocket: WebSocket):
                 # Lookup target user's intercom settings
                 target_user = db.get_user_by_terminal(target)
                 auto_answer = target_user.get("intercom_auto_answer", 1) if target_user else 1
-                auto_delay = target_user.get("intercom_auto_delay", 2) if target_user else 2
+                auto_delay = target_user.get("intercom_auto_delay", 15) if target_user else 15
                 allow_force = target_user.get("allow_force_answer_staff", 1) if target_user else 1
 
                 # Staff Priority Over Family Call: Check if currently talking to family
@@ -1746,7 +1746,7 @@ async def websocket_family_endpoint(websocket: WebSocket, user_code: str):
                 # Check force call permissions
                 allow_force = target_user.get("allow_force_answer_family", 0) == 1
                 auto_answer = target_user.get("intercom_auto_answer", 1)
-                auto_delay = target_user.get("intercom_auto_delay", 2)
+                auto_delay = target_user.get("intercom_auto_delay", 15) if target_user else 15
 
                 caller_name = account.get("name", "ご家族様")
 
@@ -1780,7 +1780,19 @@ async def websocket_family_endpoint(websocket: WebSocket, user_code: str):
                         "type": "call_answered",
                         "target": target
                     })
-                print(f"Family intercom call requested for: {target} by {user_code} (ringing)")
+                elif bool(auto_answer) and int(auto_delay) > 0:
+                    async def auto_answer_fallback_task(tgt: str, delay: int, code: str):
+                        await asyncio.sleep(delay)
+                        sess = manager.get_session(tgt)
+                        if sess and sess.get("caller_id") == code and not sess.get("answered", False):
+                            sess["answered"] = True
+                            await manager.send_to_family(code, {
+                                "type": "call_answered",
+                                "target": tgt
+                            })
+                            print(f"[Auto Answer] Call auto-answered after {delay}s for {tgt}")
+                    asyncio.create_task(auto_answer_fallback_task(target, int(auto_delay), user_code))
+                print(f"Family intercom call requested for: {target} by {user_code} (ringing, delay={auto_delay}s)")
 
             elif msg_type == "audio_stream":
                 target = data.get("target") or terminal_id
@@ -1948,7 +1960,7 @@ def api_get_family_my_patient(user_code: str = "family01", season: Optional[str]
             "dementia_level": user["dementia_level"],
             "terminal_id": user.get("terminal_id"),
             "intercom_auto_answer": user.get("intercom_auto_answer", 1),
-            "intercom_auto_delay": user.get("intercom_auto_delay", 2),
+            "intercom_auto_delay": user.get("intercom_auto_delay", 15),
             "allow_force_answer_family": user.get("allow_force_answer_family", 0)
         },
         "vital_status": vital_status,

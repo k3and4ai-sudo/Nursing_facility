@@ -1354,7 +1354,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const callerName = callData.caller || "スタッフステーション";
         const callerType = callData.caller_type || "staff";
         const autoAnswer = callData.auto_answer !== false; // default true if not specified
-        let remainingSeconds = (typeof callData.auto_delay === "number") ? callData.auto_delay : 2;
+        let remainingSeconds = (typeof callData.auto_delay === "number") ? callData.auto_delay : 15;
         const isForce = !!callData.force_mode;
 
         // Play incoming audio chime (Standard Ding-Dong, Emergency alert beep, or Family Pin-Pon-Pan)
@@ -1446,8 +1446,18 @@ document.addEventListener("DOMContentLoaded", () => {
         isPlayingQueue = false;
 
         // Notify server that room resident answered the call
+        console.log("[User Intercom] Resident answered call. Sending call_answer to server...");
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "call_answer" }));
+        } else {
+            console.warn("[User Intercom] WS was not open when answering call. Reconnecting WS...");
+            connectWebSocket();
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "call_answer" }));
+                    console.log("[User Intercom] call_answer sent after WS reconnect");
+                }
+            }, 400);
         }
 
         try {
@@ -1576,14 +1586,31 @@ document.addEventListener("DOMContentLoaded", () => {
         setAvatarState("idle");
     }
 
-    answerBtn.addEventListener("click", () => {
+    function handleAnswerClick(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (isCallActive) return;
+        console.log("[User] Resident pressed answer button");
         clearAutoAnswerTimers();
         startIntercomSession();
-    });
+    }
 
-    hangupBtn.addEventListener("click", () => {
+    answerBtn.addEventListener("click", handleAnswerClick);
+    answerBtn.addEventListener("touchend", handleAnswerClick);
+
+    function handleHangupClick(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        console.log("[User] Resident pressed hangup button");
         endIntercomCall(true);
-    });
+    }
+
+    hangupBtn.addEventListener("click", handleHangupClick);
+    hangupBtn.addEventListener("touchend", handleHangupClick);
 
     // Helper functions
     function setAvatarState(state) {
