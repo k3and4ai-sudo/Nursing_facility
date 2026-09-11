@@ -229,6 +229,8 @@ document.addEventListener("DOMContentLoaded", () => {
         osc.stop(startTime + duration);
     }
 
+    let incomingChimeInterval = null;
+
     function playIncomingChime(isForce = false, callerType = "staff") {
         try {
             const ctx = getChimeAudioContext();
@@ -252,6 +254,32 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } catch (e) {
             console.warn("Could not play incoming chime:", e);
+        }
+    }
+
+    function startIncomingChimeLoop(isForce = false, callerType = "staff") {
+        stopIncomingChimeLoop();
+        // Play first chime immediately
+        playIncomingChime(isForce, callerType);
+
+        // Emergency force mode answers automatically within ~800ms, no loop needed
+        if (isForce) return;
+
+        // Repeat incoming chime every 5 seconds until answered or hung up
+        incomingChimeInterval = setInterval(() => {
+            if (isCallActive || !intercomOverlay || intercomOverlay.classList.contains("hidden")) {
+                stopIncomingChimeLoop();
+                return;
+            }
+            console.log("[User Intercom] Ringing 5s interval chime triggered");
+            playIncomingChime(isForce, callerType);
+        }, 5000);
+    }
+
+    function stopIncomingChimeLoop() {
+        if (incomingChimeInterval) {
+            clearInterval(incomingChimeInterval);
+            incomingChimeInterval = null;
         }
     }
 
@@ -396,7 +424,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     handleIncomingCall(data);
                     break;
 
+                case "call_answered":
+                case "call_started":
+                    console.log("[User WS] Call answered/started event received from server");
+                    if (!isCallActive && intercomOverlay && !intercomOverlay.classList.contains("hidden")) {
+                        startIntercomSession();
+                    }
+                    break;
+
                 case "intercom_audio": // Intercom incoming audio chunks
+                    // If audio chunks start arriving while call modal is up, ensure session is marked active and answer button is hidden
+                    if (!isCallActive && intercomOverlay && !intercomOverlay.classList.contains("hidden")) {
+                        startIntercomSession();
+                    }
                     if (isCallActive) {
                         playIntercomChunk(data.audio);
                     }
@@ -1337,6 +1377,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Intercom (Pattern A) - Calling functions
     function clearAutoAnswerTimers() {
+        stopIncomingChimeLoop();
         if (autoAnswerTimer) {
             clearTimeout(autoAnswerTimer);
             autoAnswerTimer = null;
@@ -1350,6 +1391,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleIncomingCall(callData = {}) {
         clearAutoAnswerTimers();
         intercomOverlay.classList.remove("hidden");
+        if (callCard) callCard.classList.remove("in-call");
         
         const callerName = callData.caller || "スタッフステーション";
         const callerType = callData.caller_type || "staff";
@@ -1357,8 +1399,8 @@ document.addEventListener("DOMContentLoaded", () => {
         let remainingSeconds = (typeof callData.auto_delay === "number") ? callData.auto_delay : 15;
         const isForce = !!callData.force_mode;
 
-        // Play incoming audio chime (Standard Ding-Dong, Emergency alert beep, or Family Pin-Pon-Pan)
-        playIncomingChime(isForce, callerType);
+        // Start 5-second interval incoming chime loop (immediate 1st chime + repeat every 5s)
+        startIncomingChimeLoop(isForce, callerType);
         reportTerminalStatus("intercom");
 
         if (callerType === "family") {
@@ -1375,6 +1417,7 @@ document.addEventListener("DOMContentLoaded", () => {
             callStatus.textContent = `${callerName}から緊急呼出`;
             callSubstatus.textContent = "自動でハンズフリー通話を開始します...";
             answerBtn.classList.add("hidden");
+            answerBtn.style.display = "none";
             hangupBtn.classList.remove("hidden");
 
             // Short chime preview delay (800ms) before opening microphone stream
@@ -1433,13 +1476,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function startIntercomSession() {
         clearAutoAnswerTimers();
+        stopIncomingChimeLoop();
         isCallActive = true;
         isRecordingIntercom = true;
         reportTerminalStatus("intercom");
         callStatus.textContent = "通話中...";
         callSubstatus.textContent = "お話しいただけます";
+
+        // Strictly mark callCard as in-call and hide answer button
+        if (callCard) callCard.classList.add("in-call");
         answerBtn.classList.add("hidden");
-        answerBtn.style.display = "none"; // Hide answer button once connected (only hangup remains)
+        answerBtn.style.display = "none";
         hangupBtn.classList.remove("hidden");
         hangupBtn.style.display = "";
         audioQueue = [];
@@ -1550,6 +1597,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function endIntercomCall(notifyServer = true) {
         clearAutoAnswerTimers();
+        stopIncomingChimeLoop();
         isRecordingIntercom = false;
         const wasRingingOrActive = isCallActive || !intercomOverlay.classList.contains("hidden");
         if (!wasRingingOrActive) return;
@@ -1569,11 +1617,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (callCard) {
             callCard.classList.remove("emergency-force");
             callCard.classList.remove("family-call");
+            callCard.classList.remove("in-call");
         }
         if (forceCallBanner) forceCallBanner.classList.add("hidden");
 
         intercomOverlay.classList.add("hidden");
         answerBtn.classList.add("hidden");
+        answerBtn.style.display = "none";
         callSubstatus.textContent = "";
         
         if (notifyServer && ws && ws.readyState === WebSocket.OPEN) {

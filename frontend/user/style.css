@@ -639,6 +639,13 @@ body {
     transform: scale(0.96);
 }
 
+/* In-Call state: Guarantee Answer button is strictly hidden, only Hangup remains */
+.call-card.in-call #answer-btn,
+.call-card.in-call .call-btn.answer,
+#answer-btn.hidden {
+    display: none !important;
+}
+
 /* Emergency Force Call Styling */
 .call-card.emergency-force {
     border: 5px solid #ef4444 !important;

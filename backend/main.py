@@ -1790,6 +1790,10 @@ async def websocket_family_endpoint(websocket: WebSocket, user_code: str):
                                 "type": "call_answered",
                                 "target": tgt
                             })
+                            await manager.send_to_user(tgt, {
+                                "type": "call_answered",
+                                "target": tgt
+                            })
                             print(f"[Auto Answer] Call auto-answered after {delay}s for {tgt}")
                     asyncio.create_task(auto_answer_fallback_task(target, int(auto_delay), user_code))
                 print(f"Family intercom call requested for: {target} by {user_code} (ringing, delay={auto_delay}s)")
