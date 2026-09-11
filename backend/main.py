@@ -76,6 +76,15 @@ class HandoverCreate(BaseModel):
 
 # HTTP Endpoints
 
+@app.get("/api/health")
+def health_check():
+    return {
+        "status": "ok",
+        "timestamp": time.time(),
+        "service": "Care-Link Backend",
+        "version": "1.0.0"
+    }
+
 @app.post("/api/auth/login")
 def login_user(login_data: LoginRequest):
     user_acc = db.authenticate_user_account(login_data.user_code, login_data.password)

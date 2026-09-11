@@ -1380,6 +1380,47 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Family External Tunnel Status Monitoring
+    const familyTunnelBadge = document.getElementById("family-tunnel-badge");
+    const familyTunnelStatusText = document.getElementById("family-tunnel-status-text");
+    let activeFamilyTunnelUrl = null;
+
+    async function checkFamilyTunnelStatus() {
+        if (!familyTunnelBadge) return;
+        try {
+            const resp = await fetch(`https://raw.githubusercontent.com/k3and4ai-sudo/Nursing_facility/main/docs/tunnel_endpoint.json?t=${Date.now()}`, { cache: "no-store" });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.status === "online" && data.backend_url) {
+                    activeFamilyTunnelUrl = data.backend_url;
+                    familyTunnelBadge.className = "status-badge family-tunnel online";
+                    familyTunnelStatusText.textContent = `🌐 ご家族トンネル: 稼働中`;
+                    familyTunnelBadge.title = `ご家族トンネル稼働中:\n${data.backend_url}\nクリックでURLコピー`;
+                    return;
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        familyTunnelBadge.className = "status-badge family-tunnel offline";
+        familyTunnelStatusText.textContent = `⚪ ご家族トンネル: 停止中`;
+        familyTunnelBadge.title = "ご家族向け外部トンネルは停止しています。";
+    }
+
+    if (familyTunnelBadge) {
+        familyTunnelBadge.addEventListener("click", () => {
+            if (activeFamilyTunnelUrl) {
+                navigator.clipboard.writeText(activeFamilyTunnelUrl).then(() => {
+                    alert(`ご家族向けトンネルURLをコピーしました:\n${activeFamilyTunnelUrl}`);
+                });
+            } else {
+                alert("現在ご家族向けトンネルは停止中です。PCで ./start_tunnel.sh を起動してください。");
+            }
+        });
+        checkFamilyTunnelStatus();
+        setInterval(checkFamilyTunnelStatus, 30000);
+    }
+
     // Initialize Connection
     connectWS();
 });

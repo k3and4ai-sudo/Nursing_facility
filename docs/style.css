@@ -1702,3 +1702,131 @@ body.family-theme {
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* ==========================================================================
+   🌐 Backend & Tunnel Live Status Styles
+   ========================================================================== */
+.backend-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: 1px solid transparent;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.backend-status-pill .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.backend-status-pill.online {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+}
+.backend-status-pill.online .status-dot {
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+}
+
+.backend-status-pill.checking {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+.backend-status-pill.checking .status-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 8px #f59e0b;
+    animation: blink 1.2s infinite ease-in-out;
+}
+
+.backend-status-pill.offline {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #991b1b;
+}
+.backend-status-pill.offline .status-dot {
+    background: #ef4444;
+    box-shadow: 0 0 8px #ef4444;
+}
+
+.tunnel-url-tag {
+    background: rgba(0, 0, 0, 0.06);
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: monospace;
+    color: inherit;
+    font-weight: 600;
+}
+
+.server-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.server-diag-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.server-diag-meta strong {
+    color: #ffffff;
+    font-family: monospace;
+}
+
+.btn-sm-refresh {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-sm-refresh:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.server-offline-notice {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    color: #ffffff;
+    padding: 10px 16px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+    animation: slideDown 0.3s ease-out;
+}
+
+.server-offline-notice.hidden {
+    display: none !important;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+

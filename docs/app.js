@@ -185,13 +185,136 @@ document.addEventListener("DOMContentLoaded", () => {
         return cleaned;
     }
 
-    // Server Config UI Elements
+    // Server Config & Health Status UI Elements
     const serverSettingsBtn = document.getElementById("server-settings-btn");
     const serverConfigBanner = document.getElementById("server-config-banner");
     const serverUrlInput = document.getElementById("server-url-input");
     const btnSaveServerUrl = document.getElementById("btn-save-server-url");
     const btnCloseServerBanner = document.getElementById("btn-close-server-banner");
     const serverConfigStatusText = document.getElementById("server-config-status-text");
+
+    const backendStatusPill = document.getElementById("backend-status-pill");
+    const backendStatusText = document.getElementById("backend-status-text");
+    const tunnelUrlTag = document.getElementById("tunnel-url-tag");
+    const serverOfflineNotice = document.getElementById("server-offline-notice");
+    const offlineNoticeText = document.getElementById("offline-notice-text");
+    const serverDiagUrl = document.getElementById("server-diag-url");
+    const serverDiagHealth = document.getElementById("server-diag-health");
+    const btnRecheckHealth = document.getElementById("btn-recheck-health");
+    const bannerBackendDot = document.getElementById("banner-backend-dot");
+
+    let isBackendOnline = false;
+    let healthCheckInterval = null;
+
+    function formatShortUrl(fullUrl) {
+        if (!fullUrl) return "未設定";
+        try {
+            const parsed = new URL(fullUrl);
+            const host = parsed.hostname;
+            if (host.length > 22) {
+                return host.substring(0, 19) + "...";
+            }
+            return host;
+        } catch (e) {
+            return fullUrl.length > 20 ? fullUrl.substring(0, 18) + "..." : fullUrl;
+        }
+    }
+
+    function updateBackendStatusUI(status, fullUrl, message = "") {
+        const shortUrl = formatShortUrl(fullUrl);
+
+        if (backendStatusPill) {
+            backendStatusPill.className = `backend-status-pill ${status}`;
+        }
+
+        if (tunnelUrlTag) {
+            tunnelUrlTag.textContent = shortUrl;
+            tunnelUrlTag.title = fullUrl ? `認識中トンネルURL: ${fullUrl}` : "トンネル未設定";
+        }
+
+        if (serverDiagUrl) {
+            serverDiagUrl.textContent = fullUrl || "未設定 (ローカル使用)";
+        }
+
+        if (status === "online") {
+            isBackendOnline = true;
+            if (backendStatusText) backendStatusText.textContent = "施設サーバー稼働中";
+            if (serverDiagHealth) {
+                serverDiagHealth.textContent = `🟢 正常稼働 (${message || "OK"})`;
+                serverDiagHealth.style.color = "#059669";
+            }
+            if (bannerBackendDot) {
+                bannerBackendDot.className = "status-dot online";
+            }
+            if (serverConfigStatusText) {
+                serverConfigStatusText.textContent = `接続中: ${fullUrl || "ローカル"}`;
+            }
+            if (serverOfflineNotice) {
+                serverOfflineNotice.classList.add("hidden");
+            }
+        } else if (status === "checking") {
+            isBackendOnline = false;
+            if (backendStatusText) backendStatusText.textContent = "サーバー確認中...";
+            if (serverDiagHealth) {
+                serverDiagHealth.textContent = "🟡 疎通確認中...";
+                serverDiagHealth.style.color = "#d97706";
+            }
+            if (bannerBackendDot) {
+                bannerBackendDot.className = "status-dot checking";
+            }
+        } else {
+            // offline
+            isBackendOnline = false;
+            if (backendStatusText) backendStatusText.textContent = "施設サーバー停止中";
+            if (serverDiagHealth) {
+                serverDiagHealth.textContent = `🔴 停止中 (${message || "応答なし"})`;
+                serverDiagHealth.style.color = "#dc2626";
+            }
+            if (bannerBackendDot) {
+                bannerBackendDot.className = "status-dot offline";
+            }
+            if (serverConfigStatusText) {
+                serverConfigStatusText.textContent = "⚠️ 施設サーバーまたはトンネルと通信できません";
+            }
+            if (serverOfflineNotice) {
+                serverOfflineNotice.classList.remove("hidden");
+                if (offlineNoticeText) {
+                    offlineNoticeText.textContent = fullUrl 
+                        ? `現在、施設サーバー (${shortUrl}) が停止しています。スタッフ側のPC起動をお待ちください。`
+                        : "現在、施設サーバーの接続先が未設定または停止しています。";
+                }
+            }
+        }
+    }
+
+    async function checkBackendHealth() {
+        const currentUrl = getStoredBackendUrl();
+        updateBackendStatusUI("checking", currentUrl);
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+            const res = await fetch(getApiUrl("/api/health"), {
+                cache: "no-store",
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const data = await res.json();
+                updateBackendStatusUI("online", currentUrl, `ver ${data.version || "1.0"}`);
+                return true;
+            } else {
+                updateBackendStatusUI("offline", currentUrl, `HTTP ${res.status}`);
+                return false;
+            }
+        } catch (err) {
+            console.warn("[CareLink] Health check failed:", err);
+            updateBackendStatusUI("offline", currentUrl, "タイムアウト / 接続不可");
+            return false;
+        }
+    }
 
     function setupServerConfigUI() {
         const currentUrl = getStoredBackendUrl();
@@ -200,12 +323,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (currentUrl) {
             if (serverUrlInput) serverUrlInput.value = currentUrl;
-            if (serverConfigStatusText) serverConfigStatusText.textContent = `接続中: ${currentUrl}`;
         }
 
-        // Show banner automatically if on external host (e.g. GitHub Pages) and not yet configured
-        if (!isLocal && !currentUrl && serverConfigBanner) {
-            serverConfigBanner.classList.remove("hidden");
+        // Toggle banner on pill click or button click
+        if (backendStatusPill && serverConfigBanner) {
+            backendStatusPill.addEventListener("click", () => {
+                serverConfigBanner.classList.toggle("hidden");
+                if (!serverConfigBanner.classList.contains("hidden") && serverUrlInput) {
+                    serverUrlInput.focus();
+                }
+            });
+        }
+
+        if (btnRecheckHealth) {
+            btnRecheckHealth.addEventListener("click", async () => {
+                btnRecheckHealth.textContent = "確認中...";
+                await checkBackendHealth();
+                btnRecheckHealth.textContent = "🔄 再診断";
+            });
+        }
+
+        // Periodic health check every 25 seconds
+        if (!healthCheckInterval) {
+            healthCheckInterval = setInterval(checkBackendHealth, 25000);
         }
 
         if (serverSettingsBtn && serverConfigBanner) {
@@ -250,6 +390,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function initSession() {
         await fetchDynamicEndpoint();
         setupServerConfigUI();
+        await checkBackendHealth();
 
         const stored = sessionStorage.getItem("care_link_session");
         if (stored) {
@@ -279,12 +420,13 @@ document.addEventListener("DOMContentLoaded", () => {
             connectFamilyWS(userCode);
         } catch (err) {
             console.error("Family data fetch error:", err);
+            updateBackendStatusUI("offline", getStoredBackendUrl(), "接続エラー");
             const currentUrl = getStoredBackendUrl();
             if (!currentUrl && window.location.hostname !== "localhost") {
                 episodeSummaryText.innerHTML = "⚠️ 施設サーバーの接続先URLが設定されていません。<br>上の「接続設定」からCloudflareトンネル等のURLを設定してください。";
                 if (serverConfigBanner) serverConfigBanner.classList.remove("hidden");
             } else {
-                episodeSummaryText.textContent = "現在サーバーと接続できません。後ほど再度ご確認ください。";
+                episodeSummaryText.textContent = "現在施設サーバー（手元PC）が停止中か、接続できません。スタッフ側の起動をお待ちください。";
             }
         }
     }

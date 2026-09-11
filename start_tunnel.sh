@@ -51,6 +51,7 @@ UPDATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 cat <<EOF > "$ENDPOINT_JSON"
 {
   "backend_url": "$TUNNEL_URL",
+  "status": "online",
   "updated_at": "$UPDATED_AT"
 }
 EOF
@@ -79,11 +80,26 @@ echo "     $TUNNEL_URL/user/"
 echo "=========================================================="
 echo "トンネル稼働中... 停止するには Ctrl+C を押してください。"
 
-# 終了ハンドラ
+# 終了ハンドラ (トンネル停止時にGitHubのステータスも「停止中」に自動更新)
 cleanup() {
     echo ""
     echo "トンネルを停止しています..."
+    UPDATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    cat <<EOF > "$ENDPOINT_JSON"
+{
+  "backend_url": null,
+  "status": "stopped",
+  "updated_at": "$UPDATED_AT"
+}
+EOF
+    cp "$ENDPOINT_JSON" frontend/family/tunnel_endpoint.json 2>/dev/null || true
+    git add "$ENDPOINT_JSON" frontend/family/tunnel_endpoint.json 2>/dev/null || true
+    if ! git diff --staged --quiet; then
+        git commit -m "chore: mark tunnel endpoint as stopped [skip ci]" 2>/dev/null || true
+        git push origin main 2>/dev/null || true
+    fi
     kill "$TUNNEL_PID" 2>/dev/null || true
+    echo "✅ トンネル停止とGitHubステータス更新が完了しました。"
     exit 0
 }
 trap cleanup INT TERM

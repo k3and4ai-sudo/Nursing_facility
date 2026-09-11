@@ -33,6 +33,13 @@
         </div>
 
         <div class="nav-user-meta">
+            <!-- Backend & Tunnel Live Status Pill -->
+            <div id="backend-status-pill" class="backend-status-pill checking" title="施設サーバー接続状態（クリックで設定展開）">
+                <span class="status-dot"></span>
+                <span id="backend-status-text" class="status-label">サーバー確認中...</span>
+                <span id="tunnel-url-tag" class="tunnel-url-tag" title="認識中のトンネルURL">-</span>
+            </div>
+
             <div class="patient-pill">
                 <span class="pill-label">見守り対象:</span>
                 <strong id="patient-name-header">読み込み中...</strong>
@@ -56,15 +63,29 @@
     <div id="server-config-banner" class="server-config-banner hidden">
         <div class="server-config-content">
             <div class="server-config-info">
-                <span class="server-config-badge">🌐 外部サーバー連携</span>
-                <span id="server-config-status-text">手元PC（施設側）のトンネルURLを設定してください</span>
+                <div class="server-status-row">
+                    <span id="banner-backend-dot" class="status-dot online"></span>
+                    <span id="banner-backend-title" class="server-config-badge">🌐 施設サーバー連携</span>
+                    <span id="server-config-status-text">手元PC（施設側）のトンネルURLを設定してください</span>
+                </div>
+                <div class="server-diag-meta">
+                    <span>認識中URL: <strong id="server-diag-url">-</strong></span>
+                    <span>サーバー状態: <strong id="server-diag-health">未チェック</strong></span>
+                    <button id="btn-recheck-health" class="btn-sm-refresh" title="再チェック">🔄 再診断</button>
+                </div>
             </div>
             <div class="server-config-inputs">
                 <input type="text" id="server-url-input" placeholder="例: https://xxxx.trycloudflare.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-                <button id="btn-save-server-url" class="btn-server-save">接続する</button>
+                <button id="btn-save-server-url" class="btn-server-save">変更保存</button>
                 <button id="btn-close-server-banner" class="btn-server-close" title="閉じる">✕</button>
             </div>
         </div>
+    </div>
+
+    <!-- Offline Alert Notice Bar -->
+    <div id="server-offline-notice" class="server-offline-notice hidden">
+        <span class="notice-icon">⚠️</span>
+        <span id="offline-notice-text">現在、施設側のバックエンドサーバーまたはトンネルが停止しています。スタッフ側の起動をお待ちください。</span>
     </div>
 
     <!-- Main Container -->
