@@ -25,7 +25,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
 }
@@ -33,13 +34,26 @@ body {
 .app-container {
     width: 100vw;
     height: 100vh;
-    max-width: 600px;
-    max-height: 960px;
+    max-width: 900px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 24px;
+    padding: clamp(10px, 2vh, 22px) clamp(14px, 2.5vw, 30px);
     position: relative;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.body-columns {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    gap: clamp(8px, 1.8vh, 18px);
+    min-height: 0;
 }
 
 /* Header style */
@@ -224,10 +238,10 @@ body {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: clamp(14px, 3vw, 28px);
     width: 100%;
-    max-width: 680px;
-    margin: 6px 0;
+    max-width: 760px;
+    margin: 4px 0;
 }
 
 .waveform-box {
@@ -419,11 +433,11 @@ body {
 .footer {
     width: 100%;
     display: flex;
-    flex-direction: column !important;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 16px;
-    margin-top: 10px;
+    gap: clamp(8px, 1.5vh, 14px);
+    margin-top: 0;
 }
 
 .subtitle-box {
@@ -703,15 +717,16 @@ body {
 
 /* Real-time Status Lamps Full Pill Background Glow System */
 .status-lamps-container {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;
-    align-items: center !important;
-    gap: 12px !important;
-    margin: 0 0 12px 0 !important;
-    width: 100% !important;
-    max-width: 650px !important;
-    box-sizing: border-box !important;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(6px, 1.2vw, 12px);
+    margin: 0 0 6px 0;
+    width: 100%;
+    max-width: 760px;
+    box-sizing: border-box;
+    flex-wrap: wrap;
 }
 
 .status-lamp {
@@ -799,12 +814,13 @@ body {
 
 /* Two Separate Speech Display Cards */
 .speech-display-container {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 16px !important;
-    width: 100% !important;
-    max-width: 600px !important;
-    margin: 0 auto !important;
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
 .speech-box {
@@ -985,17 +1001,35 @@ body {
    🛡️ LLM Safety Guardrail Monitor Banner Styles
    ========================================================================== */
 .guardrail-banner {
-    width: 100% !important;
-    max-width: 580px !important;
-    box-sizing: border-box !important;
-    padding: 10px 16px !important;
-    border-radius: 14px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 4px !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    backdrop-filter: blur(8px) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    width: 100%;
+    max-width: 760px;
+    box-sizing: border-box;
+    padding: 10px 16px;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.guardrail-call-btn {
+    background: #dc2626;
+    color: #fff;
+    font-weight: bold;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+    transition: transform 0.15s ease;
+}
+
+.guardrail-call-btn:hover {
+    transform: scale(1.04);
 }
 
 .guardrail-top {
@@ -1143,4 +1177,234 @@ body {
 }
 .resume-huge-btn:active {
     transform: translateY(2px) scale(0.98);
+}
+
+/* ==========================================================================
+   📱 Responsive & Fullscreen Tablet Landscape / Portrait Optimization
+   ========================================================================== */
+
+/* 1. Landscape Tablet & Large Displays (2-Column Balanced Dashboard) */
+@media (orientation: landscape) and (min-width: 768px), (min-width: 1024px) {
+    .app-container {
+        max-width: 1540px;
+        width: 100vw;
+        height: 100vh;
+        padding: clamp(14px, 2.5vh, 26px) clamp(24px, 3.5vw, 48px);
+        overflow: hidden;
+    }
+
+    .body-columns {
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: clamp(24px, 4vw, 56px);
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+    }
+
+    .main-content {
+        flex: 1 1 46%;
+        max-width: 580px;
+        height: 100%;
+        justify-content: center;
+        border-right: 2px dashed rgba(203, 213, 225, 0.7);
+        padding-right: clamp(20px, 3vw, 44px);
+        margin-bottom: 0;
+        gap: clamp(10px, 2vh, 22px);
+    }
+
+    .footer {
+        flex: 1 1 54%;
+        max-width: 760px;
+        height: 100%;
+        justify-content: center;
+        gap: clamp(10px, 2vh, 18px);
+    }
+
+    .speech-display-container,
+    .guardrail-banner,
+    .status-lamps-container,
+    .mic-waveform-row {
+        max-width: 100%;
+    }
+
+    .avatar-container {
+        width: clamp(140px, 22vh, 210px);
+        height: clamp(140px, 22vh, 210px);
+    }
+
+    .status-message {
+        font-size: clamp(26px, 3.8vh, 38px);
+        min-height: auto;
+    }
+
+    .huge-mic-btn {
+        width: clamp(110px, 17vh, 150px);
+        height: clamp(110px, 17vh, 150px);
+    }
+
+    .mic-icon {
+        width: clamp(56px, 8.5vh, 76px);
+        height: clamp(56px, 8.5vh, 76px);
+    }
+
+    .speech-box {
+        min-height: clamp(110px, 16vh, 140px);
+        padding: clamp(14px, 2vh, 20px) clamp(16px, 2.2vw, 24px) !important;
+    }
+
+    .box-content {
+        font-size: clamp(18px, 2.4vh, 23px);
+    }
+
+    .guardrail-banner {
+        padding: clamp(10px, 1.6vh, 14px) 18px;
+    }
+}
+
+/* 2. Large Tablet Portrait (>= 768px and portrait) */
+@media (min-width: 768px) and (orientation: portrait) {
+    .app-container {
+        max-width: 860px;
+        padding: 24px 32px;
+    }
+    .avatar-container {
+        width: 180px;
+        height: 180px;
+    }
+    .status-message {
+        font-size: 36px;
+    }
+    .huge-mic-btn {
+        width: 140px;
+        height: 140px;
+    }
+    .mic-icon {
+        width: 72px;
+        height: 72px;
+    }
+    .box-content {
+        font-size: 21px;
+    }
+    .speech-box {
+        min-height: 110px;
+    }
+}
+
+/* 3. Small Mobile Screens (Portrait <= 600px) */
+@media (max-width: 600px) {
+    html, body {
+        height: auto !important;
+        min-height: 100vh !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    .app-container {
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow-y: visible !important;
+        padding: 8px 12px 28px !important;
+        max-width: 100vw !important;
+        display: block !important;
+    }
+    .body-columns {
+        height: auto !important;
+        flex: none !important;
+        gap: 6px !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .main-content {
+        flex: none;
+        margin-bottom: 0;
+        gap: 4px;
+    }
+    .footer {
+        flex: none;
+        margin-top: 0;
+        gap: 4px;
+    }
+    .header {
+        gap: 4px;
+        padding: 2px 0;
+    }
+    .badge {
+        font-size: 12px;
+        padding: 3px 8px;
+    }
+    .avatar-container {
+        width: 76px;
+        height: 76px;
+    }
+    .status-message {
+        font-size: 18px;
+        min-height: 24px;
+    }
+    .mic-waveform-row {
+        flex-direction: row;
+        gap: 8px;
+        margin: 0;
+    }
+    .huge-mic-btn {
+        width: 68px;
+        height: 68px;
+        flex-shrink: 0;
+    }
+    .mic-icon {
+        width: 34px;
+        height: 34px;
+    }
+    .waveform-box {
+        padding: 4px 8px;
+    }
+    .waveform-header {
+        font-size: 0.74rem;
+        gap: 4px;
+    }
+    #waveform-canvas {
+        height: 36px;
+    }
+    .guide-subtext {
+        font-size: 12px;
+    }
+    .speech-display-container {
+        flex-direction: row;
+        gap: 6px;
+    }
+    .speech-box {
+        min-height: 48px;
+        padding: 4px 8px !important;
+    }
+    .box-title {
+        font-size: 11px;
+    }
+    .box-content {
+        font-size: 12px;
+        line-height: 1.25;
+    }
+    .status-lamps-container {
+        gap: 3px;
+        margin: 0;
+    }
+    .status-lamp {
+        padding: 2px 6px;
+        font-size: 9.5px;
+    }
+    .guardrail-banner {
+        padding: 4px 8px;
+    }
+    .guardrail-title {
+        font-size: 11px;
+    }
+    .guardrail-badge {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+    .guardrail-detail {
+        font-size: 9.5px;
+        padding-left: 14px;
+    }
 }

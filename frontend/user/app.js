@@ -997,6 +997,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const canvas = document.getElementById("waveform-canvas");
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
+
+        function syncCanvasSize() {
+            if (canvas.clientWidth && canvas.clientHeight) {
+                if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+                    canvas.width = canvas.clientWidth;
+                    canvas.height = canvas.clientHeight;
+                }
+            }
+        }
+        syncCanvasSize();
         
         if (waveformAnimId) {
             cancelAnimationFrame(waveformAnimId);
@@ -1004,6 +1014,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         function draw() {
+            syncCanvasSize();
             if (!isRecording) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.strokeStyle = "#cbd5e1";
