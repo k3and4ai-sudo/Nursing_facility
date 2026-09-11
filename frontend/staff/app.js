@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedUserId = null;
     let selectedTerminalId = null;
     let selectedUserName = null;
+    let selectedUserObj = null;
     let activeAlerts = [];
     
     // Web Audio Intercom variables
@@ -48,6 +49,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const pDementiaInput = document.getElementById("p-dementia");
     const pAttentionInput = document.getElementById("p-attention");
     const pNotesInput = document.getElementById("p-notes");
+    const pAutoAnswerInput = document.getElementById("p-auto-answer");
+    const pAutoDelayInput = document.getElementById("p-auto-delay");
+    const pAllowForceStaffInput = document.getElementById("p-allow-force-staff");
+    const pAllowForceFamilyInput = document.getElementById("p-allow-force-family");
     const savePatientBtn = document.getElementById("save-patient-btn");
     const cancelEditBtn = document.getElementById("cancel-edit-btn");
     const patientList = document.getElementById("patient-list");
@@ -63,13 +68,114 @@ document.addEventListener("DOMContentLoaded", () => {
     const callControlCard = document.getElementById("call-control-card");
     const callTargetName = document.getElementById("call-target-name");
     const callTargetRoom = document.getElementById("call-target-room");
+    const callTargetStatusWrapper = document.getElementById("call-target-status-wrapper");
     const callTimer = document.getElementById("call-timer");
+    const callButtonsBox = document.getElementById("call-buttons-box");
     const staffCallBtn = document.getElementById("staff-call-btn");
+    const staffForceCallBtn = document.getElementById("staff-force-call-btn");
+    const callOfflineNotice = document.getElementById("call-offline-notice");
     const staffHangupBtn = document.getElementById("staff-hangup-btn");
     const activeMonitorBadge = document.getElementById("active-monitor-badge");
     const liveChatWindow = document.getElementById("live-chat-window");
     const overrideInputText = document.getElementById("override-input-text");
     const overrideSendBtn = document.getElementById("override-send-btn");
+
+    // Real-time Terminal Status Cache & UI Helpers
+    let terminalStatuses = {};
+
+    function updateTerminalBadgeDOM(terminalId, status) {
+        document.querySelectorAll(`.terminal-status-badge[data-terminal="${terminalId}"]`).forEach(badge => {
+            badge.className = `terminal-status-badge ${status}`;
+            const labels = {
+                offline: "⚪ オフライン",
+                idle: "🟢 待機中",
+                chatting: "💬 会話中",
+                intercom: "📞 通話中"
+            };
+            badge.textContent = labels[status] || "⚪ 不明";
+        });
+    }
+
+    function getTerminalStatusBadgeHtml(terminalId) {
+        const status = terminalStatuses[terminalId] || "offline";
+        const labels = {
+            offline: "⚪ オフライン",
+            idle: "🟢 待機中",
+            chatting: "💬 会話中",
+            intercom: "📞 通話中"
+        };
+        const label = labels[status] || "⚪ 不明";
+        return `<span class="terminal-status-badge ${status}" data-terminal="${terminalId}">${label}</span>`;
+    }
+
+    function updateCallButtonsState() {
+        if (!selectedTerminalId) {
+            if (callButtonsBox) callButtonsBox.classList.remove("offline-disabled");
+            if (callOfflineNotice) callOfflineNotice.classList.add("hidden");
+            if (callTargetStatusWrapper) callTargetStatusWrapper.innerHTML = "";
+            return;
+        }
+
+        const status = terminalStatuses[selectedTerminalId] || "offline";
+        const isOffline = (status === "offline");
+
+        if (callTargetStatusWrapper) {
+            callTargetStatusWrapper.innerHTML = getTerminalStatusBadgeHtml(selectedTerminalId);
+        }
+
+        if (isIntercomCallActive) {
+            if (callButtonsBox) callButtonsBox.classList.add("hidden");
+            if (callOfflineNotice) callOfflineNotice.classList.add("hidden");
+            staffHangupBtn.classList.remove("hidden");
+            return;
+        }
+
+        if (callButtonsBox) callButtonsBox.classList.remove("hidden");
+        staffHangupBtn.classList.add("hidden");
+
+        if (isOffline) {
+            // 利用者端末がオフラインの場合「通常呼出」と「強制呼出」のボックスをグレーアウト
+            staffCallBtn.disabled = true;
+            staffForceCallBtn.disabled = true;
+            staffCallBtn.title = "端末がオフラインのため発信できません";
+            staffForceCallBtn.title = "端末がオフラインのため発信できません";
+            if (callButtonsBox) callButtonsBox.classList.add("offline-disabled");
+            if (callOfflineNotice) callOfflineNotice.classList.remove("hidden");
+        } else {
+            // オンライン（待機中・会話中・通話中）の場合
+            if (callButtonsBox) callButtonsBox.classList.remove("offline-disabled");
+            if (callOfflineNotice) callOfflineNotice.classList.add("hidden");
+
+            staffCallBtn.disabled = false;
+            staffCallBtn.title = "通常呼出を行います";
+
+            if (selectedUserObj && selectedUserObj.allow_force_answer_staff !== 0) {
+                staffForceCallBtn.disabled = false;
+                staffForceCallBtn.title = "緊急用: 利用者側の設定に関わらず即座にハンズフリー通話を開始します";
+            } else {
+                staffForceCallBtn.disabled = true;
+                staffForceCallBtn.title = "この利用者は緊急強制受話が無効に設定されています";
+            }
+        }
+    }
+
+    async function fetchTerminalStatuses() {
+        try {
+            const res = await fetch("/api/terminals/status");
+            if (res.ok) {
+                const data = await res.json();
+                terminalStatuses = { ...terminalStatuses, ...data };
+                Object.entries(terminalStatuses).forEach(([tId, st]) => {
+                    updateTerminalBadgeDOM(tId, st);
+                });
+                if (selectedTerminalId) {
+                    updateCallButtonsState();
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to fetch terminal statuses:", e);
+        }
+    }
 
     // UI Elements - Handover & Staff Chat
     const handoverForm = document.getElementById("handover-form");
@@ -147,9 +253,22 @@ document.addEventListener("DOMContentLoaded", () => {
                     appendStaffChatMessage(data.sender_name, data.message, data.timestamp);
                     break;
 
+                case "all_terminal_statuses":
+                    terminalStatuses = { ...terminalStatuses, ...data.statuses };
+                    Object.entries(terminalStatuses).forEach(([tId, st]) => {
+                        updateTerminalBadgeDOM(tId, st);
+                    });
+                    if (selectedTerminalId) {
+                        updateCallButtonsState();
+                    }
+                    break;
+
                 case "user_status":
-                    // Update user lists dynamically if needed
-                    loadIntercomRooms();
+                    terminalStatuses[data.terminal_id] = data.status;
+                    updateTerminalBadgeDOM(data.terminal_id, data.status);
+                    if (selectedTerminalId && selectedTerminalId === data.terminal_id) {
+                        updateCallButtonsState();
+                    }
                     break;
             }
         };
@@ -195,7 +314,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // 3. Load All Data (Invoked on WebSocket Connect)
-    function loadAllData() {
+    async function loadAllData() {
+        await fetchTerminalStatuses();
         loadRecentVitals();
         loadPatients();
         populateVitalsSelector();
@@ -467,11 +587,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 const demLevels = { none: "なし", mild: "軽度", moderate: "中等度", severe: "重度" };
                 const demLabel = demLevels[p.dementia_level] || p.dementia_level;
+                const autoAnsBadge = (p.intercom_auto_answer !== 0)
+                    ? `<span class="badge" style="background:rgba(16, 185, 129, 0.15); color:#10b981; border:1px solid rgba(16, 185, 129, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 自動応答 (${p.intercom_auto_delay ?? 2}秒)</span>`
+                    : `<span class="badge" style="background:rgba(148, 163, 184, 0.15); color:#94a3b8; border:1px solid rgba(148, 163, 184, 0.3); font-size:11px; padding:2px 7px; border-radius:12px; margin-left:6px;">📞 手動応答</span>`;
 
                 div.innerHTML = `
                     <div class="details">
-                        <h4>${p.room_number ? p.room_number + '号室 ' : ''}${p.name} (${p.age || '-'}歳)</h4>
-                        <p>端末ID: <strong>${p.terminal_id}</strong> | 認知症: ${demLabel}</p>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <h4 style="margin: 0;">${p.room_number ? p.room_number + '号室 ' : ''}${p.name} (${p.age || '-'}歳)</h4>
+                            ${getTerminalStatusBadgeHtml(p.terminal_id)}
+                        </div>
+                        <p>端末ID: <strong>${p.terminal_id}</strong> | 認知症: ${demLabel} ${autoAnsBadge}</p>
                         ${p.notes ? `<p style="font-size:11px; color:var(--text-muted);">メモ: ${p.notes}</p>` : ''}
                     </div>
                     <div class="actions">
@@ -509,7 +635,11 @@ document.addEventListener("DOMContentLoaded", () => {
             terminal_id: pTerminalInput.value,
             dementia_level: pDementiaInput.value,
             notes: pNotesInput.value,
-            attention_points: pAttentionInput.value
+            attention_points: pAttentionInput.value,
+            intercom_auto_answer: pAutoAnswerInput.checked ? 1 : 0,
+            intercom_auto_delay: parseInt(pAutoDelayInput.value) || 2,
+            allow_force_answer_staff: pAllowForceStaffInput.checked ? 1 : 0,
+            allow_force_answer_family: pAllowForceFamilyInput.checked ? 1 : 0
         };
 
         const id = pIdInput.value;
@@ -525,6 +655,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (res.ok) {
                 patientForm.reset();
                 pIdInput.value = "";
+                pAutoAnswerInput.checked = true;
+                pAutoDelayInput.value = 2;
+                pAllowForceStaffInput.checked = true;
+                pAllowForceFamilyInput.checked = false;
                 formTitle.textContent = "➕ 利用者 新規登録";
                 savePatientBtn.textContent = "登録する";
                 cancelEditBtn.classList.add("hidden");
@@ -553,6 +687,10 @@ document.addEventListener("DOMContentLoaded", () => {
             pDementiaInput.value = p.dementia_level;
             pAttentionInput.value = p.attention_points || "";
             pNotesInput.value = p.notes || "";
+            pAutoAnswerInput.checked = p.intercom_auto_answer !== 0;
+            pAutoDelayInput.value = p.intercom_auto_delay ?? 2;
+            pAllowForceStaffInput.checked = p.allow_force_answer_staff !== 0;
+            pAllowForceFamilyInput.checked = p.allow_force_answer_family === 1;
 
             formTitle.textContent = "✏️ 利用者情報の編集";
             savePatientBtn.textContent = "更新する";
@@ -565,6 +703,10 @@ document.addEventListener("DOMContentLoaded", () => {
     cancelEditBtn.addEventListener("click", () => {
         patientForm.reset();
         pIdInput.value = "";
+        pAutoAnswerInput.checked = true;
+        pAutoDelayInput.value = 2;
+        pAllowForceStaffInput.checked = true;
+        pAllowForceFamilyInput.checked = false;
         formTitle.textContent = "➕ 利用者 新規登録";
         savePatientBtn.textContent = "登録する";
         cancelEditBtn.classList.add("hidden");
@@ -725,9 +867,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 
                 div.innerHTML = `
-                    <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
                         <span class="room-badge">${p.room_number || '-'}号室</span>
-                        <strong style="margin-left:8px;">${p.name}様</strong>
+                        <strong>${p.name}様</strong>
+                    </div>
+                    <div>
+                        ${getTerminalStatusBadgeHtml(p.terminal_id)}
                     </div>
                 `;
                 
@@ -748,12 +893,15 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedUserId = p.id;
         selectedTerminalId = p.terminal_id;
         selectedUserName = p.name;
+        selectedUserObj = p;
 
         // Update Call Card info
         callTargetName.textContent = `${p.name}様`;
         callTargetRoom.textContent = `${p.room_number || '-'}号室`;
         callControlCard.classList.remove("disabled");
-        staffCallBtn.disabled = false;
+
+        // Update call buttons state (disabled/grayed-out if offline)
+        updateCallButtonsState();
 
         // Update Monitor badge
         activeMonitorBadge.textContent = `監視中: ${p.room_number || '-'}号室 ${p.name}様`;
@@ -841,26 +989,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Intercom Voice Chat (Pattern A)
-    staffCallBtn.addEventListener("click", startIntercomSession);
+    staffCallBtn.addEventListener("click", () => startIntercomSession(false));
+    if (staffForceCallBtn) {
+        staffForceCallBtn.addEventListener("click", () => startIntercomSession(true));
+    }
     staffHangupBtn.addEventListener("click", () => endIntercomSession(true));
 
-    async function startIntercomSession() {
+    async function startIntercomSession(isForce = false) {
         if (!selectedTerminalId || isIntercomCallActive) return;
+
+        const currentStatus = terminalStatuses[selectedTerminalId] || "offline";
+        if (currentStatus === "offline") {
+            alert("対象の居室端末はオフライン（未接続）のため発信できません。");
+            return;
+        }
         
-        console.log("Requesting intercom call with:", selectedTerminalId);
+        console.log("Requesting intercom call with:", selectedTerminalId, "force:", isForce);
         isIntercomCallActive = true;
         
         // Send request via WebSocket
         ws.send(JSON.stringify({
             type: "call_request",
-            target: selectedTerminalId
+            target: selectedTerminalId,
+            force: isForce
         }));
 
         // Adjust UI
         staffCallBtn.classList.add("hidden");
+        if (staffForceCallBtn) staffForceCallBtn.classList.add("hidden");
         staffHangupBtn.classList.remove("hidden");
         callControlCard.classList.add("active");
-        callTimer.textContent = "呼び出し中...";
+        callTimer.textContent = isForce ? "強制呼出中..." : "呼び出し中...";
         
         // Reset timer
         intercomSeconds = 0;
@@ -965,8 +1124,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Adjust UI
         staffCallBtn.classList.remove("hidden");
+        if (staffForceCallBtn) staffForceCallBtn.classList.remove("hidden");
         staffHangupBtn.classList.add("hidden");
         callControlCard.classList.remove("active");
+        updateCallButtonsState();
     }
 
     // 8. Handover notes & Staff Chat (Pattern C)

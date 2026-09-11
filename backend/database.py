@@ -26,9 +26,25 @@ def db_init():
                 terminal_id TEXT UNIQUE,           -- Used for 1-to-1 client binding
                 dementia_level TEXT,               -- e.g., 'none', 'mild', 'moderate', 'severe'
                 notes TEXT,                        -- Encrypted
-                attention_points TEXT              -- Encrypted (AI interaction notes)
+                attention_points TEXT,             -- Encrypted (AI interaction notes)
+                intercom_auto_answer INTEGER DEFAULT 1,     -- 1: Hands-free auto-answer, 0: Manual
+                intercom_auto_delay INTEGER DEFAULT 2,      -- Delay in seconds before auto-answer
+                allow_force_answer_staff INTEGER DEFAULT 1, -- Allow staff emergency force-answer
+                allow_force_answer_family INTEGER DEFAULT 0 -- Allow family emergency force-answer
             )
         """)
+
+        # Migration: Ensure new intercom columns exist for existing databases
+        cursor.execute("PRAGMA table_info(users)")
+        existing_cols = {col["name"] for col in cursor.fetchall()}
+        if "intercom_auto_answer" not in existing_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN intercom_auto_answer INTEGER DEFAULT 1")
+        if "intercom_auto_delay" not in existing_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN intercom_auto_delay INTEGER DEFAULT 2")
+        if "allow_force_answer_staff" not in existing_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_staff INTEGER DEFAULT 1")
+        if "allow_force_answer_family" not in existing_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_family INTEGER DEFAULT 0")
         
         # 2. Vital Records table
         cursor.execute("""
@@ -341,30 +357,53 @@ def get_user_account_by_code(user_code: str):
     return None
 
 # Original User (Patient) Functions
-def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str):
+def _format_user_row(row):
+    if not row:
+        return None
+    data = dict(row)
+    data["name"] = decrypt_data(data["name"])
+    data["notes"] = decrypt_data(data["notes"])
+    data["attention_points"] = decrypt_data(data["attention_points"])
+    # Intercom settings default fallbacks
+    data["intercom_auto_answer"] = 1 if data.get("intercom_auto_answer") is None else int(data["intercom_auto_answer"])
+    data["intercom_auto_delay"] = 2 if data.get("intercom_auto_delay") is None else int(data["intercom_auto_delay"])
+    data["allow_force_answer_staff"] = 1 if data.get("allow_force_answer_staff") is None else int(data["allow_force_answer_staff"])
+    data["allow_force_answer_family"] = 0 if data.get("allow_force_answer_family") is None else int(data["allow_force_answer_family"])
+    return data
+
+def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
+             intercom_auto_answer: int = 1, intercom_auto_delay: int = 2,
+             allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO users (name, age, room_number, terminal_id, dementia_level, notes, attention_points) 
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO users (name, age, room_number, terminal_id, dementia_level, notes, attention_points,
+                                  intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 encrypt_data(name), age, room_number, terminal_id, dementia_level, 
-                encrypt_data(notes), encrypt_data(attention_points)
+                encrypt_data(notes), encrypt_data(attention_points),
+                intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family
             )
         )
         conn.commit()
         return cursor.lastrowid
 
-def update_user(user_id: int, name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str):
+def update_user(user_id: int, name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
+                intercom_auto_answer: int = 1, intercom_auto_delay: int = 2,
+                allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """UPDATE users 
-               SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?
+               SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?,
+                   intercom_auto_answer = ?, intercom_auto_delay = ?, allow_force_answer_staff = ?, allow_force_answer_family = ?
                WHERE id = ?""",
             (
                 encrypt_data(name), age, room_number, terminal_id, dementia_level, 
-                encrypt_data(notes), encrypt_data(attention_points), user_id
+                encrypt_data(notes), encrypt_data(attention_points),
+                intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                user_id
             )
         )
         conn.commit()
@@ -374,26 +413,14 @@ def get_user(user_id: int):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
-        if row:
-            data = dict(row)
-            data["name"] = decrypt_data(data["name"])
-            data["notes"] = decrypt_data(data["notes"])
-            data["attention_points"] = decrypt_data(data["attention_points"])
-            return data
-    return None
+        return _format_user_row(row)
 
 def get_user_by_terminal(terminal_id: str):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE terminal_id = ?", (terminal_id,))
         row = cursor.fetchone()
-        if row:
-            data = dict(row)
-            data["name"] = decrypt_data(data["name"])
-            data["notes"] = decrypt_data(data["notes"])
-            data["attention_points"] = decrypt_data(data["attention_points"])
-            return data
-    return None
+        return _format_user_row(row)
 
 def get_all_users():
     users = []
@@ -401,11 +428,7 @@ def get_all_users():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users")
         for row in cursor.fetchall():
-            data = dict(row)
-            data["name"] = decrypt_data(data["name"])
-            data["notes"] = decrypt_data(data["notes"])
-            data["attention_points"] = decrypt_data(data["attention_points"])
-            users.append(data)
+            users.append(_format_user_row(row))
     return users
 
 def delete_user(user_id: int):
@@ -746,5 +769,38 @@ def get_latest_image_prompt_payload(terminal_id: str = None, user_id: int = None
         except Exception:
             res["payload"] = {}
         return res
+
+def get_multimedia_history(user_id: int = None, terminal_id: str = None, limit: int = 15) -> list:
+    """
+    Retrieves historical digital postcard and conversation summary payloads in descending order.
+    """
+    results = []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if user_id:
+            cursor.execute(
+                "SELECT * FROM generated_image_prompts WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+                (user_id, limit)
+            )
+        elif terminal_id:
+            cursor.execute(
+                "SELECT * FROM generated_image_prompts WHERE terminal_id = ? ORDER BY id DESC LIMIT ?",
+                (terminal_id, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM generated_image_prompts ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )
+        rows = cursor.fetchall()
+        for r in rows:
+            item = dict(r)
+            try:
+                item["payload"] = json.loads(item["payload_json"])
+            except Exception:
+                item["payload"] = {}
+            results.append(item)
+    return results
+
 
 

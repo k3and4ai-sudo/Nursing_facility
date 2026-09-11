@@ -191,8 +191,69 @@ document.addEventListener("DOMContentLoaded", () => {
     const retryBtn = document.getElementById("retry-btn");
     
     const intercomOverlay = document.getElementById("intercom-overlay");
+    const callCard = document.getElementById("call-card");
+    const forceCallBanner = document.getElementById("force-call-banner");
     const callStatus = document.getElementById("call-status");
+    const callSubstatus = document.getElementById("call-substatus");
+    const answerBtn = document.getElementById("answer-btn");
     const hangupBtn = document.getElementById("hangup-btn");
+
+    // Web Audio API Ringtone / Chime Synthesizer
+    let chimeAudioCtx = null;
+
+    function getChimeAudioContext() {
+        if (!chimeAudioCtx) {
+            chimeAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (chimeAudioCtx.state === "suspended") {
+            chimeAudioCtx.resume();
+        }
+        return chimeAudioCtx;
+    }
+
+    function playTone(ctx, freq, startTime, duration, type = "sine", maxGain = 0.3) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, startTime);
+
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.exponentialRampToValueAtTime(maxGain, startTime + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+    }
+
+    function playIncomingChime(isForce = false, callerType = "staff") {
+        try {
+            const ctx = getChimeAudioContext();
+            const now = ctx.currentTime;
+
+            if (isForce) {
+                // Emergency Dual-Alert Beeps + High alert chime
+                playTone(ctx, 880, now, 0.15, "square", 0.3);
+                playTone(ctx, 880, now + 0.22, 0.15, "square", 0.3);
+                playTone(ctx, 659.25, now + 0.45, 0.35, "sine", 0.4);
+                playTone(ctx, 523.25, now + 0.75, 0.6, "sine", 0.4);
+            } else if (callerType === "family") {
+                // Warm family 3-tone chime "Pin-Pon-Pan" (C5 523Hz -> E5 659Hz -> G5 784Hz)
+                playTone(ctx, 523.25, now, 0.25, "sine", 0.35);
+                playTone(ctx, 659.25, now + 0.22, 0.25, "sine", 0.35);
+                playTone(ctx, 783.99, now + 0.45, 0.6, "sine", 0.4);
+            } else {
+                // Gentle standard door chime "Ding-Dong" (G5 784Hz -> E5 659Hz)
+                playTone(ctx, 783.99, now, 0.45, "sine", 0.35);
+                playTone(ctx, 659.25, now + 0.4, 0.75, "sine", 0.35);
+            }
+        } catch (e) {
+            console.warn("Could not play incoming chime:", e);
+        }
+    }
 
     // Audio Elements
     let activeAudio = null;
@@ -203,12 +264,27 @@ document.addEventListener("DOMContentLoaded", () => {
     let intercomStream = null;
     let intercomRecorder = null;
     let isCallActive = false;
+    let autoAnswerTimer = null;
+    let autoAnswerCountdownTimer = null;
     let audioQueue = [];
     let isPlayingQueue = false;
 
     // WebSocket Reference
     let ws = null;
     let userDetails = null;
+    let currentReportedStatus = "idle";
+
+    function reportTerminalStatus(status) {
+        if (currentReportedStatus === status && status !== "idle") return;
+        currentReportedStatus = status;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+                ws.send(JSON.stringify({ type: "status_update", status: status }));
+            } catch (e) {
+                console.warn("Failed to report terminal status:", e);
+            }
+        }
+    }
 
     // Initialize display ID
     displayTerminalId.textContent = terminalId;
@@ -263,6 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ws.onopen = async () => {
             console.log("WebSocket connected");
             connectionStatus.className = "status-dot online";
+            reportTerminalStatus("idle");
             const registered = await checkRegistration();
             if (!registered) {
                 statusText.textContent = "端末の登録をお待ちしています...";
@@ -316,7 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     break;
 
                 case "incoming_call": // Intercom Call requested (Pattern A)
-                    handleIncomingCall();
+                    handleIncomingCall(data);
                     break;
 
                 case "intercom_audio": // Intercom incoming audio chunks
@@ -1248,20 +1325,106 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Intercom (Pattern A) - Calling functions
-    function handleIncomingCall() {
+    function clearAutoAnswerTimers() {
+        if (autoAnswerTimer) {
+            clearTimeout(autoAnswerTimer);
+            autoAnswerTimer = null;
+        }
+        if (autoAnswerCountdownTimer) {
+            clearInterval(autoAnswerCountdownTimer);
+            autoAnswerCountdownTimer = null;
+        }
+    }
+
+    function handleIncomingCall(callData = {}) {
+        clearAutoAnswerTimers();
         intercomOverlay.classList.remove("hidden");
-        callStatus.textContent = "スタッフから呼び出し中...";
         
-        // Auto-answer after 2 seconds for hands-free elderly usage
-        setTimeout(() => {
-            if (intercomOverlay.classList.contains("hidden")) return; // Call canceled
-            startIntercomSession();
-        }, 2000);
+        const callerName = callData.caller || "スタッフステーション";
+        const callerType = callData.caller_type || "staff";
+        const autoAnswer = callData.auto_answer !== false; // default true if not specified
+        let remainingSeconds = (typeof callData.auto_delay === "number") ? callData.auto_delay : 2;
+        const isForce = !!callData.force_mode;
+
+        // Play incoming audio chime (Standard Ding-Dong, Emergency alert beep, or Family Pin-Pon-Pan)
+        playIncomingChime(isForce, callerType);
+        reportTerminalStatus("intercom");
+
+        if (callerType === "family") {
+            if (callCard) callCard.classList.add("family-call");
+        } else {
+            if (callCard) callCard.classList.remove("family-call");
+        }
+
+        if (isForce) {
+            // Emergency force answer mode (Red border pulse, warning banner)
+            if (callCard) callCard.classList.add("emergency-force");
+            if (forceCallBanner) forceCallBanner.classList.remove("hidden");
+
+            callStatus.textContent = `${callerName}から緊急呼出`;
+            callSubstatus.textContent = "自動でハンズフリー通話を開始します...";
+            answerBtn.classList.add("hidden");
+            hangupBtn.classList.remove("hidden");
+
+            // Short chime preview delay (800ms) before opening microphone stream
+            autoAnswerTimer = setTimeout(() => {
+                if (intercomOverlay.classList.contains("hidden")) return; // Call canceled
+                startIntercomSession();
+            }, 800);
+            return;
+        }
+
+        // Standard Call Mode
+        if (callCard) callCard.classList.remove("emergency-force");
+        if (forceCallBanner) forceCallBanner.classList.add("hidden");
+        callStatus.textContent = `${callerName}から呼び出し中...`;
+
+        if (autoAnswer) {
+            // Hands-free Auto Answer Mode
+            answerBtn.classList.remove("hidden");
+            answerBtn.textContent = "すぐに出る";
+            hangupBtn.classList.remove("hidden");
+
+            if (remainingSeconds <= 0) {
+                callSubstatus.textContent = "自動で通話を開始します...";
+                startIntercomSession();
+            } else {
+                callSubstatus.textContent = `（約${remainingSeconds}秒後に自動でつながります）`;
+                autoAnswerCountdownTimer = setInterval(() => {
+                    remainingSeconds--;
+                    if (remainingSeconds > 0) {
+                        callSubstatus.textContent = `（約${remainingSeconds}秒後に自動でつながります）`;
+                    } else {
+                        callSubstatus.textContent = "自動で通話を開始します...";
+                        if (autoAnswerCountdownTimer) {
+                            clearInterval(autoAnswerCountdownTimer);
+                            autoAnswerCountdownTimer = null;
+                        }
+                    }
+                }, 1000);
+
+                autoAnswerTimer = setTimeout(() => {
+                    clearAutoAnswerTimers();
+                    if (intercomOverlay.classList.contains("hidden")) return; // Call canceled
+                    startIntercomSession();
+                }, remainingSeconds * 1000);
+            }
+        } else {
+            // Manual Answer Mode (Resident must tap '出る')
+            callSubstatus.textContent = "「出る」を押してお話しください";
+            answerBtn.classList.remove("hidden");
+            answerBtn.textContent = "出る";
+            hangupBtn.classList.remove("hidden");
+        }
     }
 
     async function startIntercomSession() {
+        clearAutoAnswerTimers();
         isCallActive = true;
+        reportTerminalStatus("intercom");
         callStatus.textContent = "通話中...";
+        callSubstatus.textContent = "";
+        answerBtn.classList.add("hidden"); // Hide answer button once connected
         audioQueue = [];
         isPlayingQueue = false;
 
@@ -1297,12 +1460,13 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (err) {
             console.error("Failed to start intercom mic stream:", err);
             callStatus.textContent = "マイク接続に失敗しました";
+            callSubstatus.textContent = "";
             setTimeout(() => endIntercomCall(true), 2000);
         }
     }
 
     function playIntercomChunk(base64Chunk) {
-        // Enqueue incoming staff voice chunks and play them sequentially
+        // Enqueue incoming staff/family voice chunks and play them sequentially
         audioQueue.push("data:audio/webm;base64," + base64Chunk);
         if (!isPlayingQueue) {
             playNextQueueItem();
@@ -1327,7 +1491,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function endIntercomCall(notifyServer = true) {
-        if (!isCallActive) return;
+        clearAutoAnswerTimers();
+        const wasRingingOrActive = isCallActive || !intercomOverlay.classList.contains("hidden");
+        if (!wasRingingOrActive) return;
         isCallActive = false;
         
         console.log("Ending intercom call...");
@@ -1341,15 +1507,30 @@ document.addEventListener("DOMContentLoaded", () => {
             intercomStream = null;
         }
 
+        if (callCard) {
+            callCard.classList.remove("emergency-force");
+            callCard.classList.remove("family-call");
+        }
+        if (forceCallBanner) forceCallBanner.classList.add("hidden");
+
         intercomOverlay.classList.add("hidden");
+        answerBtn.classList.add("hidden");
+        callSubstatus.textContent = "";
         
         if (notifyServer && ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "hangup" }));
         }
 
+        reportTerminalStatus("idle");
+
         statusText.textContent = "お話しする準備ができました";
         setAvatarState("idle");
     }
+
+    answerBtn.addEventListener("click", () => {
+        clearAutoAnswerTimers();
+        startIntercomSession();
+    });
 
     hangupBtn.addEventListener("click", () => {
         endIntercomCall(true);
@@ -1358,6 +1539,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Helper functions
     function setAvatarState(state) {
         aiAvatar.className = `avatar-circle ${state}`;
+        if (!isCallActive && intercomOverlay && intercomOverlay.classList.contains("hidden")) {
+            if (state === "speaking" || state === "thinking" || state === "listening") {
+                reportTerminalStatus("chatting");
+            } else if (state === "idle") {
+                reportTerminalStatus("idle");
+            }
+        }
     }
 
     retryBtn.addEventListener("click", () => {

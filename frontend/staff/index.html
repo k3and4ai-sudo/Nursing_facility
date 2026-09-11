@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>スタッフステーション - Nursing Care Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260911_3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -179,6 +179,38 @@
                                     <label for="p-notes">ケア用特記事項 (持病、制限等)</label>
                                     <textarea id="p-notes" rows="3" placeholder="例: 高血圧のため塩分制限あり。右足に軽い関節痛。"></textarea>
                                 </div>
+                                <div class="intercom-settings-box">
+                                    <div class="intercom-settings-title">📞 インターホン通話・自動受話設定</div>
+                                    <div class="form-row" style="align-items: center;">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="checkbox-label" for="p-auto-answer">
+                                                <input type="checkbox" id="p-auto-answer" checked>
+                                                <span>ハンズフリー自動応答を有効にする</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="width: 140px; flex: none;">
+                                            <label for="p-auto-delay">応答遅延秒数</label>
+                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                                <input type="number" id="p-auto-delay" value="2" min="0" max="15" style="width: 70px; text-align: center;">
+                                                <span style="font-size: 13px; color: var(--text-light);">秒</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="checkbox-label" for="p-allow-force-staff">
+                                                <input type="checkbox" id="p-allow-force-staff" checked>
+                                                <span style="font-size: 12px;">スタッフの強制受話を許可</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="checkbox-label" for="p-allow-force-family">
+                                                <input type="checkbox" id="p-allow-force-family">
+                                                <span style="font-size: 12px;">ご家族の強制受話を許可</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="form-actions">
                                     <button type="submit" id="save-patient-btn" class="btn btn-primary">登録する</button>
                                     <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden">キャンセル</button>
@@ -255,13 +287,23 @@
                             <div id="call-control-card" class="call-control-panel disabled">
                                 <h4 id="call-target-name">通話先が選択されていません</h4>
                                 <p id="call-target-room">-</p>
+                                <div id="call-target-status-wrapper" style="margin: 2px 0 6px 0;"></div>
                                 <div class="call-timer" id="call-timer">00:00</div>
                                 
-                                <div class="call-btns">
-                                    <button id="staff-call-btn" class="btn btn-success" disabled>
-                                        <svg viewBox="0 0 24 24" fill="currentColor" width="20"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/></svg>
-                                        <span>呼び出す</span>
-                                    </button>
+                                <div class="call-btns" style="display: flex; flex-direction: column; gap: 8px;">
+                                    <div id="call-buttons-box" class="call-buttons-box" style="display: flex; gap: 10px; justify-content: center;">
+                                        <button id="staff-call-btn" class="btn btn-success" disabled style="flex: 1;">
+                                            <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/></svg>
+                                            <span>通常呼出</span>
+                                        </button>
+                                        <button id="staff-force-call-btn" class="btn btn-warning" disabled style="flex: 1;" title="緊急用: 利用者側の設定に関わらず即座にハンズフリー通話を開始します">
+                                            <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                                            <span>強制呼出</span>
+                                        </button>
+                                    </div>
+                                    <div id="call-offline-notice" class="offline-notice hidden">
+                                        ⚠️ 端末がオフラインのため発信できません
+                                    </div>
                                     <button id="staff-hangup-btn" class="btn btn-danger hidden">
                                         <svg viewBox="0 0 24 24" fill="currentColor" width="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                                         <span>通話を切る</span>
@@ -415,6 +457,6 @@
     <!-- Alert Sound Element -->
     <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto" loop></audio>
 
-    <script src="app.js?v=20260908_9"></script>
+    <script src="app.js?v=20260911_3"></script>
 </body>
 </html>

@@ -27,3 +27,6 @@ backend/audio_temp/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Tunnel binary
+cloudflared

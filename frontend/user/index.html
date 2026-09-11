@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260908_9">
+    <link rel="stylesheet" href="style.css?v=20260911_3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -126,7 +126,10 @@
 
         <!-- Intercom Call Overlay (Pattern A) -->
         <div id="intercom-overlay" class="modal-overlay hidden">
-            <div class="modal-card call-card">
+            <div id="call-card" class="modal-card call-card">
+                <div id="force-call-banner" class="force-call-banner hidden">
+                    ⚠️ スタッフ緊急ハンズフリー通話
+                </div>
                 <div class="ringing-animation">
                     <div class="ring"></div>
                     <div class="ring"></div>
@@ -138,7 +141,9 @@
                     </div>
                 </div>
                 <h2 id="call-status">スタッフから呼び出し中...</h2>
+                <p id="call-substatus" style="font-size: 1.15rem; color: #64748b; margin-top: -6px; margin-bottom: 22px; font-weight: 600;"></p>
                 <div class="call-actions">
+                    <button id="answer-btn" class="call-btn answer hidden">出る</button>
                     <button id="hangup-btn" class="call-btn hangup">切る</button>
                 </div>
             </div>
@@ -209,6 +214,6 @@
         </div>
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260909_2"></script>
+    <script src="app.js?v=20260911_3"></script>
 </body>
 </html>

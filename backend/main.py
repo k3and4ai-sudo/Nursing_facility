@@ -7,11 +7,12 @@ import base64
 import urllib.request
 import requests
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Optional
+import urllib.parse
 import hashlib
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -51,6 +52,10 @@ class UserCreate(BaseModel):
     dementia_level: str
     notes: str = ""
     attention_points: str = ""
+    intercom_auto_answer: int = 1
+    intercom_auto_delay: int = 2
+    allow_force_answer_staff: int = 1
+    allow_force_answer_family: int = 0
 
 class UserUpdate(BaseModel):
     name: str
@@ -60,6 +65,10 @@ class UserUpdate(BaseModel):
     dementia_level: str
     notes: str = ""
     attention_points: str = ""
+    intercom_auto_answer: int = 1
+    intercom_auto_delay: int = 2
+    allow_force_answer_staff: int = 1
+    allow_force_answer_family: int = 0
 
 class HandoverCreate(BaseModel):
     author: str
@@ -91,7 +100,11 @@ def create_user(user: UserCreate):
             terminal_id=user.terminal_id,
             dementia_level=user.dementia_level,
             notes=user.notes,
-            attention_points=user.attention_points
+            attention_points=user.attention_points,
+            intercom_auto_answer=user.intercom_auto_answer,
+            intercom_auto_delay=user.intercom_auto_delay,
+            allow_force_answer_staff=user.allow_force_answer_staff,
+            allow_force_answer_family=user.allow_force_answer_family
         )
         return {"id": user_id, "status": "success"}
     except Exception as e:
@@ -108,7 +121,11 @@ def update_user_details(user_id: int, user: UserUpdate):
             terminal_id=user.terminal_id,
             dementia_level=user.dementia_level,
             notes=user.notes,
-            attention_points=user.attention_points
+            attention_points=user.attention_points,
+            intercom_auto_answer=user.intercom_auto_answer,
+            intercom_auto_delay=user.intercom_auto_delay,
+            allow_force_answer_staff=user.allow_force_answer_staff,
+            allow_force_answer_family=user.allow_force_answer_family
         )
         return {"status": "success"}
     except Exception as e:
@@ -167,23 +184,90 @@ class ConnectionManager:
     def __init__(self):
         # Map: terminal_id -> WebSocket
         self.user_connections: Dict[str, WebSocket] = {}
+        # Map: terminal_id -> status ('offline', 'idle', 'chatting', 'intercom')
+        self.terminal_statuses: Dict[str, str] = {}
         # List of staff WebSockets
         self.staff_connections: List[WebSocket] = []
+        # Map: user_code -> List[WebSocket] for family users
+        self.family_connections: Dict[str, List[WebSocket]] = {}
+        # Map: terminal_id -> Session info dict:
+        # { "caller_type": "staff" | "family", "caller_id": str, "caller_name": str, "is_force": bool, "started_at": float }
+        self.active_call_sessions: Dict[str, Dict] = {}
+
+    def get_status(self, terminal_id: str) -> str:
+        if terminal_id in self.user_connections:
+            return self.terminal_statuses.get(terminal_id, "idle")
+        return "offline"
+
+    def get_session(self, terminal_id: str) -> Optional[Dict]:
+        return self.active_call_sessions.get(terminal_id)
+
+    def start_session(self, terminal_id: str, caller_type: str, caller_id: str, caller_name: str, is_force: bool = False) -> Dict:
+        session = {
+            "caller_type": caller_type,
+            "caller_id": caller_id,
+            "caller_name": caller_name,
+            "is_force": is_force,
+            "started_at": time.time()
+        }
+        self.active_call_sessions[terminal_id] = session
+        print(f"Call session started for {terminal_id}: {session}")
+        return session
+
+    def end_session(self, terminal_id: str):
+        if terminal_id in self.active_call_sessions:
+            ended = self.active_call_sessions.pop(terminal_id)
+            print(f"Call session ended for {terminal_id}: {ended}")
+
+    async def update_status(self, terminal_id: str, status: str):
+        self.terminal_statuses[terminal_id] = status
+        print(f"Terminal status changed: {terminal_id} -> {status}")
+        # Broadcast to all staff
+        await self.broadcast_to_staff({
+            "type": "user_status",
+            "terminal_id": terminal_id,
+            "status": status
+        })
+        # Broadcast to connected family members who monitor this terminal
+        await self.broadcast_terminal_status_to_family(terminal_id, status)
 
     async def connect_user(self, terminal_id: str, websocket: WebSocket):
         await websocket.accept()
         self.user_connections[terminal_id] = websocket
+        self.terminal_statuses[terminal_id] = "idle"
         print(f"User Client connected: {terminal_id}")
+        await self.broadcast_to_staff({
+            "type": "user_status",
+            "terminal_id": terminal_id,
+            "status": "idle"
+        })
+        await self.broadcast_terminal_status_to_family(terminal_id, "idle")
 
     def disconnect_user(self, terminal_id: str):
         if terminal_id in self.user_connections:
             del self.user_connections[terminal_id]
-            print(f"User Client disconnected: {terminal_id}")
+        self.terminal_statuses[terminal_id] = "offline"
+        self.end_session(terminal_id)
+        print(f"User Client disconnected: {terminal_id}")
 
     async def connect_staff(self, websocket: WebSocket):
         await websocket.accept()
         self.staff_connections.append(websocket)
         print("Staff Client connected")
+        # Send initial full status map of all terminals
+        try:
+            all_users = db.get_all_users()
+            current_statuses = {}
+            for u in all_users:
+                t_id = u.get("terminal_id")
+                if t_id:
+                    current_statuses[t_id] = self.get_status(t_id)
+            await websocket.send_json({
+                "type": "all_terminal_statuses",
+                "statuses": current_statuses
+            })
+        except Exception as e:
+            print(f"Failed to send initial statuses to staff: {e}")
 
     def disconnect_staff(self, websocket: WebSocket):
         if websocket in self.staff_connections:
@@ -200,6 +284,55 @@ class ConnectionManager:
         for dead in dead_connections:
             self.disconnect_staff(dead)
 
+    async def connect_family(self, user_code: str, websocket: WebSocket):
+        await websocket.accept()
+        if user_code not in self.family_connections:
+            self.family_connections[user_code] = []
+        self.family_connections[user_code].append(websocket)
+        print(f"Family Client connected: {user_code}")
+
+    def disconnect_family(self, user_code: str, websocket: WebSocket):
+        if user_code in self.family_connections:
+            if websocket in self.family_connections[user_code]:
+                self.family_connections[user_code].remove(websocket)
+            if not self.family_connections[user_code]:
+                del self.family_connections[user_code]
+        print(f"Family Client disconnected: {user_code}")
+
+    async def send_to_family(self, user_code: str, message: dict):
+        connections = self.family_connections.get(user_code, [])
+        dead_connections = []
+        for ws in connections:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead_connections.append(ws)
+        for dead in dead_connections:
+            self.disconnect_family(user_code, dead)
+
+    async def broadcast_terminal_status_to_family(self, terminal_id: str, status: str):
+        # Look up which family accounts monitor this terminal_id
+        target_user = db.get_user_by_terminal(terminal_id)
+        if not target_user:
+            return
+        patient_id = target_user.get("id")
+        if not patient_id:
+            return
+        
+        # Notify connected family members that have group access to this patient
+        for user_code, conns in list(self.family_connections.items()):
+            account = db.get_user_account_by_code(user_code)
+            if account and db.check_group_access(account, patient_id):
+                for ws in conns:
+                    try:
+                        await ws.send_json({
+                            "type": "terminal_status",
+                            "terminal_id": terminal_id,
+                            "status": status
+                        })
+                    except Exception:
+                        pass
+
     async def send_to_user(self, terminal_id: str, message: dict):
         websocket = self.user_connections.get(terminal_id)
         if websocket:
@@ -209,6 +342,16 @@ class ConnectionManager:
                 self.disconnect_user(terminal_id)
 
 manager = ConnectionManager()
+
+@app.get("/api/terminals/status")
+def get_terminal_statuses():
+    all_users = db.get_all_users()
+    statuses = {}
+    for u in all_users:
+        t_id = u.get("terminal_id")
+        if t_id:
+            statuses[t_id] = manager.get_status(t_id)
+    return statuses
 
 # Helper for calling Ollama for General Conversation
 def query_ollama_chat(user: dict, chat_history: list, new_message: str, memory_context: str) -> str:
@@ -699,6 +842,12 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
             data = await websocket.receive_json()
             msg_type = data.get("type")
             
+            # Direct terminal state notification (idle, chatting, intercom)
+            if msg_type == "status_update":
+                new_status = data.get("status", "idle")
+                await manager.update_status(terminal_id, new_status)
+                continue
+
             # Stop stream and clear buffer when user turns off mic
             if msg_type == "stop_bidi_stream":
                 bidi_buffers[terminal_id] = bytearray()
@@ -1009,20 +1158,37 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                     except Exception as e:
                         print(f"Background RAG embedding skipped: {e}")
             
-            # Pattern A: Real-time Audio Stream from User to Staff (Intercom)
+            # Real-time Audio Stream from User to Caller (Staff or Family Intercom)
             elif msg_type == "audio_stream":
                 audio_chunk = data.get("audio") # Base64 string
-                await manager.broadcast_to_staff({
-                    "type": "intercom_audio",
-                    "source": terminal_id,
-                    "audio": audio_chunk
-                })
+                session = manager.get_session(terminal_id)
+                if session and session.get("caller_type") == "family":
+                    await manager.send_to_family(session.get("caller_id"), {
+                        "type": "intercom_audio",
+                        "source": terminal_id,
+                        "audio": audio_chunk
+                    })
+                else:
+                    await manager.broadcast_to_staff({
+                        "type": "intercom_audio",
+                        "source": terminal_id,
+                        "audio": audio_chunk
+                    })
                 
             elif msg_type == "hangup":
-                await manager.broadcast_to_staff({
-                    "type": "intercom_hangup",
-                    "source": terminal_id
-                })
+                session = manager.get_session(terminal_id)
+                await manager.update_status(terminal_id, "idle")
+                if session and session.get("caller_type") == "family":
+                    await manager.send_to_family(session.get("caller_id"), {
+                        "type": "intercom_hangup",
+                        "source": terminal_id
+                    })
+                else:
+                    await manager.broadcast_to_staff({
+                        "type": "intercom_hangup",
+                        "source": terminal_id
+                    })
+                manager.end_session(terminal_id)
 
     except WebSocketDisconnect:
         manager.disconnect_user(terminal_id)
@@ -1410,11 +1576,44 @@ async def websocket_staff_endpoint(websocket: WebSocket):
             # Pattern A: Initiate intercom call
             elif msg_type == "call_request":
                 target = data.get("target") # terminal_id
+                force_mode = data.get("force", False)
+                # Lookup target user's intercom settings
+                target_user = db.get_user_by_terminal(target)
+                auto_answer = target_user.get("intercom_auto_answer", 1) if target_user else 1
+                auto_delay = target_user.get("intercom_auto_delay", 2) if target_user else 2
+                allow_force = target_user.get("allow_force_answer_staff", 1) if target_user else 1
+
+                # Staff Priority Over Family Call: Check if currently talking to family
+                current_session = manager.get_session(target)
+                if current_session and current_session.get("caller_type") == "family":
+                    family_user_code = current_session.get("caller_id")
+                    print(f"[Staff Priority] Interrupting family call on {target} by user {family_user_code}")
+                    if family_user_code:
+                        await manager.send_to_family(family_user_code, {
+                            "type": "call_interrupted",
+                            "reason": "staff_priority",
+                            "message": "施設スタッフからの緊急呼出・対応のため、通話が切り替わりました。"
+                        })
+
+                # Register staff session
+                manager.start_session(
+                    target,
+                    caller_type="staff",
+                    caller_id="staff",
+                    caller_name="スタッフステーション",
+                    is_force=bool(force_mode and allow_force)
+                )
+
                 await manager.send_to_user(target, {
                     "type": "incoming_call",
-                    "caller": "スタッフステーション"
+                    "caller": "スタッフステーション",
+                    "caller_type": "staff",
+                    "auto_answer": bool(auto_answer),
+                    "auto_delay": int(auto_delay),
+                    "force_mode": bool(force_mode and allow_force)
                 })
-                print(f"Intercom call requested for: {target}")
+                await manager.update_status(target, "intercom")
+                print(f"Intercom call requested for: {target} (auto_answer={auto_answer}, auto_delay={auto_delay}s, force={bool(force_mode and allow_force)})")
                 
             # Intercom Voice stream from Staff to User Client
             elif msg_type == "audio_stream":
@@ -1427,6 +1626,9 @@ async def websocket_staff_endpoint(websocket: WebSocket):
                 
             elif msg_type == "hangup":
                 target = data.get("target")
+                if target:
+                    manager.end_session(target)
+                    await manager.update_status(target, "idle")
                 await manager.send_to_user(target, {
                     "type": "intercom_hangup"
                 })
@@ -1436,6 +1638,154 @@ async def websocket_staff_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"Error in staff websocket: {e}")
         manager.disconnect_staff(websocket)
+
+# WebSocket Endpoint for Family client (Intercom & Status Monitoring)
+@app.websocket("/ws/family/{user_code}")
+async def websocket_family_endpoint(websocket: WebSocket, user_code: str):
+    account = db.get_user_account_by_code(user_code)
+    if not account:
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "message": "ご家族アカウントが見つかりません。"})
+        await websocket.close()
+        return
+
+    group_id = account.get("group_id")
+    group = db.get_group(group_id) if group_id else None
+    if not group or not group.get("patient_id"):
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "message": "見守り対象の利用者が設定されていません。"})
+        await websocket.close()
+        return
+
+    patient_id = group["patient_id"]
+    patient = db.get_user(patient_id)
+    terminal_id = patient.get("terminal_id") if patient else None
+
+    await manager.connect_family(user_code, websocket)
+
+    # Send initial terminal status to this family client
+    if terminal_id:
+        current_st = manager.get_status(terminal_id)
+        await websocket.send_json({
+            "type": "terminal_status",
+            "terminal_id": terminal_id,
+            "status": current_st
+        })
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "call_request":
+                target = data.get("target") or terminal_id
+                force_mode = data.get("force", False)
+
+                # Validate group access
+                target_user = db.get_user_by_terminal(target)
+                if not target_user or not db.check_group_access(account, target_user["id"]):
+                    await websocket.send_json({
+                        "type": "call_error",
+                        "message": "グループ外の利用者端末への発信はできません。"
+                    })
+                    continue
+
+                # Check if terminal is offline
+                if manager.get_status(target) == "offline":
+                    await websocket.send_json({
+                        "type": "call_error",
+                        "message": "対象の居室端末は現在オフライン（未接続）です。"
+                    })
+                    continue
+
+                # Busy / Arbitration Check
+                existing_session = manager.get_session(target)
+                if existing_session:
+                    if existing_session.get("caller_type") == "staff":
+                        await websocket.send_json({
+                            "type": "call_rejected",
+                            "reason": "busy_staff",
+                            "message": "現在、施設スタッフが対応中です（通話中）。"
+                        })
+                        continue
+                    elif existing_session.get("caller_type") == "family":
+                        await websocket.send_json({
+                            "type": "call_rejected",
+                            "reason": "busy_family",
+                            "message": "現在、他のご家族とお話し中です。"
+                        })
+                        continue
+
+                # Check force call permissions
+                allow_force = target_user.get("allow_force_answer_family", 0) == 1
+                auto_answer = target_user.get("intercom_auto_answer", 1)
+                auto_delay = target_user.get("intercom_auto_delay", 2)
+
+                caller_name = account.get("name", "ご家族様")
+
+                # Register active family session
+                manager.start_session(
+                    target,
+                    caller_type="family",
+                    caller_id=user_code,
+                    caller_name=caller_name,
+                    is_force=bool(force_mode and allow_force)
+                )
+
+                # Send incoming call to User terminal
+                await manager.send_to_user(target, {
+                    "type": "incoming_call",
+                    "caller": f"ご家族（{caller_name}）",
+                    "caller_type": "family",
+                    "auto_answer": bool(auto_answer),
+                    "auto_delay": int(auto_delay),
+                    "force_mode": bool(force_mode and allow_force)
+                })
+
+                await manager.update_status(target, "intercom")
+                await websocket.send_json({
+                    "type": "call_started",
+                    "target": target
+                })
+                print(f"Family intercom call requested for: {target} by {user_code}")
+
+            elif msg_type == "audio_stream":
+                target = data.get("target") or terminal_id
+                audio_chunk = data.get("audio")
+                session = manager.get_session(target)
+                if session and session.get("caller_id") == user_code:
+                    await manager.send_to_user(target, {
+                        "type": "intercom_audio",
+                        "audio": audio_chunk
+                    })
+
+            elif msg_type == "hangup":
+                target = data.get("target") or terminal_id
+                session = manager.get_session(target)
+                if session and session.get("caller_id") == user_code:
+                    manager.end_session(target)
+                    await manager.update_status(target, "idle")
+                    await manager.send_to_user(target, {
+                        "type": "intercom_hangup"
+                    })
+                await websocket.send_json({
+                    "type": "call_ended",
+                    "target": target
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect_family(user_code, websocket)
+        if terminal_id:
+            sess = manager.get_session(terminal_id)
+            if sess and sess.get("caller_id") == user_code:
+                manager.end_session(terminal_id)
+                await manager.update_status(terminal_id, "idle")
+                await manager.send_to_user(terminal_id, {
+                    "type": "intercom_hangup"
+                })
+    except Exception as e:
+        print(f"Error in family websocket ({user_code}): {e}")
+        manager.disconnect_family(user_code, websocket)
 
 # Prompt Templates API
 @app.get("/api/prompt_templates")
@@ -1542,7 +1892,13 @@ def api_get_family_my_patient(user_code: str = "family01", season: Optional[str]
            (latest_vital.get("bp_sys") and latest_vital["bp_sys"] >= 150):
             vital_status = "caution"
     
-    multimedia_payload = multimedia.generate_multimedia_payload(user["name"], chat_history, season_key=season)
+    multimedia_payload = multimedia.generate_multimedia_payload(
+        user["name"],
+        chat_history,
+        season_key=season,
+        terminal_id=user.get("terminal_id"),
+        user_id=user.get("id")
+    )
 
     return {
         "status": "success",
@@ -1556,7 +1912,11 @@ def api_get_family_my_patient(user_code: str = "family01", season: Optional[str]
             "name": user["name"],
             "age": user["age"],
             "room_number": user["room_number"],
-            "dementia_level": user["dementia_level"]
+            "dementia_level": user["dementia_level"],
+            "terminal_id": user.get("terminal_id"),
+            "intercom_auto_answer": user.get("intercom_auto_answer", 1),
+            "intercom_auto_delay": user.get("intercom_auto_delay", 2),
+            "allow_force_answer_family": user.get("allow_force_answer_family", 0)
         },
         "vital_status": vital_status,
         "recent_mood": recent_mood,
@@ -1583,7 +1943,8 @@ def api_get_family_patient_summary(patient_id: int, user_code: str = "family01",
         user["name"],
         chat_history,
         season_key=season,
-        terminal_id=user.get("terminal_id")
+        terminal_id=user.get("terminal_id"),
+        user_id=user.get("id")
     )
     
     return {
@@ -1715,6 +2076,66 @@ def api_family_encrypted_sync(req: EncryptedSyncReq):
         "resp_nonce_b64": base64.b64encode(resp_nonce).decode("utf-8"),
         "resp_ciphertext_b64": base64.b64encode(resp_ciphertext).decode("utf-8")
     }
+
+@app.post("/api/family/download_postcard")
+async def api_download_postcard(request: Request):
+    """
+    Client-synthesized Postcard Canvas binary download with standard Content-Disposition attachment.
+    Bypasses modern browser automatic-download blocking via hidden iframe POST form submission.
+    """
+    try:
+        form_data = await request.form()
+        image_data = form_data.get("image_data", "")
+        filename = form_data.get("filename", "care_link_postcard.jpg")
+        
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+        
+        # 安全なBase64パディング補正
+        missing_padding = len(image_data) % 4
+        if missing_padding:
+            image_data += '=' * (4 - missing_padding)
+        
+        img_bytes = base64.b64decode(image_data)
+        encoded_filename = urllib.parse.quote(filename)
+        headers = {
+            "Content-Disposition": f"attachment; filename=\"postcard.jpg\"; filename*=UTF-8''{encoded_filename}",
+            "Content-Type": "image/jpeg",
+            "Cache-Control": "no-cache"
+        }
+        return Response(content=img_bytes, media_type="image/jpeg", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"ダウンロード処理に失敗しました: {str(e)}")
+
+@app.get("/api/family/download_raw_postcard")
+def api_download_raw_postcard(image_url: str, filename: str = "care_link_postcard.jpg"):
+    """
+    Direct raw image download with Content-Disposition attachment.
+    """
+    project_root = os.path.dirname(BASE_DIR)
+    clean_path = image_url.lstrip("/")
+    if clean_path.startswith("family/"):
+        file_path = os.path.join(project_root, "frontend", clean_path)
+    else:
+        file_path = os.path.join(project_root, "frontend", "family", clean_path)
+    
+    if not os.path.exists(file_path):
+        # Fallback search inside frontend/family/assets
+        basename = os.path.basename(image_url)
+        file_path = os.path.join(project_root, "frontend", "family", "assets", basename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"画像ファイルが見つかりません: {file_path}")
+    
+    with open(file_path, "rb") as f:
+        img_bytes = f.read()
+    
+    encoded_filename = urllib.parse.quote(filename)
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"postcard.jpg\"; filename*=UTF-8''{encoded_filename}",
+        "Content-Type": "image/jpeg",
+        "Cache-Control": "no-cache"
+    }
+    return Response(content=img_bytes, media_type="image/jpeg", headers=headers)
 
 class MultimediaPreviewReq(BaseModel):
     user_id: int
