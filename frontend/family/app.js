@@ -88,13 +88,64 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentTerminalStatus = "offline";
 
     // --- Dynamic Backend Host Resolution for External / GitHub Pages Access ---
-    function getStoredBackendUrl() {
+    let dynamicBackendUrl = null;
+
+    async function fetchDynamicEndpoint() {
         const urlParams = new URLSearchParams(window.location.search);
         const paramServer = urlParams.get("server") || urlParams.get("backend");
         if (paramServer) {
             const cleaned = paramServer.replace(/\/+$/, "");
             localStorage.setItem("carelink_backend_server", cleaned);
+            dynamicBackendUrl = cleaned;
             return cleaned;
+        }
+
+        const hostname = window.location.hostname;
+        if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".local")) {
+            dynamicBackendUrl = "";
+            return "";
+        }
+
+        // Auto-fetch tunnel endpoint published to GitHub / docs
+        const endpointsToTry = [
+            `tunnel_endpoint.json?t=${Date.now()}`,
+            `https://raw.githubusercontent.com/k3and4ai-sudo/Nursing_facility/main/docs/tunnel_endpoint.json?t=${Date.now()}`
+        ];
+
+        for (const ep of endpointsToTry) {
+            try {
+                const resp = await fetch(ep, { cache: "no-store" });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && data.backend_url) {
+                        const cleaned = data.backend_url.replace(/\/+$/, "");
+                        console.log(`[CareLink] 自動検出されたバックエンドURL: ${cleaned}`);
+                        dynamicBackendUrl = cleaned;
+                        localStorage.setItem("carelink_backend_server", cleaned);
+                        return cleaned;
+                    }
+                }
+            } catch (e) {
+                console.warn(`[CareLink] ${ep} の自動取得スキップ:`, e);
+            }
+        }
+
+        const stored = localStorage.getItem("carelink_backend_server");
+        if (stored) {
+            dynamicBackendUrl = stored.replace(/\/+$/, "");
+            return dynamicBackendUrl;
+        }
+        return null;
+    }
+
+    function getStoredBackendUrl() {
+        if (dynamicBackendUrl !== null) {
+            return dynamicBackendUrl;
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramServer = urlParams.get("server") || urlParams.get("backend");
+        if (paramServer) {
+            return paramServer.replace(/\/+$/, "");
         }
         const stored = localStorage.getItem("carelink_backend_server");
         if (stored) return stored.replace(/\/+$/, "");
@@ -197,6 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 1. Initialize Authentication & Session
     async function initSession() {
+        await fetchDynamicEndpoint();
         setupServerConfigUI();
 
         const stored = sessionStorage.getItem("care_link_session");
