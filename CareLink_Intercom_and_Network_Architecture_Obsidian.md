@@ -8,12 +8,13 @@
 
 ## 1. システム全体概要と主要画面
 
-本システムは、介護施設内のローカルPCで稼働するバックエンドサーバーを中心に、以下の4つの主要フロントエンド画面と外部通信機能で構成されています。
+本システムは、介護施設内のローカルPCで稼働するバックエンドサーバーを中心に、主要フロントエンド画面、ローカルAI/クラウドAIのハイブリッド連携、および外部通信機能で構成されています。
 
 ```mermaid
 graph TD
     subgraph "外部ネットワーク (インターネット)"
         FamilyExt["📱 ご家族ポータル (GitHub Pages / スマホ)"]
+        GeminiLive["⚡ Google Gemini Live API<br/>(BidiGenerateContent / WSS)"]
     end
 
     subgraph "Cloudflare エッジ"
@@ -27,19 +28,31 @@ graph TD
     end
 
     subgraph "施設内ホストPC (Linux / RTX 2060 SUPER)"
-        FastAPISrv["⚡ バックエンドサーバー (FastAPI :8000)"]
-        LocalLLM["🧠 ローカルLLM (Ollama Qwen2.5 / Whisper / Kokoro)"]
+        FastAPISrv["⚡ バックエンドサーバー (FastAPI :8000)<br/>- 内部WebSocketリレー & シグナリング<br/>- PIIガードレール並行検査 & 遮断<br/>- APIキー秘匿プロキシ"]
+        LocalLLM["🧠 ローカルLLM<br/>(Ollama Qwen2.5 / Whisper / Kokoro)"]
         DB[(🗄️ SQLite 暗号化DB)]
     end
 
-    FamilyExt <-->|HTTPS / WSS| CFTunnel
-    CFTunnel <-->|トンネル通信| FastAPISrv
-    RoomTab <-->|HTTP / WS| FastAPISrv
-    StaffPC <-->|HTTP / WS| FastAPISrv
-    BarberPC <-->|HTTP| FastAPISrv
-    FastAPISrv <--> LocalLLM
+    FamilyExt <-->|"HTTPS / WSS"| CFTunnel
+    CFTunnel <-->|"トンネル通信"| FastAPISrv
+    RoomTab <-->|"HTTP / WS: 音声・カメラ映像"| FastAPISrv
+    StaffPC <-->|"HTTP / WS"| FastAPISrv
+    BarberPC <-->|"HTTP"| FastAPISrv
+    
+    FastAPISrv <-->|"双方向WSS: 生PCM音声・映像 / 低遅延対話"| GeminiLive
+    FastAPISrv <-->|"ローカル推論: 完全プライバシー保護 / 要約"| LocalLLM
     FastAPISrv <--> DB
 ```
+
+### 1.1 バックエンドサーバーと Gemini Live API の関係・役割
+- **セキュア・プロキシ（APIキー秘匿）**:
+  - クライアント（居室端末等）が直接外部APIを叩くのではなく、施設内のホストPC（FastAPI）が中継プロキシとして Google Gemini Live API（`wss://generativelanguage.googleapis.com/.../BidiGenerateContent`）と直接常時接続を確立します。これにより API キーの漏洩を完全に防ぎます。
+- **生PCM / リアルタイム双方向通信（BidiStreaming）**:
+  - 居室端末から送られる 16kHz 16bit 生PCM 音声やカメラ映像フレームを、FastAPI バックエンドが Gemini Live API へリアルタイムに中継。Gemini から返される 24kHz PCM 音声ストリームを即座に居室端末へストリーミング返送することで、**遅延 300〜500ms の自然な会話・割り込み（Barge-in）** を実現します。
+- **PII（個人情報）ガードレール保護モニター**:
+  - バックエンドサーバー内の `PII Guardrail Monitor` が居室端末からの音声波形をバックグラウンドで並行監査（Whisper STT＋正規表現パターン検査）。氏名・住所・電話番号等の個人情報の漏洩をリアルタイムに検知し、必要に応じて Gemini への送信遮断や警告措置を行います。
+- **ローカルLLMとのハイブリッド二重構成**:
+  - リアルタイムな会話応答やマルチモーダル（画像・表情）認識には **Gemini Live API** を利用し、回線切断時（オフライン時）のフォールバックや機密性の高い日誌・カルテのバッチ要約処理には施設内 **ローカルLLM（Ollama Qwen2.5 / Whisper）** を自動使い分けます。
 
 ---
 

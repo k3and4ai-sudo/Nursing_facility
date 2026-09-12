@@ -60,12 +60,26 @@ def db_init():
                 weight REAL,
                 bp_sys INTEGER,
                 bp_dia INTEGER,
+                heart_rate INTEGER,                -- Heart Rate in bpm (from Smartwatch)
+                spo2 INTEGER,                      -- Blood Oxygen Saturation in % (from Smartwatch)
+                source TEXT DEFAULT 'voice',       -- 'voice', 'smartwatch_ble', 'simulator', 'manual'
                 raw_text TEXT,                     -- Encrypted
                 is_alert INTEGER DEFAULT 0,
                 alert_reason TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
+
+        # Migration: Ensure new smartwatch columns exist for existing databases
+        cursor.execute("PRAGMA table_info(vital_records)")
+        existing_vital_cols = {col["name"] for col in cursor.fetchall()}
+        if "heart_rate" not in existing_vital_cols:
+            cursor.execute("ALTER TABLE vital_records ADD COLUMN heart_rate INTEGER")
+        if "spo2" not in existing_vital_cols:
+            cursor.execute("ALTER TABLE vital_records ADD COLUMN spo2 INTEGER")
+        if "source" not in existing_vital_cols:
+            cursor.execute("ALTER TABLE vital_records ADD COLUMN source TEXT DEFAULT 'voice'")
+        conn.commit()
         
         # 3. Chat History table (short-term & interface history)
         cursor.execute("""
@@ -442,14 +456,26 @@ def delete_user(user_id: int):
         conn.commit()
 
 # Vital Records Functions
-def add_vital_record(user_id: int, temperature: float, weight: float, bp_sys: int, bp_dia: int, raw_text: str, is_alert: int, alert_reason: str):
+def add_vital_record(
+    user_id: int,
+    temperature: Optional[float] = None,
+    weight: Optional[float] = None,
+    bp_sys: Optional[int] = None,
+    bp_dia: Optional[int] = None,
+    raw_text: str = "",
+    is_alert: int = 0,
+    alert_reason: str = "",
+    heart_rate: Optional[int] = None,
+    spo2: Optional[int] = None,
+    source: str = "voice"
+):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         timestamp = datetime.now().isoformat()
         cursor.execute(
-            """INSERT INTO vital_records (user_id, timestamp, temperature, weight, bp_sys, bp_dia, raw_text, is_alert, alert_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, timestamp, temperature, weight, bp_sys, bp_dia, encrypt_data(raw_text), is_alert, alert_reason)
+            """INSERT INTO vital_records (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, source, raw_text, is_alert, alert_reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, source, encrypt_data(raw_text), is_alert, alert_reason)
         )
         conn.commit()
         return cursor.lastrowid

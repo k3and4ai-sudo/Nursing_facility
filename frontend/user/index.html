@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260911_8">
+    <link rel="stylesheet" href="style.css?v=20260912_1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Zen+Maru Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -14,6 +14,7 @@
         <!-- Top status bar -->
         <header class="header">
             <div id="room-badge" class="badge">確認中...</div>
+            <div id="watch-badge" class="badge watch-badge" title="スマートウォッチ連携 / シミュレータを開く">⌚ ウォッチ未接続</div>
             <div id="recording-status-badge" class="badge recording-active-badge">🟢 記録中</div>
             <div id="debug-badge" class="badge debug-badge hidden">🛠️ デバッグモード (Gemini Live)</div>
             <div id="connection-status" class="status-dot offline"></div>
@@ -215,8 +216,100 @@
                 </div>
             </div>
         </div>
+        <!-- ⌚ スマートウォッチ連携 & バイタルシミュレータ モーダル -->
+        <div id="watch-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card watch-modal-card" style="text-align: left; padding: 32px; max-width: 680px; width: 95%; border: 3px solid #3b82f6; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(59, 130, 246, 0.35); max-height: 90vh; overflow-y: auto;">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 2.2rem;">⌚</span>
+                        <h2 style="color: #1e3a8a; font-size: 1.8rem; font-weight: 800; margin: 0;">スマートウォッチ・バイタル連携</h2>
+                    </div>
+                    <button id="btn-close-watch-modal" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748b; padding: 4px 8px;">✖</button>
+                </div>
+
+                <!-- 現在の生体ステータス表示 -->
+                <div style="display: flex; gap: 16px; margin-bottom: 24px; background: #f8fafc; border-radius: 20px; padding: 16px; border: 1px solid #e2e8f0;">
+                    <div style="flex: 1; text-align: center; border-right: 1px solid #cbd5e1; padding-right: 12px;">
+                        <div style="font-size: 0.95rem; color: #64748b; font-weight: 700;">❤️ 心拍数 (bpm)</div>
+                        <div id="modal-hr-display" style="font-size: 2.4rem; font-weight: 900; color: #ef4444; margin-top: 4px;">-- <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">bpm</span></div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding-left: 12px;">
+                        <div style="font-size: 0.95rem; color: #64748b; font-weight: 700;">🫁 血中酸素 (SpO2)</div>
+                        <div id="modal-spo2-display" style="font-size: 2.4rem; font-weight: 900; color: #0284c7; margin-top: 4px;">-- <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">%</span></div>
+                    </div>
+                </div>
+
+                <!-- Section 1: 実機 Bluetooth (BLE) 接続 -->
+                <div style="margin-bottom: 28px; background: #eff6ff; border-radius: 20px; padding: 20px; border: 1.5px solid #bfdbfe;">
+                    <div style="font-weight: 800; color: #1d4ed8; font-size: 1.2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                        <span>📶 実機スマートウォッチ (Web Bluetooth)</span>
+                    </div>
+                    <p style="font-size: 0.95rem; color: #334155; margin-bottom: 14px; line-height: 1.5;">
+                        標準心拍サービス（Heart Rate 0x180D）対応のスマートウォッチと直接ペアリングし、心拍データをリアルタイムに取得します。
+                    </p>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button id="btn-ble-connect" class="modal-btn" style="flex: 2; min-height: 52px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.1rem; font-weight: 800; border-radius: 16px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);">
+                            <span>🔍</span>
+                            <span>Bluetoothでペアリング</span>
+                        </button>
+                        <button id="btn-ble-disconnect" class="modal-btn hidden" style="flex: 1; min-height: 52px; background: #fee2e2; color: #dc2626; font-size: 1rem; font-weight: 800; border-radius: 16px; border: 1px solid #fca5a5; cursor: pointer;">
+                            切断
+                        </button>
+                    </div>
+                    <div id="ble-device-info" style="font-size: 0.9rem; color: #64748b; margin-top: 10px; font-weight: 600;">
+                        未接続
+                    </div>
+                </div>
+
+                <!-- Section 2: 検証用バイタル・SOSシミュレータ -->
+                <div style="background: #fdf4ff; border-radius: 20px; padding: 20px; border: 1.5px solid #f0abfc;">
+                    <div style="font-weight: 800; color: #a21caf; font-size: 1.2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                        <span>🧪 検証用バイタル・SOSシミュレータ</span>
+                    </div>
+                    <p style="font-size: 0.95rem; color: #475569; margin-bottom: 14px; line-height: 1.5;">
+                        実機ウォッチが手元にない場合でも、ワンクリックで各種生体測定や緊急SOSを送信してスタッフ画面への連携をテストできます。
+                    </p>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                        <button id="sim-btn-normal" style="padding: 12px; background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 14px; color: #065f46; font-weight: 800; cursor: pointer; text-align: left;">
+                            <div>🟢 正常バイタル</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: #047857;">心拍 72bpm / SpO2 98%</div>
+                        </button>
+
+                        <button id="sim-btn-tachycardia" style="padding: 12px; background: #fff7ed; border: 1.5px solid #fdba74; border-radius: 14px; color: #9a3412; font-weight: 800; cursor: pointer; text-align: left;">
+                            <div>⚠️ 頻脈アラート</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: #c2410c;">心拍 128bpm (異常)</div>
+                        </button>
+
+                        <button id="sim-btn-hypoxia" style="padding: 12px; background: #f0f9ff; border: 1.5px solid #7dd3fc; border-radius: 14px; color: #075985; font-weight: 800; cursor: pointer; text-align: left;">
+                            <div>🫁 低酸素アラート</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: #0284c7;">SpO2 91% (要注意)</div>
+                        </button>
+
+                        <button id="sim-btn-auto-pulse" style="padding: 12px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 14px; color: #6b21a8; font-weight: 800; cursor: pointer; text-align: left;">
+                            <div id="auto-pulse-label">▶️ 自動心拍パルス</div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: #7e22ce;">5秒毎に連続測定送信</div>
+                        </button>
+                    </div>
+
+                    <!-- 転倒・緊急SOS検知テストボタン -->
+                    <button id="sim-btn-sos" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; border-radius: 16px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>🚨 転倒・緊急SOSを検知発信 (スタッフ即時通知テスト)</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+                    <button id="btn-close-watch-modal-footer" style="padding: 10px 24px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 14px; font-weight: 700; color: #475569; cursor: pointer;">
+                        閉じる
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260911_8"></script>
+    <script src="app.js?v=20260912_2"></script>
 </body>
 </html>

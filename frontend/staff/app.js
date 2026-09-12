@@ -221,8 +221,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     loadRecentVitals();
                     break;
                     
+                case "vital_update":
+                    loadRecentVitals();
+                    break;
+                    
                 case "vital_alert":
                     triggerVitalAlert(data.user_name, data.room_number, data.reason, data.timestamp);
+                    loadRecentVitals();
+                    break;
+
+                case "sos_alert":
+                    triggerSOSAlert(data.user_name, data.room_number, data.reason, data.timestamp, data.heart_rate, data.spo2);
+                    loadRecentVitals();
                     break;
 
                 case "pii_alert":
@@ -378,7 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             recentVitalsTbody.innerHTML = "";
             if (data.length === 0) {
-                recentVitalsTbody.innerHTML = `<tr><td colspan="6" class="text-center">バイタル記録はありません</td></tr>`;
+                recentVitalsTbody.innerHTML = `<tr><td colspan="7" class="text-center">バイタル記録はありません</td></tr>`;
                 return;
             }
 
@@ -387,10 +397,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (v.is_alert) tr.className = "alert-row";
                 
                 const time = new Date(v.timestamp).toLocaleTimeString("ja-JP", {hour: '2-digit', minute:'2-digit'});
+                const hrPart = v.heart_rate ? `❤️ ${v.heart_rate}` : '';
+                const spo2Part = v.spo2 ? `🫁 ${v.spo2}%` : '';
+                const hrSpo2 = (hrPart || spo2Part) ? `${hrPart} ${spo2Part}`.trim() : '-';
+
                 tr.innerHTML = `
                     <td>${v.room_number || '-'}</td>
                     <td><strong>${v.user_name}</strong></td>
                     <td>${time}</td>
+                    <td><strong>${hrSpo2}</strong></td>
                     <td>${v.temperature ? v.temperature + ' ℃' : '-'}</td>
                     <td>${v.bp_sys ? v.bp_sys + '/' + v.bp_dia + ' mmHg' : '-'}</td>
                     <td>${v.weight ? v.weight + ' kg' : '-'}</td>
@@ -486,6 +501,19 @@ document.addEventListener("DOMContentLoaded", () => {
     function triggerNurseCall(name, room, reason, timestamp) {
         const id = "nurse_call_" + Date.now();
         const fullReason = `【🚨 緊急呼出（ナースコール）】${reason || "利用者様が画面の「スタッフに連絡」ボタンを押しました。"}`;
+        activeAlerts.unshift({ id, name, room, reason: fullReason, timestamp, isEmergency: true });
+        renderAlertsList();
+        alertBadge.classList.remove("hidden");
+        try {
+            alertSound.play().catch(e => console.log("Sound play blocked."));
+        } catch(e) {}
+    }
+
+    function triggerSOSAlert(name, room, reason, timestamp, heartRate, spo2) {
+        const id = "sos_alert_" + Date.now();
+        const hrInfo = heartRate ? ` (心拍: ${heartRate} bpm)` : '';
+        const spo2Info = spo2 ? ` (SpO2: ${spo2}%)` : '';
+        const fullReason = `【🚨 転倒・緊急SOS検知】${reason || "スマートウォッチからの緊急SOS"}${hrInfo}${spo2Info}`;
         activeAlerts.unshift({ id, name, room, reason: fullReason, timestamp, isEmergency: true });
         renderAlertsList();
         alertBadge.classList.remove("hidden");

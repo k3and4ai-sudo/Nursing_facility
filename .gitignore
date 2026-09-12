@@ -20,6 +20,9 @@ backend/audio_temp/
 
 # Environment & secret files
 .env
+credentials.json
+token.json
+資料/OAuthのID.odt
 
 # Temporary workspace files
 -media-*.txt

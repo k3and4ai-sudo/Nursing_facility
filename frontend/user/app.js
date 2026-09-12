@@ -420,6 +420,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     handleGuardrailResult(data);
                     break;
 
+                case "vital_recorded":
+                    console.log("[User WS] Vital recorded:", data);
+                    if (typeof updateVitalDisplay === "function") {
+                        updateVitalDisplay(data.heart_rate, data.spo2, data.is_alert, data.alert_reason);
+                    }
+                    break;
+
+                case "emergency_sos_ack":
+                    console.log("[User WS] Emergency SOS acknowledged by server:", data);
+                    showTemporaryToast("🚨 スタッフステーションへ緊急SOSを発信しました");
+                    break;
+
                 case "incoming_call": // Intercom Call requested (Pattern A)
                     handleIncomingCall(data);
                     break;
@@ -1679,6 +1691,303 @@ document.addEventListener("DOMContentLoaded", () => {
         connectWS();
     });
 
+    // -------------------------------------------------------------
+    // ⌚ スマートウォッチ連携 (Web Bluetooth API) & バイタルシミュレータ モジュール
+    // -------------------------------------------------------------
+    const watchBadge = document.getElementById("watch-badge");
+    const watchModal = document.getElementById("watch-modal");
+    const btnCloseWatchModal = document.getElementById("btn-close-watch-modal");
+    const btnCloseWatchModalFooter = document.getElementById("btn-close-watch-modal-footer");
+    const modalHrDisplay = document.getElementById("modal-hr-display");
+    const modalSpo2Display = document.getElementById("modal-spo2-display");
+    const btnBleConnect = document.getElementById("btn-ble-connect");
+    const btnBleDisconnect = document.getElementById("btn-ble-disconnect");
+    const bleDeviceInfo = document.getElementById("ble-device-info");
+
+    const simBtnNormal = document.getElementById("sim-btn-normal");
+    const simBtnTachycardia = document.getElementById("sim-btn-tachycardia");
+    const simBtnHypoxia = document.getElementById("sim-btn-hypoxia");
+    const simBtnAutoPulse = document.getElementById("sim-btn-auto-pulse");
+    const autoPulseLabel = document.getElementById("auto-pulse-label");
+    const simBtnSos = document.getElementById("sim-btn-sos");
+
+    let bleDevice = null;
+    let heartRateChar = null;
+    let currentHeartRate = null;
+    let currentSpO2 = null;
+    let autoPulseTimer = null;
+
+    function showTemporaryToast(message, duration = 3500) {
+        let toast = document.getElementById("app-global-toast");
+        if (!toast) {
+            toast = document.createElement("div");
+            toast.id = "app-global-toast";
+            toast.style.cssText = "position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.9); color: #ffffff; padding: 14px 28px; border-radius: 30px; font-size: 1.15rem; font-weight: 700; z-index: 20000; box-shadow: 0 10px 25px rgba(0,0,0,0.3); transition: opacity 0.3s ease; pointer-events: none;";
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.style.opacity = "1";
+        if (toast._timer) clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => {
+            toast.style.opacity = "0";
+        }, duration);
+    }
+
+    function updateVitalDisplay(hr, spo2, isAlert = false, alertReason = "") {
+        if (hr !== undefined && hr !== null) {
+            currentHeartRate = hr;
+            if (modalHrDisplay) modalHrDisplay.innerHTML = `${hr} <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">bpm</span>`;
+        }
+        if (spo2 !== undefined && spo2 !== null) {
+            currentSpO2 = spo2;
+            if (modalSpo2Display) modalSpo2Display.innerHTML = `${spo2} <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">%</span>`;
+        }
+        if (watchBadge) {
+            const hrStr = currentHeartRate ? `${currentHeartRate} bpm` : "--";
+            const spo2Str = currentSpO2 ? `${currentSpO2}%` : "--";
+            watchBadge.textContent = `⌚ ❤️ ${hrStr} 🫁 ${spo2Str}`;
+            if (isAlert) {
+                watchBadge.className = "badge watch-badge alert";
+                watchBadge.title = `⚠️ 異常検知: ${alertReason}`;
+            } else {
+                watchBadge.className = "badge watch-badge connected";
+                watchBadge.title = "スマートウォッチ接続中 (タップで詳細表示)";
+            }
+        }
+    }
+
+    function sendVitalData(vitalPayload) {
+        if (vitalPayload.heart_rate !== undefined) currentHeartRate = vitalPayload.heart_rate;
+        if (vitalPayload.spo2 !== undefined) currentSpO2 = vitalPayload.spo2;
+        updateVitalDisplay(currentHeartRate, currentSpO2);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "vital_data",
+                ...vitalPayload
+            }));
+        } else if (currentUserId) {
+            fetch(`/api/users/${currentUserId}/vitals`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(vitalPayload)
+            }).catch(e => console.error("REST vital error:", e));
+        }
+    }
+
+    function sendEmergencySOS(reason = "スマートウォッチ転倒/緊急SOS検知") {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "emergency_sos",
+                reason: reason,
+                heart_rate: currentHeartRate || 120,
+                spo2: currentSpO2 || 95,
+                source: "smartwatch_sos"
+            }));
+        } else if (currentUserId) {
+            fetch(`/api/users/${currentUserId}/vitals`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    is_sos: true,
+                    sos_reason: reason,
+                    heart_rate: currentHeartRate || 120,
+                    spo2: currentSpO2 || 95,
+                    source: "smartwatch_sos"
+                })
+            }).catch(e => console.error("REST sos error:", e));
+        }
+        showTemporaryToast("🚨 緊急SOSをスタッフステーションへ送信しました！");
+    }
+
+    // Web Bluetooth API Heart Rate Handler
+    function handleHeartRateMeasurement(event) {
+        const value = event.target.value;
+        const flags = value.getUint8(0);
+        const rate16Bits = flags & 0x1;
+        let hr = rate16Bits ? value.getUint16(1, /*littleEndian=*/true) : value.getUint8(1);
+        console.log("[BLE Smartwatch] Heart Rate Measurement:", hr, "bpm");
+        
+        sendVitalData({
+            heart_rate: hr,
+            spo2: currentSpO2 || 98,
+            source: "smartwatch_ble",
+            raw_text: `スマートウォッチBLE心拍: ${hr} bpm`
+        });
+    }
+
+    function onBLEDisconnected() {
+        console.warn("[BLE Smartwatch] Device disconnected");
+        if (bleDeviceInfo) bleDeviceInfo.textContent = "切断されました";
+        if (btnBleConnect) btnBleConnect.classList.remove("hidden");
+        if (btnBleDisconnect) btnBleDisconnect.classList.add("hidden");
+        if (watchBadge) {
+            watchBadge.className = "badge watch-badge";
+            watchBadge.textContent = "⌚ ウォッチ切断";
+        }
+        showTemporaryToast("⌚ スマートウォッチとのBluetooth接続が切断されました");
+    }
+
+    async function connectBLESmartwatch() {
+        if (!navigator.bluetooth) {
+            alert("お使いのブラウザは Web Bluetooth API に対応していません。\n(Google Chrome / Edge 等の対応ブラウザをご利用いただくか、シミュレータ機能をお試しください)");
+            return;
+        }
+
+        try {
+            if (bleDeviceInfo) bleDeviceInfo.textContent = "デバイスをスキャン中... (ポップアップからウォッチを選択してください)";
+            
+            // acceptAllDevices: true enables detecting smartwatches that don't advertise standard 0x180D (like FitCloudPro)
+            bleDevice = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: [
+                    'heart_rate',
+                    0x180D,
+                    'battery_service',
+                    'device_information',
+                    '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro / Realtek common GATT service
+                    '0000fee8-0000-1000-8000-00805f9b34fb',
+                    '000055ff-0000-1000-8000-00805f9b34fb',
+                    '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
+                ]
+            });
+
+            if (bleDeviceInfo) bleDeviceInfo.textContent = `接続試行中: ${bleDevice.name || "スマートウォッチ"}...`;
+            bleDevice.addEventListener('gattserverdisconnected', onBLEDisconnected);
+
+            const server = await bleDevice.gatt.connect();
+            console.log("[BLE Smartwatch] GATT connected to:", bleDevice.name);
+
+            // Attempt to get standard heart_rate service
+            let heartRateService = null;
+            try {
+                heartRateService = await server.getPrimaryService('heart_rate');
+            } catch(e) {
+                console.log("[BLE] Standard heart_rate service not directly exposed:", e);
+            }
+
+            if (heartRateService) {
+                heartRateChar = await heartRateService.getCharacteristic('heart_rate_measurement');
+                await heartRateChar.startNotifications();
+                heartRateChar.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (標準心拍サービス稼働): ${bleDevice.name || "スマートウォッチ"}`;
+            } else {
+                // If custom watch without standard 0x180D (e.g., FitCloudPro proprietary protocol)
+                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (FitCloudPro等 独自規格ウォッチ): ${bleDevice.name || "スマートウォッチ"}`;
+                console.log("[BLE] Device connected, but uses vendor-specific custom GATT protocol.");
+            }
+
+            if (btnBleConnect) btnBleConnect.classList.add("hidden");
+            if (btnBleDisconnect) btnBleDisconnect.classList.remove("hidden");
+            if (watchBadge) {
+                watchBadge.className = "badge watch-badge connected";
+                watchBadge.textContent = `⌚ ${bleDevice.name ? bleDevice.name.slice(0, 10) : '接続中'}`;
+            }
+            showTemporaryToast(`⌚ ${bleDevice.name || "スマートウォッチ"} と接続しました`);
+        } catch (err) {
+            console.error("BLE Connection failed:", err);
+            if (bleDeviceInfo) {
+                if (err.name === "NotFoundError") {
+                    bleDeviceInfo.textContent = "スキャンがキャンセルされたか、デバイスが見つかりませんでした。";
+                } else if (err.name === "NetworkError" || err.message?.includes("connection failed")) {
+                    bleDeviceInfo.textContent = "接続エラー: FitCloudProアプリがBluetoothを占有している可能性があります。スマホ側アプリを一度終了して再試行してください。";
+                } else {
+                    bleDeviceInfo.textContent = `接続エラー: ${err.message || err}`;
+                }
+            }
+        }
+    }
+
+    function disconnectBLESmartwatch() {
+        if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+            bleDevice.gatt.disconnect();
+        }
+        onBLEDisconnected();
+    }
+
+    function initSmartwatchModule() {
+        if (watchBadge && watchModal) {
+            watchBadge.addEventListener("click", () => watchModal.classList.remove("hidden"));
+        }
+        if (btnCloseWatchModal && watchModal) {
+            btnCloseWatchModal.addEventListener("click", () => watchModal.classList.add("hidden"));
+        }
+        if (btnCloseWatchModalFooter && watchModal) {
+            btnCloseWatchModalFooter.addEventListener("click", () => watchModal.classList.add("hidden"));
+        }
+
+        if (btnBleConnect) {
+            btnBleConnect.addEventListener("click", connectBLESmartwatch);
+        }
+        if (btnBleDisconnect) {
+            btnBleDisconnect.addEventListener("click", disconnectBLESmartwatch);
+        }
+
+        // Simulator Event Listeners
+        if (simBtnNormal) {
+            simBtnNormal.addEventListener("click", () => {
+                sendVitalData({
+                    heart_rate: 72,
+                    spo2: 98,
+                    source: "simulator",
+                    raw_text: "シミュレータ: 正常バイタル (72bpm / 98%)"
+                });
+                showTemporaryToast("🟢 正常バイタルを送信しました (心拍 72bpm / SpO2 98%)");
+            });
+        }
+
+        if (simBtnTachycardia) {
+            simBtnTachycardia.addEventListener("click", () => {
+                sendVitalData({
+                    heart_rate: 128,
+                    spo2: 97,
+                    source: "simulator",
+                    raw_text: "シミュレータ: 頻脈アラートテスト (128bpm)"
+                });
+                showTemporaryToast("⚠️ 頻脈アラートを送信しました (心拍 128bpm)");
+            });
+        }
+
+        if (simBtnHypoxia) {
+            simBtnHypoxia.addEventListener("click", () => {
+                sendVitalData({
+                    heart_rate: 85,
+                    spo2: 91,
+                    source: "simulator",
+                    raw_text: "シミュレータ: 低酸素アラートテスト (SpO2 91%)"
+                });
+                showTemporaryToast("🫁 低酸素アラートを送信しました (SpO2 91%)");
+            });
+        }
+
+        if (simBtnAutoPulse) {
+            simBtnAutoPulse.addEventListener("click", () => {
+                if (autoPulseTimer) {
+                    clearInterval(autoPulseTimer);
+                    autoPulseTimer = null;
+                    if (autoPulseLabel) autoPulseLabel.textContent = "▶️ 自動心拍パルス";
+                    showTemporaryToast("自動心拍パルス送信を停止しました");
+                } else {
+                    if (autoPulseLabel) autoPulseLabel.textContent = "⏹️ 自動送信停止";
+                    showTemporaryToast("自動心拍パルス送信を開始しました (5秒間隔)");
+                    const pulse = 70 + Math.floor(Math.random() * 8);
+                    sendVitalData({ heart_rate: pulse, spo2: 98, source: "simulator" });
+                    
+                    autoPulseTimer = setInterval(() => {
+                        const hr = 70 + Math.floor(Math.random() * 8);
+                        sendVitalData({ heart_rate: hr, spo2: 98, source: "simulator" });
+                    }, 5000);
+                }
+            });
+        }
+
+        if (simBtnSos) {
+            simBtnSos.addEventListener("click", () => {
+                sendEmergencySOS("スマートウォッチ転倒/緊急SOS検知");
+            });
+        }
+    }
+
     // Initialize application connection
     async function initApp() {
         try {
@@ -1686,6 +1995,7 @@ document.addEventListener("DOMContentLoaded", () => {
             updateDebugUI();
             await checkRegistration();
             connectWS();
+            initSmartwatchModule();
             if (isDebugMode) {
                 connectLiveWS();
             }

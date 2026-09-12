@@ -74,6 +74,18 @@ class HandoverCreate(BaseModel):
     author: str
     content: str
 
+class VitalCreate(BaseModel):
+    temperature: Optional[float] = None
+    weight: Optional[float] = None
+    systolic: Optional[int] = None
+    diastolic: Optional[int] = None
+    heart_rate: Optional[int] = None
+    spo2: Optional[int] = None
+    source: str = "smartwatch_ble"
+    raw_text: str = ""
+    is_sos: bool = False
+    sos_reason: str = ""
+
 # HTTP Endpoints
 
 @app.get("/api/health")
@@ -166,6 +178,57 @@ def delete_user_record(user_id: int):
 @app.get("/api/users/{user_id}/vitals")
 def get_user_vitals(user_id: int):
     return db.get_vital_records(user_id)
+
+@app.post("/api/users/{user_id}/vitals")
+async def record_user_vitals(user_id: int, vital_data: VitalCreate):
+    vitals_dict = {
+        "temperature": vital_data.temperature,
+        "weight": vital_data.weight,
+        "systolic": vital_data.systolic,
+        "diastolic": vital_data.diastolic,
+        "heart_rate": vital_data.heart_rate,
+        "spo2": vital_data.spo2,
+        "is_sos": vital_data.is_sos,
+        "sos_reason": vital_data.sos_reason,
+    }
+    is_alert, alert_reason = vital_parser.validate_vitals(vitals_dict)
+    
+    rec_id = db.add_vital_record(
+        user_id=user_id,
+        temperature=vital_data.temperature,
+        weight=vital_data.weight,
+        bp_sys=vital_data.systolic,
+        bp_dia=vital_data.diastolic,
+        heart_rate=vital_data.heart_rate,
+        spo2=vital_data.spo2,
+        source=vital_data.source,
+        raw_text=vital_data.raw_text or f"バイタル記録 ({vital_data.source})",
+        is_alert=1 if is_alert else 0,
+        alert_reason=alert_reason
+    )
+    
+    user = db.get_user(user_id)
+    if user:
+        broadcast_type = "sos_alert" if vital_data.is_sos else ("vital_alert" if is_alert else "vital_update")
+        alert_payload = {
+            "type": broadcast_type,
+            "user_id": user_id,
+            "user_name": user.get("name", f"利用者ID:{user_id}"),
+            "room_number": user.get("room_number", ""),
+            "vitals": vitals_dict,
+            "source": vital_data.source,
+            "is_alert": is_alert,
+            "reason": alert_reason,
+            "timestamp": db.datetime.now().isoformat()
+        }
+        await manager.broadcast_to_staff(alert_payload)
+        
+    return {
+        "status": "success",
+        "id": rec_id,
+        "is_alert": is_alert,
+        "alert_reason": alert_reason
+    }
 
 @app.get("/api/vitals")
 def get_all_vitals():
@@ -973,6 +1036,99 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
                         else:
                             bidi_buffers[terminal_id] = bytearray()
                             is_processing_speech[terminal_id] = False
+
+            # Direct Smartwatch / BLE / Simulator Vital Data
+            elif msg_type == "vital_data":
+                heart_rate = data.get("heart_rate")
+                spo2 = data.get("spo2")
+                temperature = data.get("temperature")
+                source = data.get("source", "smartwatch_ble")
+                raw_text = data.get("raw_text", f"スマートウォッチ生体測定 ({source})")
+                
+                v_check = {
+                    "heart_rate": heart_rate,
+                    "spo2": spo2,
+                    "temperature": temperature,
+                    "systolic": data.get("systolic"),
+                    "diastolic": data.get("diastolic"),
+                    "weight": data.get("weight")
+                }
+                is_alert, alert_reason = vital_parser.validate_vitals(v_check)
+                
+                rec_id = db.add_vital_record(
+                    user_id=user_id,
+                    temperature=temperature,
+                    weight=data.get("weight"),
+                    bp_sys=data.get("systolic"),
+                    bp_dia=data.get("diastolic"),
+                    heart_rate=heart_rate,
+                    spo2=spo2,
+                    source=source,
+                    raw_text=raw_text,
+                    is_alert=1 if is_alert else 0,
+                    alert_reason=alert_reason
+                )
+                
+                # Send confirmation back to client
+                await websocket.send_json({
+                    "type": "vital_recorded",
+                    "record_id": rec_id,
+                    "heart_rate": heart_rate,
+                    "spo2": spo2,
+                    "is_alert": is_alert,
+                    "alert_reason": alert_reason
+                })
+                
+                # Broadcast update/alert to staff
+                staff_payload = {
+                    "type": "vital_alert" if is_alert else "vital_update",
+                    "user_id": user_id,
+                    "user_name": user["name"],
+                    "room_number": user["room_number"],
+                    "vitals": v_check,
+                    "source": source,
+                    "is_alert": is_alert,
+                    "reason": alert_reason,
+                    "timestamp": db.datetime.now().isoformat()
+                }
+                await manager.broadcast_to_staff(staff_payload)
+
+            # Direct Smartwatch Fall / Emergency SOS Trigger
+            elif msg_type == "emergency_sos":
+                reason = data.get("reason", "スマートウォッチ転倒/緊急SOS検知")
+                heart_rate = data.get("heart_rate")
+                spo2 = data.get("spo2")
+                source = data.get("source", "smartwatch_sos")
+                
+                rec_id = db.add_vital_record(
+                    user_id=user_id,
+                    heart_rate=heart_rate,
+                    spo2=spo2,
+                    source=source,
+                    raw_text=f"🚨 {reason}",
+                    is_alert=1,
+                    alert_reason=f"🚨 {reason}"
+                )
+                
+                # Immediate red-flash broadcast to all staff stations
+                sos_payload = {
+                    "type": "sos_alert",
+                    "user_id": user_id,
+                    "user_name": user["name"],
+                    "room_number": user["room_number"],
+                    "reason": reason,
+                    "heart_rate": heart_rate,
+                    "spo2": spo2,
+                    "source": source,
+                    "timestamp": db.datetime.now().isoformat()
+                }
+                await manager.broadcast_to_staff(sos_payload)
+                
+                await websocket.send_json({
+                    "type": "emergency_sos_ack",
+                    "status": "staff_notified",
+                    "message": "スタッフステーションへ緊急連絡しました"
+                })
 
             # User speaking / inputting text (Turn-based fallback)
             elif msg_type == "audio_input":

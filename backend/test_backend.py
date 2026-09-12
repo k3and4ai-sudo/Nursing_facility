@@ -71,6 +71,34 @@ class TestNursingFacilityBackend(unittest.TestCase):
         self.assertTrue(is_alert)
         self.assertIn("血圧高", reason)
 
+        # Smartwatch Heart Rate alerts (tachycardia & bradycardia)
+        tachy_vitals = {"heart_rate": 125}
+        is_alert, reason = vital_parser.validate_vitals(tachy_vitals)
+        self.assertTrue(is_alert)
+        self.assertIn("頻脈", reason)
+
+        brady_vitals = {"heart_rate": 42}
+        is_alert, reason = vital_parser.validate_vitals(brady_vitals)
+        self.assertTrue(is_alert)
+        self.assertIn("徐脈", reason)
+
+        # Smartwatch SpO2 alerts
+        hypoxia_vitals = {"spo2": 93}
+        is_alert, reason = vital_parser.validate_vitals(hypoxia_vitals)
+        self.assertTrue(is_alert)
+        self.assertIn("低酸素", reason)
+
+        critical_hypoxia_vitals = {"spo2": 88}
+        is_alert, reason = vital_parser.validate_vitals(critical_hypoxia_vitals)
+        self.assertTrue(is_alert)
+        self.assertIn("危険低酸素", reason)
+
+        # Smartwatch Fall / SOS alert
+        sos_vitals = {"is_sos": True, "sos_reason": "スマートウォッチ転倒検知"}
+        is_alert, reason = vital_parser.validate_vitals(sos_vitals)
+        self.assertTrue(is_alert)
+        self.assertIn("転倒検知", reason)
+
     def test_database_user_crud(self):
         """Test patient registration, retrieval, and updates in SQLite."""
         # Create user
@@ -132,6 +160,22 @@ class TestNursingFacilityBackend(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["temperature"], 36.7)
         self.assertEqual(records[0]["raw_text"], "測定完了です")
+
+        # Add smartwatch vitals
+        db.add_vital_record(
+            user_id,
+            heart_rate=78,
+            spo2=98,
+            source="smartwatch_ble",
+            raw_text="BLE心拍測定",
+            is_alert=0,
+            alert_reason=""
+        )
+        records = db.get_vital_records(user_id)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["heart_rate"], 78)
+        self.assertEqual(records[0]["spo2"], 98)
+        self.assertEqual(records[0]["source"], "smartwatch_ble")
 
         # Add chat history
         db.add_chat_message(user_id, "user", "こんにちは")

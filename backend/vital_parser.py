@@ -3,7 +3,8 @@ import re
 import requests
 from backend.config import (
     OLLAMA_URL, OLLAMA_MODEL,
-    TEMP_MIN, TEMP_MAX, BP_SYS_MIN, BP_SYS_MAX, BP_DIA_MIN, BP_DIA_MAX, WEIGHT_MIN, WEIGHT_MAX
+    TEMP_MIN, TEMP_MAX, BP_SYS_MIN, BP_SYS_MAX, BP_DIA_MIN, BP_DIA_MAX, WEIGHT_MIN, WEIGHT_MAX,
+    HEART_RATE_MIN, HEART_RATE_MAX, SPO2_MIN, SPO2_CRITICAL
 )
 
 def extract_vitals_from_text(text: str) -> dict:
@@ -170,5 +171,34 @@ def validate_vitals(vitals: dict, user_limits: dict = None) -> tuple[bool, str]:
         if weight > w_max or weight < w_min:
             is_alert = True
             reasons.append(f"体重異常（{weight}kg）")
+
+    # Check heart rate (bpm)
+    hr = vitals.get("heart_rate")
+    if hr is not None:
+        hr_min = user_limits.get("heart_rate_min", HEART_RATE_MIN) if user_limits else HEART_RATE_MIN
+        hr_max = user_limits.get("heart_rate_max", HEART_RATE_MAX) if user_limits else HEART_RATE_MAX
+        if hr > hr_max:
+            is_alert = True
+            reasons.append(f"頻脈（心拍数 {hr} bpm）")
+        elif hr < hr_min:
+            is_alert = True
+            reasons.append(f"徐脈（心拍数 {hr} bpm）")
+
+    # Check SpO2 (%)
+    spo2 = vitals.get("spo2")
+    if spo2 is not None:
+        spo2_min = user_limits.get("spo2_min", SPO2_MIN) if user_limits else SPO2_MIN
+        if spo2 < SPO2_CRITICAL:
+            is_alert = True
+            reasons.append(f"危険低酸素（SpO2 {spo2}%）")
+        elif spo2 < spo2_min:
+            is_alert = True
+            reasons.append(f"低酸素（SpO2 {spo2}%）")
+
+    # Check explicit SOS / Fall detection
+    if vitals.get("is_sos") or vitals.get("sos_reason"):
+        is_alert = True
+        sos_msg = vitals.get("sos_reason") or "スマートウォッチ転倒/緊急SOS検知"
+        reasons.append(sos_msg)
 
     return is_alert, "、".join(reasons) if reasons else ""

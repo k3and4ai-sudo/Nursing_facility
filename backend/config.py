@@ -53,6 +53,10 @@ BP_DIA_MIN = 50
 BP_DIA_MAX = 90
 WEIGHT_MIN = 30.0
 WEIGHT_MAX = 150.0
+HEART_RATE_MIN = 50       # bpm (50未満: 徐脈)
+HEART_RATE_MAX = 110      # bpm (110超: 頻脈)
+SPO2_MIN = 95             # % (95未満: 軽度低酸素)
+SPO2_CRITICAL = 90        # % (90未満: 重度低酸素・緊急)
 
 # Database Encryption Key Setup
 # Save key to a file so it persists between restarts
