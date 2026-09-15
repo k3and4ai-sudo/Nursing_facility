@@ -24,6 +24,7 @@ import backend.rag as rag
 import backend.vital_parser as vital_parser
 from backend.gemini_live import GeminiLiveSession, PIIGuardrailMonitor
 import backend.multimedia as multimedia
+import backend.google_fit as google_fit
 
 # Initialize Database on Import/Startup
 db.db_init()
@@ -233,6 +234,24 @@ async def record_user_vitals(user_id: int, vital_data: VitalCreate):
 @app.get("/api/vitals")
 def get_all_vitals():
     return db.get_all_recent_vitals()
+
+@app.get("/api/google-fit/status")
+def get_google_fit_status():
+    has_creds = os.path.exists(google_fit.CREDENTIALS_FILE)
+    has_token = os.path.exists(google_fit.TOKEN_FILE)
+    return {
+        "status": "configured" if (has_creds and has_token) else "unconfigured",
+        "has_credentials": has_creds,
+        "has_token": has_token
+    }
+
+@app.post("/api/users/{user_id}/google-fit/sync")
+async def sync_google_fit(user_id: int):
+    result = await google_fit.sync_user_google_fit(
+        user_id=user_id,
+        broadcast_callback=manager.broadcast_to_staff
+    )
+    return result
 
 @app.get("/api/users/{user_id}/chat")
 def get_user_chat(user_id: int):

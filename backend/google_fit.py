@@ -21,8 +21,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/fitness.body.read"
 ]
 
-CREDENTIALS_FILE = os.path.join(BASE_DIR, "credentials.json")
-TOKEN_FILE = os.path.join(BASE_DIR, "token.json")
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, "credentials.json") if os.path.exists(os.path.join(PROJECT_ROOT, "credentials.json")) else os.path.join(BASE_DIR, "credentials.json")
+TOKEN_FILE = os.path.join(PROJECT_ROOT, "token.json") if os.path.exists(os.path.join(PROJECT_ROOT, "token.json")) else os.path.join(BASE_DIR, "token.json")
 
 def get_google_fit_credentials() -> Optional[Credentials]:
     """

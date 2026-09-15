@@ -61,11 +61,11 @@ cp "$ENDPOINT_JSON" frontend/family/tunnel_endpoint.json 2>/dev/null || true
 cp frontend/family/app.js docs/app.js 2>/dev/null || true
 
 echo "3. GitHub Pages へ最新トンネルURLを自動プッシュ中..."
-git add "$ENDPOINT_JSON" frontend/family/tunnel_endpoint.json docs/app.js frontend/family/app.js
+git add "$ENDPOINT_JSON" frontend/family/tunnel_endpoint.json docs/app.js frontend/family/app.js docs/user/index.html
 if git diff --staged --quiet; then
     echo "ℹ️ エンドポイントに変更はありません。"
 else
-    git commit -m "chore: auto-update tunnel endpoint [skip ci]"
+    git commit -m "chore: auto-update tunnel endpoint and user gateway [skip ci]"
     git push origin main
     echo "  🚀 GitHubへの反映が完了しました！"
 fi
@@ -74,9 +74,10 @@ echo "=========================================================="
 echo "  🎉 外部接続の準備が完了しました！"
 echo "  📱 ご家族ポータル固定URL:"
 echo "     https://k3and4ai-sudo.github.io/Nursing_facility/"
-echo "     (※ スマホ側でURLの打ち直しは不要です。上記URLを開くだけで自動接続されます)"
-echo "  🏠 居室端末 (外部・スマホ・タブレット用URL):"
-echo "     $TUNNEL_URL/user/"
+echo "  🏠 居室端末 (デバッグ用固定URL):"
+echo "     https://k3and4ai-sudo.github.io/Nursing_facility/user/?debug=true"
+echo "  ⚡ 直接トンネルURL:"
+echo "     $TUNNEL_URL/user/?debug=true"
 echo "=========================================================="
 echo "トンネル稼働中... 停止するには Ctrl+C を押してください。"
 

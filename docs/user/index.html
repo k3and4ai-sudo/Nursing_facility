@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Care-Link 居室端末 Gateway</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            text-align: center;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 28px;
+            padding: 44px 28px;
+            max-width: 420px;
+            width: 88%;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45);
+        }
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+        .spinner {
+            width: 46px;
+            height: 46px;
+            border: 4px solid rgba(59, 130, 246, 0.25);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        h2 {
+            margin: 0 0 10px;
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #60a5fa;
+            letter-spacing: -0.02em;
+        }
+        p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .error-box {
+            display: none;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1.5px solid #ef4444;
+            color: #fca5a5;
+            padding: 16px;
+            border-radius: 16px;
+            margin-top: 24px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            text-align: left;
+        }
+        .retry-btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 24px;
+            background: #2563eb;
+            color: #ffffff;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🏠</div>
+        <div id="spinner" class="spinner"></div>
+        <h2 id="title">居室端末へ接続中...</h2>
+        <p id="desc">最新の暗号化トンネルへ安全に転送しています</p>
+        <div id="error-box" class="error-box">
+            <div id="error-msg"></div>
+            <button class="retry-btn" onclick="location.reload()">🔄 再試行</button>
+        </div>
+    </div>
+
+    <script>
+        async function routeToUserTerminal() {
+            const title = document.getElementById("title");
+            const desc = document.getElementById("desc");
+            const spinner = document.getElementById("spinner");
+            const errorBox = document.getElementById("error-box");
+            const errorMsg = document.getElementById("error-msg");
+
+            try {
+                // キャッシュ回避パラメータ付きで最新のエンドポイントを取得
+                const res = await fetch(`../tunnel_endpoint.json?t=${Date.now()}`);
+                if (!res.ok) throw new Error("エンドポイント情報 (tunnel_endpoint.json) を取得できませんでした。");
+                const data = await res.json();
+
+                if (data.status === "online" && data.backend_url) {
+                    desc.textContent = "接続先を確立しました。自動転送します...";
+                    
+                    // 現在のクエリパラメータ（?debug=true など）をそのまま引き継ぐ
+                    const search = window.location.search || "";
+                    const targetUrl = `${data.backend_url}/user/${search}`;
+                    
+                    // 履歴を残さずスムーズに転送
+                    window.location.replace(targetUrl);
+                } else {
+                    throw new Error("現在、外部接続トンネルが停止しています。<br>PC側で <code>./start_tunnel.sh</code> を起動してください。");
+                }
+            } catch (err) {
+                spinner.style.display = "none";
+                title.textContent = "接続待機中";
+                title.style.color = "#f87171";
+                desc.textContent = "トンネルサーバーへの接続に失敗しました。";
+                errorBox.style.display = "block";
+                errorMsg.innerHTML = err.message;
+            }
+        }
+        routeToUserTerminal();
+    </script>
+</body>
+</html>
