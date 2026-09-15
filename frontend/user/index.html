@@ -8,6 +8,54 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Zen+Maru Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+    <!-- 📋 In-Memory Diagnostic Log Collector for One-Tap Copy -->
+    <script>
+        (function() {
+            window.__carelink_logs = window.__carelink_logs || [];
+            var origLog = console.log;
+            var origWarn = console.warn;
+            var origError = console.error;
+            function pushLog(type, args) {
+                try {
+                    var now = new Date();
+                    var timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+                    var str = Array.prototype.slice.call(args).map(function(a) {
+                        if (typeof a === 'object' && a !== null) {
+                            try { return JSON.stringify(a); } catch(e) { return String(a); }
+                        }
+                        return String(a);
+                    }).join(' ');
+                    window.__carelink_logs.push('[' + timeStr + '][' + type + '] ' + str);
+                    if (window.__carelink_logs.length > 200) window.__carelink_logs.shift();
+                } catch(e) {}
+            }
+            console.log = function() { pushLog('LOG', arguments); origLog.apply(console, arguments); };
+            console.warn = function() { pushLog('WARN', arguments); origWarn.apply(console, arguments); };
+            console.error = function() { pushLog('ERR', arguments); origError.apply(console, arguments); };
+        })();
+    </script>
+    <!-- 🛠️ Mobile Remote Debugger (Eruda) for Debug Mode -->
+    <script>
+        (function () {
+            try {
+                var urlParams = new URLSearchParams(window.location.search);
+                var isDebug = urlParams.get("debug") === "true" || urlParams.get("eruda") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+                if (isDebug) {
+                    var script = document.createElement("script");
+                    script.src = "https://cdn.jsdelivr.net/npm/eruda";
+                    script.onload = function () {
+                        if (window.eruda) {
+                            window.eruda.init();
+                            console.log("[Care-Link] 🛠️ Eruda Mobile DevTools Initialized in Debug Mode");
+                        }
+                    };
+                    document.head.appendChild(script);
+                }
+            } catch (e) {
+                console.warn("[Care-Link] Eruda loader error:", e);
+            }
+        })();
+    </script>
 </head>
 <body>
     <div class="app-container">
@@ -17,6 +65,7 @@
             <div id="watch-badge" class="badge watch-badge" title="スマートウォッチ連携 / シミュレータを開く">⌚ ウォッチ未接続</div>
             <div id="recording-status-badge" class="badge recording-active-badge">🟢 記録中</div>
             <div id="debug-badge" class="badge debug-badge hidden">🛠️ デバッグモード (Gemini Live)</div>
+            <button id="header-btn-copy-logs" class="badge hidden" style="background: #2563eb; color: #ffffff; border: none; cursor: pointer; font-weight: 800;" title="デバッグログをクリップボードにコピー">📋 ログコピー</button>
             <div id="connection-status" class="status-dot offline"></div>
         </header>
 
@@ -260,6 +309,17 @@
                     <div id="ble-device-info" style="font-size: 0.9rem; color: #64748b; margin-top: 10px; font-weight: 600;">
                         未接続
                     </div>
+                    <!-- 📋 ワンタップ Bluetooth＆診断ログ コピーボタン -->
+                    <div style="margin-top: 14px; padding: 12px 14px; background: #ffffff; border-radius: 14px; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <div style="font-size: 0.85rem; font-weight: 700; color: #1e40af;">
+                            <span>📋 Bluetooth＆システム診断ログ</span>
+                            <div style="font-size: 0.78rem; font-weight: 500; color: #64748b;">エラーや接続状況をワンタップでコピー</div>
+                        </div>
+                        <button id="btn-copy-debug-logs" style="padding: 8px 16px; background: #2563eb; color: #ffffff; border: none; border-radius: 12px; font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3); white-space: nowrap;">
+                            <span>📋</span>
+                            <span>ログをコピー</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Section 2: 検証用バイタル・SOSシミュレータ -->
@@ -310,6 +370,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260912_2"></script>
+    <script src="app.js?v=20260915_fixblocklist"></script>
 </body>
 </html>

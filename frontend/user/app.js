@@ -141,18 +141,40 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    isDebugMode = urlParams.get("debug") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+    isDebugMode = urlParams.get("debug") === "true" || urlParams.get("eruda") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
+    function ensureErudaLoaded() {
+        if (!window.eruda && !document.getElementById("eruda-script")) {
+            const script = document.createElement("script");
+            script.id = "eruda-script";
+            script.src = "https://cdn.jsdelivr.net/npm/eruda";
+            script.onload = () => {
+                if (window.eruda) {
+                    window.eruda.init();
+                    console.log("[Care-Link] 🛠️ Eruda Mobile DevTools Loaded dynamically");
+                }
+            };
+            document.head.appendChild(script);
+        }
+    }
+
+    const headerBtnCopyLogs = document.getElementById("header-btn-copy-logs");
     function updateDebugUI() {
         if (isDebugMode && systemInfo.enable_debug_mode) {
             if (debugBadge) debugBadge.classList.remove("hidden");
+            if (headerBtnCopyLogs) headerBtnCopyLogs.classList.remove("hidden");
             localStorage.setItem("nursing_debug_mode", "true");
+            ensureErudaLoaded();
             if (typeof connectLiveWS === "function" && (!liveWs || liveWs.readyState !== WebSocket.OPEN)) {
                 connectLiveWS();
             }
         } else {
             if (debugBadge) debugBadge.classList.add("hidden");
+            if (headerBtnCopyLogs) headerBtnCopyLogs.classList.add("hidden");
             localStorage.setItem("nursing_debug_mode", "false");
         }
+    }
+    if (isDebugMode) {
+        ensureErudaLoaded();
     }
 
     if (debugBadge) {
@@ -1829,70 +1851,112 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function connectBLESmartwatch() {
+        console.log("[BLE Smartwatch] 🚀 connectBLESmartwatch triggered.");
         if (!navigator.bluetooth) {
-            alert("お使いのブラウザは Web Bluetooth API に対応していません。\n(Google Chrome / Edge 等の対応ブラウザをご利用いただくか、シミュレータ機能をお試しください)");
+            console.error("[BLE Smartwatch] ❌ Web Bluetooth API is NOT supported on this browser/platform.");
+            alert("お使いのブラウザは Web Bluetooth API に対応していません。\n(Android Chrome / Edge 等の対応ブラウザをご利用いただくか、シミュレータ機能をお試しください)");
             return;
         }
 
         try {
             if (bleDeviceInfo) bleDeviceInfo.textContent = "デバイスをスキャン中... (ポップアップからウォッチを選択してください)";
+            console.log("[BLE Smartwatch] Opening Bluetooth requestDevice dialog (acceptAllDevices: true)...");
             
-            // acceptAllDevices: true enables detecting smartwatches that don't advertise standard 0x180D (like FitCloudPro)
+            const fitCloudCandidateServices = [
+                'heart_rate',
+                'battery_service',
+                'device_information',
+                '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro Main / Realtek
+                '0000fee8-0000-1000-8000-00805f9b34fb',
+                '0000fee9-0000-1000-8000-00805f9b34fb',
+                '000055ff-0000-1000-8000-00805f9b34fb',
+                '0000ffe0-0000-1000-8000-00805f9b34fb',
+                '0000fff0-0000-1000-8000-00805f9b34fb',
+                '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
+            ];
+
             bleDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
-                optionalServices: [
-                    'heart_rate',
-                    0x180D,
-                    'battery_service',
-                    'device_information',
-                    '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro / Realtek common GATT service
-                    '0000fee8-0000-1000-8000-00805f9b34fb',
-                    '000055ff-0000-1000-8000-00805f9b34fb',
-                    '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
-                ]
+                optionalServices: fitCloudCandidateServices
             });
 
-            if (bleDeviceInfo) bleDeviceInfo.textContent = `接続試行中: ${bleDevice.name || "スマートウォッチ"}...`;
+            const rawName = bleDevice.name || "";
+            const deviceIdShort = bleDevice.id ? bleDevice.id.slice(0, 6) : "Unknown";
+            let displayName = rawName || `名称不明デバイス (${deviceIdShort})`;
+
+            console.log("[BLE Smartwatch] ✅ User selected device:", {
+                id: bleDevice.id,
+                name: rawName,
+                displayName: displayName
+            });
+
+            if (bleDeviceInfo) bleDeviceInfo.textContent = `接続試行中: ${displayName}...`;
             bleDevice.addEventListener('gattserverdisconnected', onBLEDisconnected);
 
+            console.log("[BLE Smartwatch] Connecting to GATT server...");
             const server = await bleDevice.gatt.connect();
-            console.log("[BLE Smartwatch] GATT connected to:", bleDevice.name);
+            console.log("[BLE Smartwatch] ✅ GATT Server connected successfully!", server);
 
-            // Attempt to get standard heart_rate service
+            // Probe candidate services individually to discover device capabilities
+            const discoveredServices = [];
+            for (const svcUuid of fitCloudCandidateServices) {
+                try {
+                    const svc = await server.getPrimaryService(svcUuid);
+                    discoveredServices.push(svc.uuid);
+                    console.log(`[BLE Smartwatch] 🎯 Found Service: ${svc.uuid}`);
+                    try {
+                        const chars = await svc.getCharacteristics();
+                        console.log(`[BLE Smartwatch]    Chars in ${svc.uuid}:`, chars.map(c => c.uuid));
+                    } catch(charErr) {
+                        console.log(`[BLE Smartwatch]    Chars query error in ${svc.uuid}:`, charErr.message);
+                    }
+                } catch(svcErr) {
+                    // Service not implemented on this specific hardware
+                }
+            }
+            console.log("[BLE Smartwatch] 📋 Total Discovered GATT Services:", discoveredServices);
+
+            // Attempt to get standard heart_rate service (0x180D)
             let heartRateService = null;
             try {
                 heartRateService = await server.getPrimaryService('heart_rate');
+                console.log("[BLE Smartwatch] ✅ Found standard heart_rate service (0x180D)");
             } catch(e) {
-                console.log("[BLE] Standard heart_rate service not directly exposed:", e);
+                console.log("[BLE Smartwatch] Standard heart_rate service not directly exposed:", e);
             }
 
             if (heartRateService) {
                 heartRateChar = await heartRateService.getCharacteristic('heart_rate_measurement');
                 await heartRateChar.startNotifications();
                 heartRateChar.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
-                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (標準心拍サービス稼働): ${bleDevice.name || "スマートウォッチ"}`;
+                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (標準心拍サービス稼働): ${displayName}`;
+                console.log("[BLE Smartwatch] ✅ Subscribed to heart_rate_measurement characteristic notifications!");
             } else {
-                // If custom watch without standard 0x180D (e.g., FitCloudPro proprietary protocol)
-                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (FitCloudPro等 独自規格ウォッチ): ${bleDevice.name || "スマートウォッチ"}`;
-                console.log("[BLE] Device connected, but uses vendor-specific custom GATT protocol.");
+                // If custom watch without standard 0x180D (FitCloudPro proprietary protocol)
+                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (FitCloudPro規格ウォッチ): ${displayName}`;
+                console.log("[BLE Smartwatch] Device connected. Uses FitCloudPro GATT protocol. Discovered:", discoveredServices);
             }
 
             if (btnBleConnect) btnBleConnect.classList.add("hidden");
             if (btnBleDisconnect) btnBleDisconnect.classList.remove("hidden");
             if (watchBadge) {
                 watchBadge.className = "badge watch-badge connected";
-                watchBadge.textContent = `⌚ ${bleDevice.name ? bleDevice.name.slice(0, 10) : '接続中'}`;
+                watchBadge.textContent = `⌚ ${displayName.slice(0, 10)}`;
             }
-            showTemporaryToast(`⌚ ${bleDevice.name || "スマートウォッチ"} と接続しました`);
+            showTemporaryToast(`⌚ ${displayName} と接続しました`);
         } catch (err) {
-            console.error("BLE Connection failed:", err);
+            console.error("[BLE Smartwatch] ❌ BLE Connection failed:", {
+                name: err.name,
+                message: err.message,
+                stack: err.stack
+            });
             if (bleDeviceInfo) {
                 if (err.name === "NotFoundError") {
-                    bleDeviceInfo.textContent = "スキャンがキャンセルされたか、デバイスが見つかりませんでした。";
+                    bleDeviceInfo.textContent = "スキャンがキャンセルされたか、デバイスが見つかりませんでした。(スマホ側の専用アプリが接続していないか確認してください)";
                 } else if (err.name === "NetworkError" || err.message?.includes("connection failed")) {
-                    bleDeviceInfo.textContent = "接続エラー: FitCloudProアプリがBluetoothを占有している可能性があります。スマホ側アプリを一度終了して再試行してください。";
+                    bleDeviceInfo.textContent = "接続エラー: 専用アプリがBluetoothを占有している可能性があります。スマホ側アプリを一度終了して再試行してください。";
                 } else {
-                    bleDeviceInfo.textContent = `接続エラー: ${err.message || err}`;
+                    bleDeviceInfo.textContent = `接続エラー (${err.name}): ${err.message || err}`;
                 }
             }
         }
@@ -1985,6 +2049,68 @@ document.addEventListener("DOMContentLoaded", () => {
             simBtnSos.addEventListener("click", () => {
                 sendEmergencySOS("スマートウォッチ転倒/緊急SOS検知");
             });
+        }
+
+        // 📋 One-tap Copy Diagnostic and BLE Logs Handler
+        async function copyDebugLogs(triggerBtn) {
+            const time = new Date().toISOString();
+            const ua = navigator.userAgent;
+            const bleSupported = !!navigator.bluetooth;
+            const isHttps = window.location.protocol === 'https:';
+            const currentBleStatus = bleDeviceInfo ? bleDeviceInfo.textContent.trim() : "未接続";
+            
+            let report = `=== Care-Link 端末診断＆デバッグログ ===\n`;
+            report += `取得日時: ${time}\n`;
+            report += `URL: ${window.location.href}\n`;
+            report += `端末/ブラウザ: ${ua}\n`;
+            report += `Web Bluetooth対応: ${bleSupported ? "○ 対応" : "× 非対応"}\n`;
+            report += `HTTPSセキュア通信: ${isHttps ? "○ (HTTPS)" : "× (非HTTPS)"}\n`;
+            report += `BLE表示ステータス: ${currentBleStatus}\n`;
+            report += `WS接続状態: ${ws && ws.readyState === WebSocket.OPEN ? "OPEN" : "CLOSED"}\n`;
+            report += `Gemini Live WS状態: ${liveWs && liveWs.readyState === WebSocket.OPEN ? "OPEN" : "CLOSED"}\n`;
+            report += `\n--- 直近のコンソールログ (最新 ${window.__carelink_logs ? window.__carelink_logs.length : 0} 件) ---\n`;
+            if (window.__carelink_logs && window.__carelink_logs.length > 0) {
+                report += window.__carelink_logs.join('\n');
+            } else {
+                report += "(記録されたログはありません)";
+            }
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(report);
+                } else {
+                    const ta = document.createElement("textarea");
+                    ta.value = report;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                }
+                showTemporaryToast("✅ デバッグログをクリップボードにコピーしました！");
+                if (triggerBtn) {
+                    const origHtml = triggerBtn.innerHTML;
+                    triggerBtn.innerHTML = "<span>✅</span><span>コピー完了！</span>";
+                    const origBg = triggerBtn.style.background;
+                    triggerBtn.style.background = "#10b981";
+                    setTimeout(() => {
+                        triggerBtn.innerHTML = origHtml;
+                        triggerBtn.style.background = origBg;
+                    }, 2500);
+                }
+            } catch (err) {
+                console.error("Copy logs failed:", err);
+                prompt("以下のログを手動でコピーしてください:", report);
+            }
+        }
+
+        const btnCopyDebugLogs = document.getElementById("btn-copy-debug-logs");
+        if (btnCopyDebugLogs) {
+            btnCopyDebugLogs.addEventListener("click", () => copyDebugLogs(btnCopyDebugLogs));
+        }
+        if (headerBtnCopyLogs) {
+            headerBtnCopyLogs.addEventListener("click", () => copyDebugLogs(headerBtnCopyLogs));
         }
     }
 
