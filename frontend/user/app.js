@@ -1838,8 +1838,32 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function handleBleNotification(charUuid, dataView) {
+        if (!dataView) return;
+        const bytes = new Uint8Array(dataView.buffer);
+        const hexStr = Array.from(bytes).map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        console.log(`[BLE Packet] 📥 ${charUuid} (${bytes.length} bytes):`, hexStr);
+
+        // Simple heuristic for FitCloud / real-time heart rate / SpO2 packet
+        // Many fitness trackers send packets starting with header or [type, length, ...]
+        // If 4-20 bytes packet contains plausible heart rate (40-200)
+        if (bytes.length >= 3) {
+            for (let i = 0; i < bytes.length; i++) {
+                // Look for plausible heart rate range if header or tag matches
+                const val = bytes[i];
+                if (val >= 45 && val <= 180 && (i === 1 || i === 2 || i === 3)) {
+                    console.log(`[BLE Vital Candidate] Index ${i} has potential HR: ${val} bpm`);
+                }
+            }
+        }
+    }
+
     function onBLEDisconnected() {
         console.warn("[BLE Smartwatch] Device disconnected");
+        if (window._bleKeepAliveTimer) {
+            clearInterval(window._bleKeepAliveTimer);
+            window._bleKeepAliveTimer = null;
+        }
         if (bleDeviceInfo) bleDeviceInfo.textContent = "切断されました";
         if (btnBleConnect) btnBleConnect.classList.remove("hidden");
         if (btnBleDisconnect) btnBleDisconnect.classList.add("hidden");
@@ -1859,13 +1883,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
-            if (bleDeviceInfo) bleDeviceInfo.textContent = "デバイスをスキャン中... (ポップアップからウォッチを選択してください)";
-            console.log("[BLE Smartwatch] Opening Bluetooth requestDevice dialog (acceptAllDevices: true)...");
-            
+            if (bleDeviceInfo) bleDeviceInfo.textContent = "B16Pro をスキャン中... (ポップアップからウォッチを選択してください)";
+            console.log("[BLE Smartwatch] 🚀 Starting targeted scan for B16Pro...");
+
             const fitCloudCandidateServices = [
                 'heart_rate',
                 'battery_service',
                 'device_information',
+                0xfee7,
+                0xfee8,
+                0xfee9,
+                0x55ff,
+                0xffe0,
+                0xfff0,
                 '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro Main / Realtek
                 '0000fee8-0000-1000-8000-00805f9b34fb',
                 '0000fee9-0000-1000-8000-00805f9b34fb',
@@ -1875,10 +1905,27 @@ document.addEventListener("DOMContentLoaded", () => {
                 '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
             ];
 
-            bleDevice = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: fitCloudCandidateServices
-            });
+            // 1. First attempt: Fast targeted scan for B16Pro (0.5s)
+            try {
+                bleDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { namePrefix: 'B16' },
+                        { namePrefix: 'b16' },
+                        { name: 'B16Pro' }
+                    ],
+                    optionalServices: fitCloudCandidateServices
+                });
+            } catch (filterErr) {
+                if (filterErr.name === "NotFoundError" && !filterErr.message?.includes("cancelled")) {
+                    console.warn("[BLE Smartwatch] Fast filter returned no device, falling back to acceptAllDevices...");
+                    bleDevice = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: fitCloudCandidateServices
+                    });
+                } else {
+                    throw filterErr;
+                }
+            }
 
             const rawName = bleDevice.name || "";
             const deviceIdShort = bleDevice.id ? bleDevice.id.slice(0, 6) : "Unknown";
@@ -1897,45 +1944,101 @@ document.addEventListener("DOMContentLoaded", () => {
             const server = await bleDevice.gatt.connect();
             console.log("[BLE Smartwatch] ✅ GATT Server connected successfully!", server);
 
-            // Probe candidate services individually to discover device capabilities
+            // 2. Discover all available primary services
+            let allServices = [];
+            try {
+                allServices = await server.getPrimaryServices();
+                console.log("[BLE Smartwatch] 🎯 getPrimaryServices() found:", allServices.map(s => s.uuid));
+            } catch (e) {
+                console.warn("[BLE Smartwatch] Bulk getPrimaryServices() error:", e);
+            }
+
             const discoveredServices = [];
-            for (const svcUuid of fitCloudCandidateServices) {
-                try {
-                    const svc = await server.getPrimaryService(svcUuid);
+            // If getPrimaryServices returned services, explore their characteristics
+            if (allServices && allServices.length > 0) {
+                for (const svc of allServices) {
                     discoveredServices.push(svc.uuid);
-                    console.log(`[BLE Smartwatch] 🎯 Found Service: ${svc.uuid}`);
+                    console.log(`[BLE Smartwatch] 🎯 Discovered Service: ${svc.uuid}`);
                     try {
                         const chars = await svc.getCharacteristics();
                         console.log(`[BLE Smartwatch]    Chars in ${svc.uuid}:`, chars.map(c => c.uuid));
-                    } catch(charErr) {
-                        console.log(`[BLE Smartwatch]    Chars query error in ${svc.uuid}:`, charErr.message);
+                        for (const ch of chars) {
+                            console.log(`[BLE Smartwatch]      Char ${ch.uuid}:`, {
+                                read: ch.properties.read,
+                                write: ch.properties.write,
+                                notify: ch.properties.notify,
+                                indicate: ch.properties.indicate
+                            });
+                            if (ch.properties.notify || ch.properties.indicate) {
+                                try {
+                                    await ch.startNotifications();
+                                    ch.addEventListener('characteristicvaluechanged', (e) => {
+                                        handleBleNotification(ch.uuid, e.target.value);
+                                    });
+                                    console.log(`[BLE Smartwatch]      🔔 Subscribed to notifications on ${ch.uuid}`);
+                                } catch (subErr) {
+                                    console.warn(`[BLE Smartwatch]      Failed to subscribe to ${ch.uuid}:`, subErr.message);
+                                }
+                            }
+                        }
+                    } catch (charErr) {
+                        console.warn(`[BLE Smartwatch]    Chars query error in ${svc.uuid}:`, charErr.message);
                     }
-                } catch(svcErr) {
-                    // Service not implemented on this specific hardware
+                }
+            } else {
+                // Fallback probing of candidate services individually
+                for (const svcUuid of fitCloudCandidateServices) {
+                    try {
+                        const svc = await server.getPrimaryService(svcUuid);
+                        discoveredServices.push(svc.uuid);
+                        console.log(`[BLE Smartwatch] 🎯 Probed Service: ${svc.uuid}`);
+                        const chars = await svc.getCharacteristics();
+                        for (const ch of chars) {
+                            if (ch.properties.notify || ch.properties.indicate) {
+                                try {
+                                    await ch.startNotifications();
+                                    ch.addEventListener('characteristicvaluechanged', (e) => {
+                                        handleBleNotification(ch.uuid, e.target.value);
+                                    });
+                                    console.log(`[BLE Smartwatch]      🔔 Subscribed to notifications on ${ch.uuid}`);
+                                } catch (subErr) {
+                                    console.warn(`[BLE Smartwatch]      Failed to subscribe to ${ch.uuid}:`, subErr.message);
+                                }
+                            }
+                        }
+                    } catch (svcErr) {
+                        // Service not implemented
+                    }
                 }
             }
             console.log("[BLE Smartwatch] 📋 Total Discovered GATT Services:", discoveredServices);
 
-            // Attempt to get standard heart_rate service (0x180D)
+            // Attempt standard heart_rate service
             let heartRateService = null;
             try {
                 heartRateService = await server.getPrimaryService('heart_rate');
-                console.log("[BLE Smartwatch] ✅ Found standard heart_rate service (0x180D)");
-            } catch(e) {
-                console.log("[BLE Smartwatch] Standard heart_rate service not directly exposed:", e);
-            }
+            } catch(e) {}
 
             if (heartRateService) {
                 heartRateChar = await heartRateService.getCharacteristic('heart_rate_measurement');
                 await heartRateChar.startNotifications();
                 heartRateChar.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
                 if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (標準心拍サービス稼働): ${displayName}`;
-                console.log("[BLE Smartwatch] ✅ Subscribed to heart_rate_measurement characteristic notifications!");
+                console.log("[BLE Smartwatch] ✅ Subscribed to standard heart_rate_measurement!");
             } else {
-                // If custom watch without standard 0x180D (FitCloudPro proprietary protocol)
-                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (FitCloudPro規格ウォッチ): ${displayName}`;
-                console.log("[BLE Smartwatch] Device connected. Uses FitCloudPro GATT protocol. Discovered:", discoveredServices);
+                if (bleDeviceInfo) bleDeviceInfo.textContent = `✅ 接続完了 (独自GATT稼働中): ${displayName}`;
+                console.log("[BLE Smartwatch] Device connected. FitCloudPro GATT protocol. Discovered:", discoveredServices);
             }
+
+            // Start BLE Keepalive ping (every 5 seconds) to prevent device sleep
+            if (window._bleKeepAliveTimer) clearInterval(window._bleKeepAliveTimer);
+            window._bleKeepAliveTimer = setInterval(async () => {
+                if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) {
+                    console.log("[BLE KeepAlive] Connection active.");
+                } else {
+                    clearInterval(window._bleKeepAliveTimer);
+                }
+            }, 5000);
 
             if (btnBleConnect) btnBleConnect.classList.add("hidden");
             if (btnBleDisconnect) btnBleDisconnect.classList.remove("hidden");
