@@ -1723,6 +1723,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalHrDisplay = document.getElementById("modal-hr-display");
     const modalSpo2Display = document.getElementById("modal-spo2-display");
     const btnBleConnect = document.getElementById("btn-ble-connect");
+    const btnBleFast = document.getElementById("btn-ble-fast");
     const btnBleDisconnect = document.getElementById("btn-ble-disconnect");
     const bleDeviceInfo = document.getElementById("ble-device-info");
 
@@ -1866,6 +1867,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (bleDeviceInfo) bleDeviceInfo.textContent = "切断されました";
         if (btnBleConnect) btnBleConnect.classList.remove("hidden");
+        if (btnBleFast) btnBleFast.classList.remove("hidden");
         if (btnBleDisconnect) btnBleDisconnect.classList.add("hidden");
         if (watchBadge) {
             watchBadge.className = "badge watch-badge";
@@ -1874,8 +1876,8 @@ document.addEventListener("DOMContentLoaded", () => {
         showTemporaryToast("⌚ スマートウォッチとのBluetooth接続が切断されました");
     }
 
-    async function connectBLESmartwatch() {
-        console.log("[BLE Smartwatch] 🚀 connectBLESmartwatch triggered.");
+    async function connectBLESmartwatch(fastMode = false) {
+        console.log(`[BLE Smartwatch] 🚀 connectBLESmartwatch triggered (fastMode: ${fastMode})`);
         if (!navigator.bluetooth) {
             console.error("[BLE Smartwatch] ❌ Web Bluetooth API is NOT supported on this browser/platform.");
             alert("お使いのブラウザは Web Bluetooth API に対応していません。\n(Android Chrome / Edge 等の対応ブラウザをご利用いただくか、シミュレータ機能をお試しください)");
@@ -1883,9 +1885,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
-            if (bleDeviceInfo) bleDeviceInfo.textContent = "B16Pro をスキャン中... (ポップアップからウォッチを選択してください)";
-            console.log("[BLE Smartwatch] 🚀 Starting targeted scan for B16Pro...");
-
             const fitCloudCandidateServices = [
                 'heart_rate',
                 'battery_service',
@@ -1905,8 +1904,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
             ];
 
-            // 1. First attempt: Fast targeted scan for B16Pro (0.5s)
-            try {
+            if (fastMode) {
+                if (bleDeviceInfo) bleDeviceInfo.textContent = "B16Pro を高速スキャン中... (一覧から選択してください)";
+                console.log("[BLE Smartwatch] 🚀 Starting targeted scan for B16Pro...");
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [
                         { namePrefix: 'B16' },
@@ -1915,16 +1915,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     ],
                     optionalServices: fitCloudCandidateServices
                 });
-            } catch (filterErr) {
-                if (filterErr.name === "NotFoundError" && !filterErr.message?.includes("cancelled")) {
-                    console.warn("[BLE Smartwatch] Fast filter returned no device, falling back to acceptAllDevices...");
-                    bleDevice = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: fitCloudCandidateServices
-                    });
-                } else {
-                    throw filterErr;
-                }
+            } else {
+                if (bleDeviceInfo) bleDeviceInfo.textContent = "Bluetooth機器をスキャン中... (一覧から B16Pro を選択してください)";
+                console.log("[BLE Smartwatch] 🔍 Starting broad scan (acceptAllDevices)...");
+                bleDevice = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: fitCloudCandidateServices
+                });
             }
 
             const rawName = bleDevice.name || "";
@@ -2041,6 +2038,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }, 5000);
 
             if (btnBleConnect) btnBleConnect.classList.add("hidden");
+            if (btnBleFast) btnBleFast.classList.add("hidden");
             if (btnBleDisconnect) btnBleDisconnect.classList.remove("hidden");
             if (watchBadge) {
                 watchBadge.className = "badge watch-badge connected";
@@ -2084,7 +2082,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (btnBleConnect) {
-            btnBleConnect.addEventListener("click", connectBLESmartwatch);
+            btnBleConnect.addEventListener("click", () => connectBLESmartwatch(false));
+        }
+        if (btnBleFast) {
+            btnBleFast.addEventListener("click", () => connectBLESmartwatch(true));
         }
         if (btnBleDisconnect) {
             btnBleDisconnect.addEventListener("click", disconnectBLESmartwatch);
