@@ -97,6 +97,30 @@
                         </div>
                     </div>
 
+                    <!-- Google Fit Cloud Sync & Smartwatch Banner -->
+                    <div class="card full-width google-fit-status-card">
+                        <div class="google-fit-banner">
+                            <div class="gfit-info">
+                                <span class="gfit-icon">⌚</span>
+                                <div class="gfit-text">
+                                    <div class="gfit-title">
+                                        <strong>Google Fit（Google LLC）クラウド自動見守り連携</strong>
+                                        <span id="gfit-sync-badge" class="badge badge-success">🟢 自動同期稼働中</span>
+                                    </div>
+                                    <div class="gfit-desc" id="gfit-sync-desc">
+                                        スマートウォッチ（B16Pro）から同期された心拍数・歩数・SpO2データをリアルタイムにカルテへ自動反映中
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="gfit-actions">
+                                <span id="gfit-last-sync-time" class="gfit-time">最終同期: 取得中...</span>
+                                <button id="gfit-manual-sync-btn" class="btn btn-primary btn-sm">
+                                    <span class="btn-icon">🔄</span> 今すぐGoogle Fitと同期
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Left: Recent Vitals -->
                     <div class="card">
                         <div class="card-header">
@@ -110,6 +134,7 @@
                                         <th>氏名</th>
                                         <th>測定時間</th>
                                         <th>心拍/SpO2</th>
+                                        <th>歩数</th>
                                         <th>体温</th>
                                         <th>血圧(上/下)</th>
                                         <th>体重</th>
@@ -117,7 +142,7 @@
                                 </thead>
                                 <tbody id="recent-vitals-tbody">
                                     <tr>
-                                        <td colspan="7" class="text-center">データを読み込んでいます...</td>
+                                        <td colspan="8" class="text-center">データを読み込んでいます...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -245,12 +270,15 @@
             <section id="tab-vitals" class="tab-content">
                 <div class="card">
                     <div class="card-header selection-bar">
-                        <h3>📈 バイタルサイン推移推移グラフ</h3>
+                        <h3>📈 バイタルサイン推移グラフ</h3>
                         <div class="selector">
                             <label for="vital-user-selector">利用者の選択:</label>
                             <select id="vital-user-selector">
                                 <option value="">-- 利用者を選択してください --</option>
                             </select>
+                            <button id="vitals-tab-sync-btn" class="btn btn-secondary btn-sm" style="margin-left: 10px;">
+                                🔄 Google Fit同期
+                            </button>
                         </div>
                     </div>
                     <div class="card-body">
@@ -258,7 +286,29 @@
                             チャートを表示するには、対象の利用者を選択してください。
                         </div>
                         <div id="vitals-chart-wrapper" class="chart-container hidden">
+                            <!-- Smartwatch Activity Summary Banner -->
+                            <div id="vitals-activity-summary-banner" class="activity-summary-banner">
+                                <div class="summary-kpis" id="vitals-summary-kpis">
+                                    <!-- Populated dynamically -->
+                                </div>
+                                <div class="summary-karte-text" id="vitals-summary-karte">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
                             <div class="chart-grid">
+                                <div class="chart-box">
+                                    <h4>❤️ 心拍数推移 (bpm) <span class="chart-sub">（スマートウォッチ／Google Fit）</span></h4>
+                                    <canvas id="heartRateChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>🚶 時間別歩数・活動量 (歩) <span class="chart-sub">（1時間ごとの歩行実績）</span></h4>
+                                    <canvas id="stepsChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>🫁 血中酸素飽和度 (SpO2 %)</h4>
+                                    <canvas id="spo2Chart"></canvas>
+                                </div>
                                 <div class="chart-box">
                                     <h4>体温の推移 (℃)</h4>
                                     <canvas id="tempChart"></canvas>

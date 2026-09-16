@@ -62,7 +62,8 @@ def db_init():
                 bp_dia INTEGER,
                 heart_rate INTEGER,                -- Heart Rate in bpm (from Smartwatch)
                 spo2 INTEGER,                      -- Blood Oxygen Saturation in % (from Smartwatch)
-                source TEXT DEFAULT 'voice',       -- 'voice', 'smartwatch_ble', 'simulator', 'manual'
+                steps INTEGER,                     -- Step count (from Smartwatch/Google Fit)
+                source TEXT DEFAULT 'voice',       -- 'voice', 'smartwatch_ble', 'simulator', 'manual', 'google_fit'
                 raw_text TEXT,                     -- Encrypted
                 is_alert INTEGER DEFAULT 0,
                 alert_reason TEXT,
@@ -77,6 +78,8 @@ def db_init():
             cursor.execute("ALTER TABLE vital_records ADD COLUMN heart_rate INTEGER")
         if "spo2" not in existing_vital_cols:
             cursor.execute("ALTER TABLE vital_records ADD COLUMN spo2 INTEGER")
+        if "steps" not in existing_vital_cols:
+            cursor.execute("ALTER TABLE vital_records ADD COLUMN steps INTEGER")
         if "source" not in existing_vital_cols:
             cursor.execute("ALTER TABLE vital_records ADD COLUMN source TEXT DEFAULT 'voice'")
         conn.commit()
@@ -467,15 +470,16 @@ def add_vital_record(
     alert_reason: str = "",
     heart_rate: Optional[int] = None,
     spo2: Optional[int] = None,
+    steps: Optional[int] = None,
     source: str = "voice"
 ):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         timestamp = datetime.now().isoformat()
         cursor.execute(
-            """INSERT INTO vital_records (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, source, raw_text, is_alert, alert_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, source, encrypt_data(raw_text), is_alert, alert_reason)
+            """INSERT INTO vital_records (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, steps, source, raw_text, is_alert, alert_reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, timestamp, temperature, weight, bp_sys, bp_dia, heart_rate, spo2, steps, source, encrypt_data(raw_text), is_alert, alert_reason)
         )
         conn.commit()
         return cursor.lastrowid

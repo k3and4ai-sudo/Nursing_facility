@@ -948,3 +948,131 @@ input:focus, select:focus, textarea:focus {
     border-top: 1px solid var(--border-color);
     margin: 16px 0;
 }
+
+/* Google Fit & Smartwatch Cloud Sync Styles */
+.google-fit-status-card {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    margin-bottom: 12px;
+}
+
+.google-fit-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 6px 4px;
+}
+
+.gfit-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gfit-icon {
+    font-size: 26px;
+    background: rgba(59, 130, 246, 0.15);
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.gfit-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-light);
+}
+
+.gfit-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.gfit-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.gfit-time {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.badge-gfit {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+/* Activity Summary & KPIs Banner in Vitals Tab */
+.activity-summary-banner {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.summary-kpis {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.kpi-card {
+    flex: 1;
+    min-width: 140px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.kpi-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.kpi-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-light);
+}
+
+.kpi-val.highlight {
+    color: #38bdf8;
+}
+
+.summary-karte-text {
+    background: rgba(0, 0, 0, 0.25);
+    border-left: 3px solid #3b82f6;
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+}
+
+.chart-sub {
+    font-size: 11px;
+    font-weight: normal;
+    color: var(--text-muted);
+}
+

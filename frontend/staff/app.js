@@ -21,6 +21,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let tempChart = null;
     let bpChart = null;
     let weightChart = null;
+    let heartRateChart = null;
+    let stepsChart = null;
+    let spo2Chart = null;
 
     // WebSocket Reference
     let ws = null;
@@ -36,8 +39,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // UI Elements - Dashboard
     const alertList = document.getElementById("alert-list");
     const recentVitalsTbody = document.getElementById("recent-vitals-tbody");
-    const summaryList = document.getElementById("summary-list");
     const clearAlertsBtn = document.getElementById("clear-alerts-btn");
+
+    // UI Elements - Google Fit Cloud Sync
+    const gfitSyncBadge = document.getElementById("gfit-sync-badge");
+    const gfitSyncDesc = document.getElementById("gfit-sync-desc");
+    const gfitLastSyncTime = document.getElementById("gfit-last-sync-time");
+    const gfitManualSyncBtn = document.getElementById("gfit-manual-sync-btn");
+    const vitalsTabSyncBtn = document.getElementById("vitals-tab-sync-btn");
+    const vitalsSummaryKpis = document.getElementById("vitals-summary-kpis");
+    const vitalsSummaryKarte = document.getElementById("vitals-summary-karte");
 
     // UI Elements - Patient Master
     const patientForm = document.getElementById("patient-form");
@@ -327,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadAllData() {
         await fetchTerminalStatuses();
         loadRecentVitals();
+        loadGoogleFitStatus();
         loadPatients();
         populateVitalsSelector();
         loadIntercomRooms();
@@ -380,6 +392,82 @@ document.addEventListener("DOMContentLoaded", () => {
         window.open(lineUrl, "_blank");
     }
 
+    // Google Fit Status & Sync Handlers
+    async function loadGoogleFitStatus() {
+        try {
+            const res = await fetch("/api/google-fit/status");
+            const data = await res.json();
+            if (data.status === "configured") {
+                if (gfitSyncBadge) {
+                    gfitSyncBadge.className = "badge badge-success";
+                    gfitSyncBadge.textContent = "🟢 自動同期稼働中";
+                }
+                if (gfitSyncDesc) {
+                    gfitSyncDesc.textContent = "スマートウォッチ（B16Pro）から同期された心拍数・歩数・SpO2データをリアルタイムにカルテへ自動反映中";
+                }
+            } else {
+                if (gfitSyncBadge) {
+                    gfitSyncBadge.className = "badge badge-warning";
+                    gfitSyncBadge.textContent = "⚪ 未認証";
+                }
+                if (gfitSyncDesc) {
+                    gfitSyncDesc.textContent = "Google Fit credentials または token が未設定です。";
+                }
+            }
+        } catch (err) {
+            console.error("Error loading Google Fit status:", err);
+        }
+    }
+
+    async function handleGoogleFitManualSync() {
+        const targetUserId = (vitalUserSelector && vitalUserSelector.value) ? vitalUserSelector.value : 1;
+        const origText = gfitManualSyncBtn ? gfitManualSyncBtn.innerHTML : "";
+        if (gfitManualSyncBtn) {
+            gfitManualSyncBtn.disabled = true;
+            gfitManualSyncBtn.innerHTML = '<span class="btn-icon">⏳</span> 同期中...';
+        }
+        if (vitalsTabSyncBtn) {
+            vitalsTabSyncBtn.disabled = true;
+            vitalsTabSyncBtn.textContent = "⏳ 同期中...";
+        }
+
+        try {
+            const res = await fetch(`/api/users/${targetUserId}/google-fit/sync`, { method: "POST" });
+            const data = await res.json();
+            console.log("Google Fit Manual Sync response:", data);
+
+            if (gfitLastSyncTime) {
+                const now = new Date();
+                gfitLastSyncTime.textContent = `最終同期: ${now.toLocaleTimeString("ja-JP", {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
+            }
+
+            await loadRecentVitals();
+            await loadGoogleFitStatus();
+            if (vitalUserSelector && vitalUserSelector.value) {
+                await loadVitalCharts(vitalUserSelector.value);
+            }
+        } catch (err) {
+            console.error("Manual Google Fit sync failed:", err);
+            alert("Google Fit同期中にエラーが発生しました: " + err.message);
+        } finally {
+            if (gfitManualSyncBtn) {
+                gfitManualSyncBtn.disabled = false;
+                gfitManualSyncBtn.innerHTML = origText;
+            }
+            if (vitalsTabSyncBtn) {
+                vitalsTabSyncBtn.disabled = false;
+                vitalsTabSyncBtn.textContent = "🔄 Google Fit同期";
+            }
+        }
+    }
+
+    if (gfitManualSyncBtn) {
+        gfitManualSyncBtn.addEventListener("click", handleGoogleFitManualSync);
+    }
+    if (vitalsTabSyncBtn) {
+        vitalsTabSyncBtn.addEventListener("click", handleGoogleFitManualSync);
+    }
+
     // 4. Dashboard Logic & Alerts
     async function loadRecentVitals() {
         try {
@@ -388,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             recentVitalsTbody.innerHTML = "";
             if (data.length === 0) {
-                recentVitalsTbody.innerHTML = `<tr><td colspan="7" class="text-center">バイタル記録はありません</td></tr>`;
+                recentVitalsTbody.innerHTML = `<tr><td colspan="8" class="text-center">バイタル記録はありません</td></tr>`;
                 return;
             }
 
@@ -401,11 +489,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 const spo2Part = v.spo2 ? `🫁 ${v.spo2}%` : '';
                 const hrSpo2 = (hrPart || spo2Part) ? `${hrPart} ${spo2Part}`.trim() : '-';
 
+                // Step count display
+                let stepsHtml = '-';
+                if (v.steps) {
+                    stepsHtml = `<strong>🚶 ${Number(v.steps).toLocaleString()}</strong> <small>歩</small>`;
+                }
+
+                // Source badge
+                let sourceBadge = '';
+                if (v.source === 'google_fit') {
+                    sourceBadge = ' <span class="badge-gfit">G-Fit</span>';
+                } else if (v.source === 'smartwatch_ble') {
+                    sourceBadge = ' <span class="badge-gfit">BLE</span>';
+                }
+
                 tr.innerHTML = `
                     <td>${v.room_number || '-'}</td>
-                    <td><strong>${v.user_name}</strong></td>
+                    <td><strong>${v.user_name}</strong>${sourceBadge}</td>
                     <td>${time}</td>
                     <td><strong>${hrSpo2}</strong></td>
+                    <td>${stepsHtml}</td>
                     <td>${v.temperature ? v.temperature + ' ℃' : '-'}</td>
                     <td>${v.bp_sys ? v.bp_sys + '/' + v.bp_dia + ' mmHg' : '-'}</td>
                     <td>${v.weight ? v.weight + ' kg' : '-'}</td>
@@ -413,15 +516,42 @@ document.addEventListener("DOMContentLoaded", () => {
                 recentVitalsTbody.appendChild(tr);
             });
 
-            // Rebuild summaries based on recent vital remarks
+            // Rebuild summaries based on recent vital remarks and Google Fit activity
             buildConversationsSummary(data);
         } catch (err) {
             console.error("Error loading recent vitals:", err);
         }
     }
 
-    function buildConversationsSummary(vitals) {
+    async function buildConversationsSummary(vitals) {
         summaryList.innerHTML = "";
+
+        // First: Fetch and insert Google Fit Daily Smartwatch Activity Report card
+        try {
+            const fitSummaryRes = await fetch("/api/users/1/google-fit/summary");
+            const fitSummary = await fitSummaryRes.json();
+            if (fitSummary && fitSummary.status === "success" && (fitSummary.steps > 0 || fitSummary.heart_rate)) {
+                const fitCard = document.createElement("div");
+                fitCard.className = "summary-card";
+                fitCard.style.border = "1px solid rgba(59, 130, 246, 0.4)";
+                fitCard.style.background = "linear-gradient(135deg, rgba(30, 58, 138, 0.15) 0%, rgba(15, 23, 42, 0.4) 100%)";
+                
+                fitCard.innerHTML = `
+                    <div class="summary-card-header">
+                        <h4>⌚ ${fitSummary.room_number ? fitSummary.room_number + '号室 ' : ''}${fitSummary.user_name}様 【スマートウォッチ活動日報】</h4>
+                        <span class="sentiment-badge positive">Google Fit 連携</span>
+                    </div>
+                    <div style="font-size:13px; line-height:1.5; color:#cbd5e1; margin-top:6px;">
+                        <div>🚶 <strong>本日累計歩数:</strong> ${Number(fitSummary.steps).toLocaleString()} 歩（${fitSummary.activity_status}）</div>
+                        <div>❤️ <strong>直近心拍・状態:</strong> ${fitSummary.heart_rate ? fitSummary.heart_rate + ' bpm' : '-'}（${fitSummary.vital_status}） / ${fitSummary.spo2 ? '🫁 SpO2: ' + fitSummary.spo2 + '%' : ''}</div>
+                        <div style="font-size:11px; color:#94a3b8; margin-top:4px;">${fitSummary.activity_comment}</div>
+                    </div>
+                `;
+                summaryList.appendChild(fitCard);
+            }
+        } catch (e) {
+            console.error("Error fetching Google Fit activity card:", e);
+        }
         
         // Group by user
         const userSummaryMap = {};
@@ -437,7 +567,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         const users = Object.keys(userSummaryMap);
-        if (users.length === 0) {
+        if (users.length === 0 && summaryList.children.length === 0) {
             summaryList.innerHTML = `<div class="no-data-msg">本日の会話データはありません</div>`;
             return;
         }
@@ -793,78 +923,223 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function loadVitalCharts(userId) {
         try {
-            const res = await fetch(`/api/users/${userId}/vitals`);
-            const records = await res.json();
-            
-            // Sort records by timestamp chronological
+            // 1. Fetch DB vitals, Google Fit trends, and Google Fit daily summary concurrently
+            const [vitalsRes, trendsRes, summaryRes] = await Promise.allSettled([
+                fetch(`/api/users/${userId}/vitals`),
+                fetch(`/api/users/${userId}/google-fit/trends`),
+                fetch(`/api/users/${userId}/google-fit/summary`)
+            ]);
+
+            const records = (vitalsRes.status === "fulfilled" && vitalsRes.value.ok) ? await vitalsRes.value.json() : [];
+            const trendsData = (trendsRes.status === "fulfilled" && trendsRes.value.ok) ? await trendsRes.value.json() : null;
+            const summaryData = (summaryRes.status === "fulfilled" && summaryRes.value.ok) ? await summaryRes.value.json() : null;
+
+            // 2. Render Google Fit Activity KPI Banner & Karte Entry
+            if (vitalsSummaryKpis && summaryData && summaryData.status === "success") {
+                vitalsSummaryKpis.innerHTML = `
+                    <div class="kpi-card">
+                        <div class="kpi-label">🚶 本日累計歩数</div>
+                        <div class="kpi-val highlight">${Number(summaryData.steps || 0).toLocaleString()} <span style="font-size:12px;">歩</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">❤️ 直近心拍数</div>
+                        <div class="kpi-val">${summaryData.heart_rate ? summaryData.heart_rate + ' <span style="font-size:12px;">bpm</span>' : '-'}</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">🫁 直近SpO2</div>
+                        <div class="kpi-val">${summaryData.spo2 ? summaryData.spo2 + ' <span style="font-size:12px;">%</span>' : '-'}</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">📋 活動状態評価</div>
+                        <div class="kpi-val" style="font-size:15px; color:#10b981;">${summaryData.activity_status || '未計測'}</div>
+                    </div>
+                `;
+            }
+            if (vitalsSummaryKarte && summaryData && summaryData.karte_entry) {
+                vitalsSummaryKarte.textContent = summaryData.karte_entry;
+            }
+
+            // 3. Process DB records
             records.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-            const labels = records.map(r => new Date(r.timestamp).toLocaleDateString("ja-JP") + " " + new Date(r.timestamp).toLocaleTimeString("ja-JP", {hour: '2-digit', minute:'2-digit'}));
+            const dbLabels = records.map(r => new Date(r.timestamp).toLocaleDateString("ja-JP", {month:'numeric', day:'numeric'}) + " " + new Date(r.timestamp).toLocaleTimeString("ja-JP", {hour: '2-digit', minute:'2-digit'}));
             const temps = records.map(r => r.temperature);
             const weights = records.map(r => r.weight);
             const sys = records.map(r => r.bp_sys);
             const dia = records.map(r => r.bp_dia);
+            const spo2Vals = records.map(r => r.spo2);
 
             // Destroy previous charts if exist
             if (tempChart) tempChart.destroy();
             if (bpChart) bpChart.destroy();
             if (weightChart) weightChart.destroy();
+            if (heartRateChart) heartRateChart.destroy();
+            if (stepsChart) stepsChart.destroy();
+            if (spo2Chart) spo2Chart.destroy();
 
-            // Draw Temp Chart
+            // 4. Draw Heart Rate Chart (bpm)
+            let hrLabels = [];
+            let hrValues = [];
+            if (trendsData && trendsData.status === "success" && trendsData.labels && trendsData.labels.length > 0) {
+                hrLabels = trendsData.labels;
+                hrValues = trendsData.heart_rates;
+            } else {
+                hrLabels = dbLabels;
+                hrValues = records.map(r => r.heart_rate);
+            }
+
+            const ctxHr = document.getElementById("heartRateChart");
+            if (ctxHr) {
+                heartRateChart = new Chart(ctxHr.getContext("2d"), {
+                    type: 'line',
+                    data: {
+                        labels: hrLabels,
+                        datasets: [{
+                            label: '心拍数 (bpm)',
+                            data: hrValues,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                            tension: 0.3,
+                            fill: true,
+                            spanGaps: true,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                min: 40,
+                                max: 130,
+                                title: { display: true, text: 'bpm' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 5. Draw Hourly Steps Chart (Bar Chart)
+            const ctxSteps = document.getElementById("stepsChart");
+            if (ctxSteps) {
+                const stepLabels = (trendsData && trendsData.labels) ? trendsData.labels : dbLabels;
+                const stepValues = (trendsData && trendsData.steps) ? trendsData.steps : records.map(r => r.steps || 0);
+
+                stepsChart = new Chart(ctxSteps.getContext("2d"), {
+                    type: 'bar',
+                    data: {
+                        labels: stepLabels,
+                        datasets: [{
+                            label: '時間別歩数 (歩)',
+                            data: stepValues,
+                            backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                            borderColor: '#0284c7',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: '歩' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 6. Draw SpO2 Chart (%)
+            const ctxSpo2 = document.getElementById("spo2Chart");
+            if (ctxSpo2) {
+                spo2Chart = new Chart(ctxSpo2.getContext("2d"), {
+                    type: 'line',
+                    data: {
+                        labels: dbLabels,
+                        datasets: [{
+                            label: '血中酸素飽和度 (SpO2 %)',
+                            data: spo2Vals,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                            tension: 0.2,
+                            fill: true,
+                            spanGaps: true,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                min: 88,
+                                max: 100,
+                                title: { display: true, text: '%' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 7. Draw Temp Chart
             const ctxTemp = document.getElementById("tempChart").getContext("2d");
             tempChart = new Chart(ctxTemp, {
                 type: 'line',
                 data: {
-                    labels,
+                    labels: dbLabels,
                     datasets: [{
                         label: '体温 (℃)',
                         data: temps,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
                         tension: 0.2,
-                        fill: true
+                        fill: true,
+                        spanGaps: true
                     }]
                 },
                 options: { responsive: true, scales: { y: { min: 34, max: 42 } } }
             });
 
-            // Draw BP Chart
+            // 8. Draw BP Chart
             const ctxBp = document.getElementById("bpChart").getContext("2d");
             bpChart = new Chart(ctxBp, {
                 type: 'line',
                 data: {
-                    labels,
+                    labels: dbLabels,
                     datasets: [
                         {
                             label: '最高血圧 (mmHg)',
                             data: sys,
                             borderColor: '#3b82f6',
-                            tension: 0.1
+                            tension: 0.1,
+                            spanGaps: true
                         },
                         {
                             label: '最低血圧 (mmHg)',
                             data: dia,
-                            borderColor: '#10b981',
-                            tension: 0.1
+                            borderColor: '#6366f1',
+                            tension: 0.1,
+                            spanGaps: true
                         }
                     ]
                 },
                 options: { responsive: true, scales: { y: { min: 40, max: 200 } } }
             });
 
-            // Draw Weight Chart
+            // 9. Draw Weight Chart
             const ctxWeight = document.getElementById("weightChart").getContext("2d");
             weightChart = new Chart(ctxWeight, {
                 type: 'line',
                 data: {
-                    labels,
+                    labels: dbLabels,
                     datasets: [{
                         label: '体重 (kg)',
                         data: weights,
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderColor: '#eab308',
+                        backgroundColor: 'rgba(234, 179, 8, 0.1)',
                         tension: 0.1,
-                        fill: true
+                        fill: true,
+                        spanGaps: true
                     }]
                 },
                 options: { responsive: true }

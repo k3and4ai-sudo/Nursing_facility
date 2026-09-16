@@ -242,8 +242,17 @@ def get_google_fit_status():
     return {
         "status": "configured" if (has_creds and has_token) else "unconfigured",
         "has_credentials": has_creds,
-        "has_token": has_token
+        "has_token": has_token,
+        "auto_sync": True
     }
+
+@app.get("/api/users/{user_id}/google-fit/summary")
+def get_user_google_fit_summary(user_id: int):
+    return google_fit.get_today_activity_summary(user_id)
+
+@app.get("/api/users/{user_id}/google-fit/trends")
+def get_user_google_fit_trends(user_id: int):
+    return google_fit.fetch_fit_hourly_trends(hours_back=24)
 
 @app.post("/api/users/{user_id}/google-fit/sync")
 async def sync_google_fit(user_id: int):
@@ -433,6 +442,31 @@ class ConnectionManager:
                 self.disconnect_user(terminal_id)
 
 manager = ConnectionManager()
+
+# Background Worker: Periodic Google Fit Auto-Sync
+async def google_fit_periodic_sync_loop():
+    print("[Google Fit Worker] Background auto-sync loop initialized.")
+    while True:
+        try:
+            if os.path.exists(google_fit.CREDENTIALS_FILE) and os.path.exists(google_fit.TOKEN_FILE):
+                users = db.get_all_users()
+                if users:
+                    target_user_id = users[0]["id"]
+                    res = await google_fit.sync_user_google_fit(
+                        user_id=target_user_id,
+                        broadcast_callback=manager.broadcast_to_staff
+                    )
+                    if res.get("status") == "success":
+                        print(f"[Google Fit Worker] Auto-synced user {target_user_id}: HR={res.get('heart_rate')}, SpO2={res.get('spo2')}, Steps={res.get('steps')}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[Google Fit Worker] Error in sync loop: {e}")
+        await asyncio.sleep(300)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(google_fit_periodic_sync_loop())
 
 @app.get("/api/terminals/status")
 def get_terminal_statuses():
