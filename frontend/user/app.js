@@ -187,8 +187,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // Instant client-side trigger for confidential recording stop/resume
-            const STOP_KEYWORDS = ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで"];
-            const RESUME_KEYWORDS = ["記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻", "普通の会話に戻"];
+            const STOP_KEYWORDS = [
+                "ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて",
+                "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止",
+                "録音を停止", "記録しないで", "記録やめて", "きろくていし"
+            ];
+            const RESUME_KEYWORDS = [
+                "記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻",
+                "普通の会話に戻", "録音再開", "録音を再開", "記録していい", "きろくさいかい"
+            ];
 
             if (STOP_KEYWORDS.some(k => clean.includes(k))) {
                 console.log("[SpeechRec Confidential Mode]: Instant client stop trigger:", clean);
@@ -654,6 +661,30 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log("[Gemini Live Voice]: Screen already switched recently (within 4s) - ignoring Gemini Live command:", rawText);
                 }
 
+                // Detect Gemini Live recording commands
+                const isToStopRec = (
+                    rawText.includes("会話記録を停止") ||
+                    rawText.includes("会話記録の停止") ||
+                    rawText.includes("記録停止") ||
+                    rawText.includes("記録を停止")
+                );
+                const isToResumeRec = (
+                    rawText.includes("会話記録を再開") ||
+                    rawText.includes("会話記録の再開") ||
+                    rawText.includes("記録再開") ||
+                    rawText.includes("記録を再開")
+                );
+
+                if (Date.now() - lastRecordingChangeTime > 4000) {
+                    if (isToStopRec) {
+                        console.log("[Gemini Live Voice]: Detected recording stop command from Gemini speech:", rawText);
+                        handleRecordingStatus(false, "会話記録停止");
+                    } else if (isToResumeRec) {
+                        console.log("[Gemini Live Voice]: Detected recording resume command from Gemini speech:", rawText);
+                        handleRecordingStatus(true, "会話記録再開");
+                    }
+                }
+
                 // Filter out the internal command preamble for cleaner speech box display
                 const cleanText = rawText.replace(/みまもりさん[へ]?業務連絡[、,][^。.\n]+[。.・\n]?/g, "").trim();
 
@@ -687,6 +718,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const thought = (data.thought || "").toLowerCase();
                 const isThoughtSimple = data.thought && (data.thought.includes("単純画面に切り替") || data.thought.includes("画面切り替") || data.thought.includes("シンプル画面に切り替") || thought.includes("simple screen") || thought.includes("initiating screen transition"));
                 const isThoughtDetailed = data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"));
+                const isThoughtStopRec = data.thought && (data.thought.includes("会話記録を停止") || data.thought.includes("記録停止") || thought.includes("conversation halt") || thought.includes("cease recording") || thought.includes("stop recording"));
+                const isThoughtResumeRec = data.thought && (data.thought.includes("会話記録を再開") || data.thought.includes("記録再開") || thought.includes("resume recording"));
 
                 if (Date.now() - lastUIModeChangeTime > 4000) {
                     if (isThoughtSimple) {
@@ -698,6 +731,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 } else if (isThoughtSimple || isThoughtDetailed) {
                     console.log("[Gemini Live Thought]: Screen already switched recently (within 4s) - ignoring thought command:", data.thought);
+                }
+
+                if (Date.now() - lastRecordingChangeTime > 4000) {
+                    if (isThoughtStopRec) {
+                        console.log("[Gemini Live Thought]: Detected recording stop in thought:", data.thought);
+                        handleRecordingStatus(false, "会話記録停止");
+                    } else if (isThoughtResumeRec) {
+                        console.log("[Gemini Live Thought]: Detected recording resume in thought:", data.thought);
+                        handleRecordingStatus(true, "会話記録再開");
+                    }
                 }
             } else if (data.type === "guardrail_result") {
                 handleGuardrailResult(data);

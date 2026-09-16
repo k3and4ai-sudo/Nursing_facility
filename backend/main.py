@@ -1585,7 +1585,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
-        is_confidential_request = any(k in text_to_check for k in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて"])
+        is_confidential_request = any(k in text_to_check for k in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "記録停止", "記録を停止", "録音停止", "録音を停止"])
         is_pii = (status == "ALERT") and not is_confidential_request and any(k in summary or k in detail for k in ["個人情報", "口座", "住所", "電話", "名前", "氏名"])
         if is_pii:
             print(f"[LIVE PII GUARDRAIL TRIGGERED BY LLM] ({terminal_id}): {summary} - {detail}")
@@ -1635,8 +1635,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         }))
 
         # 2. Check for confidential recording stop / resume triggers directly from Whisper STT
-        confidential_stop_words = ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで"]
-        confidential_resume_words = ["記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻", "普通の会話に戻"]
+        confidential_stop_words = [
+            "ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて",
+            "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止",
+            "録音を停止", "広く停止"
+        ]
+        confidential_resume_words = [
+            "記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻",
+            "普通の会話に戻", "録音再開", "録音を再開"
+        ]
 
         if any(w in transcribed_text for w in confidential_stop_words):
             print(f"[Whisper Confidential Mode]: Recording pause triggered by Whisper: '{transcribed_text}'")
@@ -1701,17 +1708,19 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 if user_text:
                     print(f"[Live Session EOS]: Received user text: '{user_text}'")
                     # Check for confidential / secret conversation recording pause triggers
-                    if any(w in user_text for w in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで"]):
+                    if any(w in user_text for w in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止", "録音を停止"]):
                         print(f"[Live Session Confidential Mode]: User initiated recording pause: '{user_text}'")
                         session.recording_active = False
+                        session.last_recording_time = time.time()
                         await websocket.send_json({
                             "type": "recording_status",
                             "active": False,
                             "message": "会話記録停止"
                         })
-                    elif any(w in user_text for w in ["記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "普通の会話に戻"]):
+                    elif any(w in user_text for w in ["記録再開", "記録を再開", "内緒話はおしまい", "秘密はおしまい", "通常の会話に戻", "普通の会話に戻", "録音再開", "録音を再開"]):
                         print(f"[Live Session Confidential Mode]: User initiated recording resume: '{user_text}'")
                         session.recording_active = True
+                        session.last_recording_time = time.time()
                         await websocket.send_json({
                             "type": "recording_status",
                             "active": True,

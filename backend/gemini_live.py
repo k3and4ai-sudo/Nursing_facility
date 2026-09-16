@@ -468,6 +468,43 @@ class GeminiLiveSession:
                             print(f"[Gemini Live Session]: Detected detailed mode command in text/thought: '{text_val}'")
                             self.notify_ui_mode_changed("detailed")
 
+                        # Detect Mimamori-san recording commands from Gemini speech or thought (with duplicate suppression)
+                        is_to_stop_recording = (
+                            "会話記録を停止" in text_val or 
+                            "会話記録の停止" in text_val or 
+                            "記録停止" in text_val or 
+                            "記録を停止" in text_val or
+                            "conversation halt" in text_lower or
+                            "cease recording" in text_lower or
+                            "stop recording" in text_lower
+                        )
+                        is_to_resume_recording = (
+                            "会話記録を再開" in text_val or 
+                            "会話記録の再開" in text_val or 
+                            "記録再開" in text_val or 
+                            "記録を再開" in text_val or
+                            "resume recording" in text_lower
+                        )
+
+                        if is_to_stop_recording:
+                            if self.recording_active and (now - self.last_recording_time >= 4.0):
+                                print(f"[Gemini Live Session]: Detected confidential recording stop command in text/thought: '{text_val}'")
+                                self.recording_active = False
+                                self.last_recording_time = now
+                                if self.on_recording_status_changed:
+                                    self.on_recording_status_changed(False, "会話記録停止")
+                            else:
+                                print(f"[Gemini Live Session]: Already in stopped recording state - ignoring duplicate command: '{text_val}'")
+                        elif is_to_resume_recording:
+                            if not self.recording_active and (now - self.last_recording_time >= 4.0):
+                                print(f"[Gemini Live Session]: Detected recording resume command in text/thought: '{text_val}'")
+                                self.recording_active = True
+                                self.last_recording_time = now
+                                if self.on_recording_status_changed:
+                                    self.on_recording_status_changed(True, "会話記録再開")
+                            else:
+                                print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
+
                         if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
                             print(f"[Gemini Live Session Filtered Thought]: {text_val}")
                             if self.on_thought_received:
@@ -475,26 +512,6 @@ class GeminiLiveSession:
                             continue
                         if text_val and self.on_text_received:
                             self.on_text_received(text_val)
-
-                        # Detect Mimamori-san recording commands from Gemini speech (with duplicate suppression)
-                        if "会話記録を停止" in text_val or "会話記録の停止" in text_val:
-                            if self.recording_active and (now - self.last_recording_time >= 4.0):
-                                print(f"[Gemini Live Session]: Detected confidential recording stop command: '{text_val}'")
-                                self.recording_active = False
-                                self.last_recording_time = now
-                                if self.on_recording_status_changed:
-                                    self.on_recording_status_changed(False, "会話記録停止")
-                            else:
-                                print(f"[Gemini Live Session]: Already in stopped recording state - ignoring duplicate command: '{text_val}'")
-                        elif "会話記録を再開" in text_val or "会話記録の再開" in text_val:
-                            if not self.recording_active and (now - self.last_recording_time >= 4.0):
-                                print(f"[Gemini Live Session]: Detected recording resume command: '{text_val}'")
-                                self.recording_active = True
-                                self.last_recording_time = now
-                                if self.on_recording_status_changed:
-                                    self.on_recording_status_changed(True, "会話記録再開")
-                            else:
-                                print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
                     
                     # Audio chunk response
                     inline_data = part.get("inlineData", {})
