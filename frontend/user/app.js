@@ -193,16 +193,27 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // UI Mode voice commands (みまもりさん音声切り替え)
-            const TO_SIMPLE_COMMANDS = ["画面を簡単にして", "単純な画面にして", "シンプルな画面にして", "シンプル画面にして", "画面簡単にして", "単純画面にして", "かんたんながめんにして", "たんじゅんながめんにして"];
-            const TO_DETAILED_COMMANDS = ["詳細画面にして", "元の画面にして", "画面を戻して", "詳しい画面にして", "詳細な画面にして", "元の画面戻して", "しょうさいがめんにして"];
+            const TO_SIMPLE_COMMANDS = [
+                "画面を簡単にして", "単純な画面にして", "シンプルな画面にして", "シンプル画面にして",
+                "画面簡単にして", "単純画面にして", "かんたんながめんにして", "たんじゅんながめんにして",
+                "シンプル画面に切り替えて", "単純画面に切り替えて", "画面をシンプルにして", "画面シンプルにして",
+                "シンプル画面に切り替え", "単純画面に切り替え", "簡単にして", "シンプルにして"
+            ];
+            const TO_DETAILED_COMMANDS = [
+                "詳細画面にして", "元の画面にして", "画面を戻して", "詳しい画面にして",
+                "詳細な画面にして", "元の画面戻して", "しょうさいがめんにして", "詳細画面に切り替えて",
+                "詳細画面に切り替え", "元に戻して", "画面戻して"
+            ];
 
-            if (TO_SIMPLE_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "detailed" && clean.includes("画面を切り替えて"))) {
+            const isSwitchGeneric = (clean.includes("画面") && clean.includes("切り替")) || clean.includes("画面変えて");
+
+            if (TO_SIMPLE_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "detailed" && isSwitchGeneric)) {
                 console.log("[SpeechRec UI Mode]: Voice triggered Simple Mode:", clean);
                 setUIMode("simple", true);
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "simple" }));
                 }
-            } else if (TO_DETAILED_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "simple" && clean.includes("画面を切り替えて"))) {
+            } else if (TO_DETAILED_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "simple" && isSwitchGeneric)) {
                 console.log("[SpeechRec UI Mode]: Voice triggered Detailed Mode:", clean);
                 setUIMode("detailed", true);
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
@@ -603,10 +614,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 const rawText = data.text || "";
 
                 // Detect Gemini Live internal command speech
-                if (rawText.includes("みまもりさん業務連絡、単純画面に切り替") || rawText.includes("みまもりさん業務連絡、画面切り替") || rawText.includes("みまもりさん業務連絡、シンプル画面に切り替")) {
+                const isToSimple = (
+                    rawText.includes("単純画面に切り替") || 
+                    rawText.includes("画面切り替") || 
+                    rawText.includes("シンプル画面に切り替") ||
+                    (rawText.includes("業務連絡") && (rawText.includes("単純画面") || rawText.includes("シンプル画面")))
+                );
+                const isToDetailed = (
+                    rawText.includes("詳細画面に切り替") ||
+                    (rawText.includes("業務連絡") && rawText.includes("詳細画面"))
+                );
+
+                if (isToSimple) {
                     console.log("[Gemini Live Voice]: Detected simple mode command from Gemini speech:", rawText);
                     setUIMode("simple", true);
-                } else if (rawText.includes("みまもりさん業務連絡、詳細画面に切り替")) {
+                } else if (isToDetailed) {
                     console.log("[Gemini Live Voice]: Detected detailed mode command from Gemini speech:", rawText);
                     setUIMode("detailed", true);
                 }
@@ -641,6 +663,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 setLiveLampState("thinking");
                 setAvatarState("thinking");
                 if (statusText) statusText.textContent = "🧠 Gemini考え中...";
+                const thought = (data.thought || "").toLowerCase();
+                if (data.thought && (data.thought.includes("単純画面に切り替") || data.thought.includes("画面切り替") || data.thought.includes("シンプル画面に切り替") || thought.includes("simple screen") || thought.includes("initiating screen transition"))) {
+                    console.log("[Gemini Live Thought]: Detected simple mode in thought:", data.thought);
+                    setUIMode("simple", true);
+                } else if (data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"))) {
+                    console.log("[Gemini Live Thought]: Detected detailed mode in thought:", data.thought);
+                    setUIMode("detailed", true);
+                }
             } else if (data.type === "guardrail_result") {
                 handleGuardrailResult(data);
             } else if (data.type === "recording_status") {

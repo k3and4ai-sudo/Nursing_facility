@@ -429,6 +429,31 @@ class GeminiLiveSession:
                     # Text response or thought
                     if "text" in part and part["text"]:
                         text_val = part["text"].strip()
+
+                        # Detect Mimamori-san UI mode switching commands from Gemini speech or thought
+                        text_lower = text_val.lower()
+                        is_to_simple = (
+                            "単純画面に切り替" in text_val or 
+                            "画面切り替" in text_val or 
+                            "シンプル画面に切り替" in text_val or 
+                            "単純画面" in text_val or
+                            "simple screen" in text_lower or
+                            "screen transition" in text_lower
+                        )
+                        is_to_detailed = (
+                            "詳細画面に切り替" in text_val or 
+                            "詳細画面" in text_val or
+                            "detailed screen" in text_lower
+                        )
+                        if is_to_simple:
+                            print(f"[Gemini Live Session]: Detected simple mode command in text/thought: '{text_val}'")
+                            if self.on_ui_mode_changed:
+                                self.on_ui_mode_changed("simple")
+                        elif is_to_detailed:
+                            print(f"[Gemini Live Session]: Detected detailed mode command in text/thought: '{text_val}'")
+                            if self.on_ui_mode_changed:
+                                self.on_ui_mode_changed("detailed")
+
                         if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
                             print(f"[Gemini Live Session Filtered Thought]: {text_val}")
                             if self.on_thought_received:
@@ -448,16 +473,6 @@ class GeminiLiveSession:
                             self.recording_active = True
                             if self.on_recording_status_changed:
                                 self.on_recording_status_changed(True, "会話記録再開")
-
-                        # Detect Mimamori-san UI mode switching commands from Gemini speech
-                        if "単純画面に切り替" in text_val or "画面切り替" in text_val or "シンプル画面に切り替" in text_val:
-                            print(f"[Gemini Live Session]: Detected simple mode command: '{text_val}'")
-                            if self.on_ui_mode_changed:
-                                self.on_ui_mode_changed("simple")
-                        elif "詳細画面に切り替" in text_val:
-                            print(f"[Gemini Live Session]: Detected detailed mode command: '{text_val}'")
-                            if self.on_ui_mode_changed:
-                                self.on_ui_mode_changed("detailed")
                     
                     # Audio chunk response
                     inline_data = part.get("inlineData", {})

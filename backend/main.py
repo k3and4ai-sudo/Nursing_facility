@@ -1567,6 +1567,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             **res
         })
 
+        # 1-1. Immediate voice command detection for UI Mode switching
+        to_simple = any(k in text_to_check for k in ["シンプル画面", "単純な画面", "単純画面", "画面を簡単", "簡単な画面", "画面簡単", "シンプルにし", "単純にし"]) or ("切り替" in text_to_check and "画面" in text_to_check and "詳細" not in text_to_check)
+        to_detail = any(k in text_to_check for k in ["詳細画面", "元の画面", "画面を戻", "詳しい画面", "詳細な画面"])
+        if to_simple:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Simple Mode: '{text_to_check}'")
+            asyncio.create_task(on_live_ui_mode_change("simple"))
+        elif to_detail:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Detailed Mode: '{text_to_check}'")
+            asyncio.create_task(on_live_ui_mode_change("detailed"))
+
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
         is_confidential_request = any(k in text_to_check for k in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて"])
