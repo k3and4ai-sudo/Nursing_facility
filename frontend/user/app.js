@@ -2053,7 +2053,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             if (bleDeviceInfo) {
                 if (err.name === "NotFoundError") {
-                    bleDeviceInfo.textContent = "スキャンがキャンセルされたか、デバイスが見つかりませんでした。(スマホ側の専用アプリが接続していないか確認してください)";
+                    bleDeviceInfo.textContent = "スキャンがキャンセルされたか、デバイスが見つかりませんでした。(ウォッチ側面ボタン長押しで「再起動」をお試しください)";
                 } else if (err.name === "NetworkError" || err.message?.includes("connection failed")) {
                     bleDeviceInfo.textContent = "接続エラー: 専用アプリがBluetoothを占有している可能性があります。スマホ側アプリを一度終了して再試行してください。";
                 } else {
