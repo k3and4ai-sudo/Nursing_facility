@@ -1889,12 +1889,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 'heart_rate',
                 'battery_service',
                 'device_information',
+                'health_thermometer',
+                'pulse_oximeter',
                 '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro Main / Realtek
                 '0000fee8-0000-1000-8000-00805f9b34fb',
                 '0000fee9-0000-1000-8000-00805f9b34fb',
+                '0000feea-0000-1000-8000-00805f9b34fb',
                 '000055ff-0000-1000-8000-00805f9b34fb',
                 '0000ffe0-0000-1000-8000-00805f9b34fb',
+                '0000ffe1-0000-1000-8000-00805f9b34fb',
+                '0000ffe2-0000-1000-8000-00805f9b34fb',
                 '0000fff0-0000-1000-8000-00805f9b34fb',
+                '0000fff1-0000-1000-8000-00805f9b34fb',
+                '0000fff2-0000-1000-8000-00805f9b34fb',
+                '0000180d-0000-1000-8000-00805f9b34fb',
+                '0000180f-0000-1000-8000-00805f9b34fb',
+                '0000180a-0000-1000-8000-00805f9b34fb',
                 '6e400001-b5a3-f393-e0a9-e50e24dcca9e'  // Nordic UART
             ];
 
