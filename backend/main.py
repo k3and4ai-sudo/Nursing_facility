@@ -1488,6 +1488,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
     async def on_live_ui_mode_change(mode: str):
         try:
+            now = time.time()
+            if session.current_ui_mode == mode and (now - session.last_ui_mode_time < 4.0):
+                print(f"[Gemini Live Session ({terminal_id})]: Already in UI mode '{mode}' recently - skipping duplicate send.")
+                return
+            session.current_ui_mode = mode
+            session.last_ui_mode_time = now
             print(f"[Gemini Live Session ({terminal_id})]: Sending ui_mode_change -> {mode}")
             await websocket.send_json({
                 "type": "ui_mode_change",
@@ -1732,6 +1738,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
             elif msg_type == "resume_recording":
                 session.recording_active = True
+                session.last_recording_time = time.time()
                 await websocket.send_json({
                     "type": "recording_status",
                     "active": True,
@@ -1740,11 +1747,18 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
             elif msg_type == "stop_recording":
                 session.recording_active = False
+                session.last_recording_time = time.time()
                 await websocket.send_json({
                     "type": "recording_status",
                     "active": False,
                     "message": "会話記録停止"
                 })
+
+            elif msg_type == "client_ui_mode":
+                new_mode = data.get("mode", "simple")
+                session.current_ui_mode = new_mode
+                session.last_ui_mode_time = time.time()
+                print(f"[Client UI Mode Notification ({terminal_id})]: Synced mode -> {new_mode}")
 
             elif msg_type == "resume_live_session":
                 # User acknowledged warning and clicks resume

@@ -187,6 +187,9 @@ class GeminiLiveSession:
         self.on_recording_status_changed = on_recording_status_changed
         self.on_ui_mode_changed = on_ui_mode_changed
         self.recording_active = True
+        self.last_recording_time = 0.0
+        self.current_ui_mode = "simple"
+        self.last_ui_mode_time = 0.0
         self.history = history or []
         self.ws = None
         self.is_connected = False
@@ -195,6 +198,17 @@ class GeminiLiveSession:
         self.pending_chunks = []
         self._connect_lock = asyncio.Lock()
         self.api_key = os.getenv("GEMINI_API_KEY", getattr(config, "GEMINI_API_KEY", ""))
+
+    def notify_ui_mode_changed(self, mode: str):
+        """Updates internal UI mode state and triggers callback only if not redundant."""
+        now = time.time()
+        if self.current_ui_mode == mode and (now - self.last_ui_mode_time < 4.0):
+            print(f"[Gemini Live Session]: Already in UI mode '{mode}' recently - skipping duplicate signal.")
+            return
+        self.current_ui_mode = mode
+        self.last_ui_mode_time = now
+        if self.on_ui_mode_changed:
+            self.on_ui_mode_changed(mode)
 
     async def connect(self):
         """Establishes WebSocket connection to Gemini Live API and sends setup frame with history context."""
@@ -445,14 +459,13 @@ class GeminiLiveSession:
                             "詳細画面" in text_val or
                             "detailed screen" in text_lower
                         )
+                        now = time.time()
                         if is_to_simple:
                             print(f"[Gemini Live Session]: Detected simple mode command in text/thought: '{text_val}'")
-                            if self.on_ui_mode_changed:
-                                self.on_ui_mode_changed("simple")
+                            self.notify_ui_mode_changed("simple")
                         elif is_to_detailed:
                             print(f"[Gemini Live Session]: Detected detailed mode command in text/thought: '{text_val}'")
-                            if self.on_ui_mode_changed:
-                                self.on_ui_mode_changed("detailed")
+                            self.notify_ui_mode_changed("detailed")
 
                         if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
                             print(f"[Gemini Live Session Filtered Thought]: {text_val}")
@@ -462,17 +475,25 @@ class GeminiLiveSession:
                         if text_val and self.on_text_received:
                             self.on_text_received(text_val)
 
-                        # Detect Mimamori-san recording commands from Gemini speech
+                        # Detect Mimamori-san recording commands from Gemini speech (with duplicate suppression)
                         if "会話記録を停止" in text_val or "会話記録の停止" in text_val:
-                            print(f"[Gemini Live Session]: Detected confidential recording stop command: '{text_val}'")
-                            self.recording_active = False
-                            if self.on_recording_status_changed:
-                                self.on_recording_status_changed(False, "会話記録停止")
+                            if self.recording_active and (now - self.last_recording_time >= 4.0):
+                                print(f"[Gemini Live Session]: Detected confidential recording stop command: '{text_val}'")
+                                self.recording_active = False
+                                self.last_recording_time = now
+                                if self.on_recording_status_changed:
+                                    self.on_recording_status_changed(False, "会話記録停止")
+                            else:
+                                print(f"[Gemini Live Session]: Already in stopped recording state - ignoring duplicate command: '{text_val}'")
                         elif "会話記録を再開" in text_val or "会話記録の再開" in text_val:
-                            print(f"[Gemini Live Session]: Detected recording resume command: '{text_val}'")
-                            self.recording_active = True
-                            if self.on_recording_status_changed:
-                                self.on_recording_status_changed(True, "会話記録再開")
+                            if not self.recording_active and (now - self.last_recording_time >= 4.0):
+                                print(f"[Gemini Live Session]: Detected recording resume command: '{text_val}'")
+                                self.recording_active = True
+                                self.last_recording_time = now
+                                if self.on_recording_status_changed:
+                                    self.on_recording_status_changed(True, "会話記録再開")
+                            else:
+                                print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
                     
                     # Audio chunk response
                     inline_data = part.get("inlineData", {})

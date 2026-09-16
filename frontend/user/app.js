@@ -56,7 +56,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // ==========================================================
     // 🌿 UI Mode (Simple vs Detailed) Management
     // ==========================================================
-    let currentUIMode = localStorage.getItem("carelink_ui_mode") || "detailed";
+    // Default to 'simple' mode on startup
+    let currentUIMode = "simple";
+    let lastUIModeChangeTime = 0;
 
     function showUIToast(message, type = "simple") {
         let toast = document.getElementById("ui-mode-toast");
@@ -74,8 +76,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 2500);
     }
 
-    function setUIMode(mode, showToast = true) {
-        currentUIMode = mode === "simple" ? "simple" : "detailed";
+    function setUIMode(mode, showToast = true, force = false) {
+        const targetMode = mode === "simple" ? "simple" : "detailed";
+        
+        // Prevent duplicate switching if already in target mode (Idempotency)
+        if (!force && currentUIMode === targetMode) {
+            console.log("[Care-Link UI Mode]: Already in target mode:", targetMode, "(skipping duplicate)");
+            return false;
+        }
+
+        currentUIMode = targetMode;
+        lastUIModeChangeTime = Date.now();
         localStorage.setItem("carelink_ui_mode", currentUIMode);
         console.log("[Care-Link UI Mode]: Switched to", currentUIMode);
 
@@ -103,10 +114,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 showUIToast("📋 詳細画面に切り替えました", "detailed");
             }
         }
+        return true;
     }
 
-    // Initialize UI Mode on startup
-    setUIMode(currentUIMode, false);
+    // Always start in Simple Mode upon launching
+    setUIMode("simple", false, true);
 
     if (roomBadge) {
         roomBadge.style.cursor = "pointer";
@@ -180,14 +192,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (STOP_KEYWORDS.some(k => clean.includes(k))) {
                 console.log("[SpeechRec Confidential Mode]: Instant client stop trigger:", clean);
-                handleRecordingStatus(false, "会話記録停止");
-                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                const changed = handleRecordingStatus(false, "会話記録停止");
+                if (changed && liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "stop_recording", text: clean }));
                 }
             } else if (RESUME_KEYWORDS.some(k => clean.includes(k))) {
                 console.log("[SpeechRec Confidential Mode]: Instant client resume trigger:", clean);
-                handleRecordingStatus(true, "会話記録再開");
-                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                const changed = handleRecordingStatus(true, "会話記録再開");
+                if (changed && liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "resume_recording", text: clean }));
                 }
             }
@@ -209,14 +221,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (TO_SIMPLE_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "detailed" && isSwitchGeneric)) {
                 console.log("[SpeechRec UI Mode]: Voice triggered Simple Mode:", clean);
-                setUIMode("simple", true);
-                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                const changed = setUIMode("simple", true);
+                if (changed && liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "simple" }));
                 }
             } else if (TO_DETAILED_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "simple" && isSwitchGeneric)) {
                 console.log("[SpeechRec UI Mode]: Voice triggered Detailed Mode:", clean);
-                setUIMode("detailed", true);
-                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                const changed = setUIMode("detailed", true);
+                if (changed && liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "detailed" }));
                 }
             }
@@ -609,7 +621,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 playPCM24Chunk(data.data, data.sample_rate || 24000);
             } else if (data.type === "ui_mode_change") {
                 console.log("[LiveWS]: Received ui_mode_change ->", data.mode);
-                setUIMode(data.mode, true);
+                if (Date.now() - lastUIModeChangeTime < 4000 && currentUIMode === data.mode) {
+                    console.log("[LiveWS]: Already switched recently to", data.mode, "- skipping duplicate");
+                } else {
+                    setUIMode(data.mode, true);
+                }
             } else if (data.type === "live_response" || data.type === "live_text_output") {
                 const rawText = data.text || "";
 
@@ -625,12 +641,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     (rawText.includes("業務連絡") && rawText.includes("詳細画面"))
                 );
 
-                if (isToSimple) {
-                    console.log("[Gemini Live Voice]: Detected simple mode command from Gemini speech:", rawText);
-                    setUIMode("simple", true);
-                } else if (isToDetailed) {
-                    console.log("[Gemini Live Voice]: Detected detailed mode command from Gemini speech:", rawText);
-                    setUIMode("detailed", true);
+                // Ignore Gemini Live screen switching command if already switched within 4 seconds
+                if (Date.now() - lastUIModeChangeTime > 4000) {
+                    if (isToSimple) {
+                        console.log("[Gemini Live Voice]: Detected simple mode command from Gemini speech:", rawText);
+                        setUIMode("simple", true);
+                    } else if (isToDetailed) {
+                        console.log("[Gemini Live Voice]: Detected detailed mode command from Gemini speech:", rawText);
+                        setUIMode("detailed", true);
+                    }
+                } else if (isToSimple || isToDetailed) {
+                    console.log("[Gemini Live Voice]: Screen already switched recently (within 4s) - ignoring Gemini Live command:", rawText);
                 }
 
                 // Filter out the internal command preamble for cleaner speech box display
@@ -664,17 +685,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 setAvatarState("thinking");
                 if (statusText) statusText.textContent = "🧠 Gemini考え中...";
                 const thought = (data.thought || "").toLowerCase();
-                if (data.thought && (data.thought.includes("単純画面に切り替") || data.thought.includes("画面切り替") || data.thought.includes("シンプル画面に切り替") || thought.includes("simple screen") || thought.includes("initiating screen transition"))) {
-                    console.log("[Gemini Live Thought]: Detected simple mode in thought:", data.thought);
-                    setUIMode("simple", true);
-                } else if (data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"))) {
-                    console.log("[Gemini Live Thought]: Detected detailed mode in thought:", data.thought);
-                    setUIMode("detailed", true);
+                const isThoughtSimple = data.thought && (data.thought.includes("単純画面に切り替") || data.thought.includes("画面切り替") || data.thought.includes("シンプル画面に切り替") || thought.includes("simple screen") || thought.includes("initiating screen transition"));
+                const isThoughtDetailed = data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"));
+
+                if (Date.now() - lastUIModeChangeTime > 4000) {
+                    if (isThoughtSimple) {
+                        console.log("[Gemini Live Thought]: Detected simple mode in thought:", data.thought);
+                        setUIMode("simple", true);
+                    } else if (isThoughtDetailed) {
+                        console.log("[Gemini Live Thought]: Detected detailed mode in thought:", data.thought);
+                        setUIMode("detailed", true);
+                    }
+                } else if (isThoughtSimple || isThoughtDetailed) {
+                    console.log("[Gemini Live Thought]: Screen already switched recently (within 4s) - ignoring thought command:", data.thought);
                 }
             } else if (data.type === "guardrail_result") {
                 handleGuardrailResult(data);
             } else if (data.type === "recording_status") {
-                handleRecordingStatus(data.active, data.message);
+                if (Date.now() - lastRecordingChangeTime < 4000 && isCurrentRecordingActive === data.active) {
+                    console.log("[LiveWS]: Recording status already switched recently - skipping duplicate server message");
+                } else {
+                    handleRecordingStatus(data.active, data.message);
+                }
             }
         };
 
@@ -685,8 +717,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 🔒 Mimamori-san Recording Status & Popup Handler
-    function handleRecordingStatus(isActive, message) {
-        console.log("[Mimamori Recording Status]:", isActive, message);
+    let isCurrentRecordingActive = true;
+    let lastRecordingChangeTime = 0;
+
+    function handleRecordingStatus(isActive, message, force = false) {
+        // Prevent duplicate toggling if already in the target recording state
+        if (!force && isCurrentRecordingActive === isActive) {
+            console.log("[Mimamori Recording Status]: Already in target state:", isActive, "(skipping duplicate)");
+            return false;
+        }
+
+        isCurrentRecordingActive = isActive;
+        lastRecordingChangeTime = Date.now();
+        console.log("[Mimamori Recording Status]: Switched to", isActive, message);
         if (recordingStatusBadge) {
             if (isActive) {
                 recordingStatusBadge.className = "badge recording-active-badge";
@@ -741,6 +784,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 3500);
             }
         }
+        return true;
     }
 
     if (btnResumeRecording) {
