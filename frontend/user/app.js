@@ -1889,12 +1889,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 'heart_rate',
                 'battery_service',
                 'device_information',
-                0xfee7,
-                0xfee8,
-                0xfee9,
-                0x55ff,
-                0xffe0,
-                0xfff0,
                 '0000fee7-0000-1000-8000-00805f9b34fb', // FitCloudPro Main / Realtek
                 '0000fee8-0000-1000-8000-00805f9b34fb',
                 '0000fee9-0000-1000-8000-00805f9b34fb',
@@ -1947,7 +1941,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 allServices = await server.getPrimaryServices();
                 console.log("[BLE Smartwatch] 🎯 getPrimaryServices() found:", allServices.map(s => s.uuid));
             } catch (e) {
-                console.warn("[BLE Smartwatch] Bulk getPrimaryServices() error:", e);
+                console.warn("[BLE Smartwatch] Bulk getPrimaryServices() error:", e.name, e.message);
             }
 
             const discoveredServices = [];
@@ -2004,7 +1998,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                         }
                     } catch (svcErr) {
-                        // Service not implemented
+                        console.log(`[BLE Probing] Service ${svcUuid} not found/accessible:`, svcErr.name, svcErr.message);
                     }
                 }
             }
