@@ -53,6 +53,69 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     checkSystemInfo();
 
+    // ==========================================================
+    // 🌿 UI Mode (Simple vs Detailed) Management
+    // ==========================================================
+    let currentUIMode = localStorage.getItem("carelink_ui_mode") || "detailed";
+
+    function showUIToast(message, type = "simple") {
+        let toast = document.getElementById("ui-mode-toast");
+        if (!toast) {
+            toast = document.createElement("div");
+            toast.id = "ui-mode-toast";
+            toast.className = "ui-mode-toast";
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.className = `ui-mode-toast ${type} show`;
+        clearTimeout(window.uiToastTimer);
+        window.uiToastTimer = setTimeout(() => {
+            toast.classList.remove("show");
+        }, 2500);
+    }
+
+    function setUIMode(mode, showToast = true) {
+        currentUIMode = mode === "simple" ? "simple" : "detailed";
+        localStorage.setItem("carelink_ui_mode", currentUIMode);
+        console.log("[Care-Link UI Mode]: Switched to", currentUIMode);
+
+        if (currentUIMode === "simple") {
+            document.body.classList.add("simple-mode");
+            try {
+                if (window.eruda) {
+                    window.eruda.hide();
+                    const erudaEl = document.getElementById("eruda");
+                    if (erudaEl) erudaEl.style.display = "none";
+                }
+            } catch (e) {}
+            if (showToast) {
+                showUIToast("🌿 シンプル画面に切り替えました", "simple");
+            }
+        } else {
+            document.body.classList.remove("simple-mode");
+            try {
+                if (window.eruda) {
+                    const erudaEl = document.getElementById("eruda");
+                    if (erudaEl) erudaEl.style.display = "";
+                }
+            } catch (e) {}
+            if (showToast) {
+                showUIToast("📋 詳細画面に切り替えました", "detailed");
+            }
+        }
+    }
+
+    // Initialize UI Mode on startup
+    setUIMode(currentUIMode, false);
+
+    if (roomBadge) {
+        roomBadge.style.cursor = "pointer";
+        roomBadge.title = "タップでシンプル画面／詳細画面を切り替え";
+        roomBadge.addEventListener("click", () => {
+            setUIMode(currentUIMode === "simple" ? "detailed" : "simple", true);
+        });
+    }
+
     // Debug Mode (Gemini Live) Toggle Logic
     // Web Speech API for instant client-side text rendering & automatic EOS trigger
     let speechRec = null;
@@ -126,6 +189,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 handleRecordingStatus(true, "会話記録再開");
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "resume_recording", text: clean }));
+                }
+            }
+
+            // UI Mode voice commands (みまもりさん音声切り替え)
+            const TO_SIMPLE_COMMANDS = ["画面を簡単にして", "単純な画面にして", "シンプルな画面にして", "シンプル画面にして", "画面簡単にして", "単純画面にして", "かんたんながめんにして", "たんじゅんながめんにして"];
+            const TO_DETAILED_COMMANDS = ["詳細画面にして", "元の画面にして", "画面を戻して", "詳しい画面にして", "詳細な画面にして", "元の画面戻して", "しょうさいがめんにして"];
+
+            if (TO_SIMPLE_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "detailed" && clean.includes("画面を切り替えて"))) {
+                console.log("[SpeechRec UI Mode]: Voice triggered Simple Mode:", clean);
+                setUIMode("simple", true);
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "simple" }));
+                }
+            } else if (TO_DETAILED_COMMANDS.some(cmd => clean.includes(cmd)) || (currentUIMode === "simple" && clean.includes("画面を切り替えて"))) {
+                console.log("[SpeechRec UI Mode]: Voice triggered Detailed Mode:", clean);
+                setUIMode("detailed", true);
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "detailed" }));
                 }
             }
         };
@@ -421,6 +502,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     statusText.textContent = "考え中...";
                     break;
 
+                case "ui_mode_change":
+                    console.log("[User WS]: Received ui_mode_change ->", data.mode);
+                    setUIMode(data.mode, true);
+                    break;
+
                 case "processing_status":
                     handleProcessingStatus(data.status, data.stt_time, data.llm_time);
                     break;
@@ -510,16 +596,33 @@ document.addEventListener("DOMContentLoaded", () => {
                 setLiveLampState("speaking");
                 setAvatarState("speaking");
                 playPCM24Chunk(data.data, data.sample_rate || 24000);
+            } else if (data.type === "ui_mode_change") {
+                console.log("[LiveWS]: Received ui_mode_change ->", data.mode);
+                setUIMode(data.mode, true);
             } else if (data.type === "live_response" || data.type === "live_text_output") {
-                if (aiResponseBox && data.text) {
+                const rawText = data.text || "";
+
+                // Detect Gemini Live internal command speech
+                if (rawText.includes("みまもりさん業務連絡、単純画面に切り替") || rawText.includes("みまもりさん業務連絡、画面切り替") || rawText.includes("みまもりさん業務連絡、シンプル画面に切り替")) {
+                    console.log("[Gemini Live Voice]: Detected simple mode command from Gemini speech:", rawText);
+                    setUIMode("simple", true);
+                } else if (rawText.includes("みまもりさん業務連絡、詳細画面に切り替")) {
+                    console.log("[Gemini Live Voice]: Detected detailed mode command from Gemini speech:", rawText);
+                    setUIMode("detailed", true);
+                }
+
+                // Filter out the internal command preamble for cleaner speech box display
+                const cleanText = rawText.replace(/みまもりさん[へ]?業務連絡[、,][^。.\n]+[。.・\n]?/g, "").trim();
+
+                if (aiResponseBox && cleanText) {
                     if (data.type === "live_text_output") {
                         if (!aiResponseBox.textContent || aiResponseBox.textContent.includes("表示されます") || aiResponseBox.textContent.includes("待っています") || aiResponseBox.textContent.includes("リアルタイム音声応答中")) {
-                            aiResponseBox.textContent = data.text;
-                        } else if (!aiResponseBox.textContent.endsWith(data.text)) {
-                            aiResponseBox.textContent += data.text;
+                            aiResponseBox.textContent = cleanText;
+                        } else if (!aiResponseBox.textContent.endsWith(cleanText)) {
+                            aiResponseBox.textContent += cleanText;
                         }
                     } else {
-                        aiResponseBox.textContent = data.text;
+                        aiResponseBox.textContent = cleanText;
                     }
                     setLiveLampState("speaking");
                     setAvatarState("speaking");

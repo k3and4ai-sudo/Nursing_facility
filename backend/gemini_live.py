@@ -176,6 +176,7 @@ class GeminiLiveSession:
         on_text_received: Optional[Callable[[str], None]] = None,
         on_thought_received: Optional[Callable[[str], None]] = None,
         on_recording_status_changed: Optional[Callable[[bool, str], None]] = None,
+        on_ui_mode_changed: Optional[Callable[[str], None]] = None,
         history: Optional[list] = None
     ):
         self.user = user
@@ -184,6 +185,7 @@ class GeminiLiveSession:
         self.on_text_received = on_text_received
         self.on_thought_received = on_thought_received
         self.on_recording_status_changed = on_recording_status_changed
+        self.on_ui_mode_changed = on_ui_mode_changed
         self.recording_active = True
         self.history = history or []
         self.ws = None
@@ -258,7 +260,14 @@ class GeminiLiveSession:
                                         f"「みまもりさんへ業務連絡、会話記録を停止してください。」\n"
                                         f"続けて「何でもおっしゃってくださいね。誰にも言いませんよ」と優しく温かく秘密を受け止めてください。\n"
                                         f"また、利用者様が「記録を再開して」「内緒話はおしまい」などと言われた場合は、必ず第一声で正確に：\n"
-                                        f"「みまもりさんへ業務連絡、会話記録を再開してください。」\n"
+                                        f"「みまもりさんへ業務連絡、会話記録を再開してください。」\n\n"
+                                        f"【重要指示2-2：画面切り替え（シンプル画面・詳細画面）について】\n"
+                                        f"利用者様が「画面を簡単にして」「単純な画面にして」「画面を切り替えて」「シンプルな画面にして」「見やすくして」など、画面の簡略化や切り替えを希望された場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"「みまもりさん業務連絡、単純画面に切り替えてください。」\n"
+                                        f"続けて「はい、画面をシンプルな表示に切り替えましたよ」と優しく温かく伝えてください。\n"
+                                        f"また、利用者様が「詳細画面にして」「元の画面にして」「画面を戻して」「詳しい画面にして」などと言われた場合は、必ず第一声で正確に：\n"
+                                        f"「みまもりさん業務連絡、詳細画面に切り替えてください。」\n"
+                                        f"続けて「はい、詳細な画面に戻しましたよ」と伝えてください。\n\n"
                                         f"【重要指示3：回想法（昔の思い出話への誘導と情景の深掘り）】\n"
                                         f"利用者様が「昔の話をしたい」「昔のこと」「子供の頃」「若い頃」「運動会」「お祭り」など、過去の思い出について話された時、または昔話を希望された時は、単に「はい」「そうですね」と受動的に聞くだけで終わらせず、大歓迎の共感とともに【季節・いつ頃・情景・時間】を優しく尋ねて思い出を広げてください：\n"
                                         f"・季節や時期の質問：「わあ、ぜひ聞かせてください！それは春の頃でしたか、それとも秋など涼しい季節でしたか？」「何歳くらいの時のお話ですか？」\n"
@@ -439,6 +448,16 @@ class GeminiLiveSession:
                             self.recording_active = True
                             if self.on_recording_status_changed:
                                 self.on_recording_status_changed(True, "会話記録再開")
+
+                        # Detect Mimamori-san UI mode switching commands from Gemini speech
+                        if "単純画面に切り替" in text_val or "画面切り替" in text_val or "シンプル画面に切り替" in text_val:
+                            print(f"[Gemini Live Session]: Detected simple mode command: '{text_val}'")
+                            if self.on_ui_mode_changed:
+                                self.on_ui_mode_changed("simple")
+                        elif "詳細画面に切り替" in text_val:
+                            print(f"[Gemini Live Session]: Detected detailed mode command: '{text_val}'")
+                            if self.on_ui_mode_changed:
+                                self.on_ui_mode_changed("detailed")
                     
                     # Audio chunk response
                     inline_data = part.get("inlineData", {})

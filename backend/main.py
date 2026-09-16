@@ -1470,7 +1470,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "text": text
             })
             # Save Gemini message to database only if recording is active and not an internal command
-            if session.recording_active and not text.startswith("みまもりさんへ業務連絡"):
+            is_internal_command = text.startswith("みまもりさんへ業務連絡") or text.startswith("みまもりさん業務連絡")
+            if session.recording_active and not is_internal_command:
                 db.add_chat_message(user["id"], "ai", text)
         except Exception as e:
             print(f"Error sending live text to client ({terminal_id}): {e}")
@@ -1484,6 +1485,17 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             })
         except Exception as e:
             print(f"Error sending recording status ({terminal_id}): {e}")
+
+    async def on_live_ui_mode_change(mode: str):
+        try:
+            print(f"[Gemini Live Session ({terminal_id})]: Sending ui_mode_change -> {mode}")
+            await websocket.send_json({
+                "type": "ui_mode_change",
+                "mode": mode,
+                "message": "シンプル画面に切り替えました" if mode == "simple" else "詳細画面に切り替えました"
+            })
+        except Exception as e:
+            print(f"Error sending ui mode change ({terminal_id}): {e}")
 
     async def on_user_transcription(text: str):
         try:
@@ -1514,6 +1526,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         on_text_received=lambda txt: asyncio.create_task(on_gemini_text(txt)),
         on_thought_received=on_gemini_thought,
         on_recording_status_changed=lambda active, msg: asyncio.create_task(on_live_recording_status(active, msg)),
+        on_ui_mode_changed=lambda mode: asyncio.create_task(on_live_ui_mode_change(mode)),
         history=recent_history
     )
 

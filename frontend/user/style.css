@@ -1454,3 +1454,81 @@ body {
         padding-left: 14px;
     }
 }
+
+/* ==========================================================
+   🌿 シンプル画面 (Simple Mode) スタイル定義
+   ========================================================== */
+body.simple-mode #watch-badge,
+body.simple-mode #debug-badge,
+body.simple-mode #header-btn-copy-logs,
+body.simple-mode .guardrail-bottom,
+body.simple-mode .speech-box.ai-box,
+body.simple-mode #eruda,
+body.simple-mode .eruda-container,
+body.simple-mode .eruda-entry-btn {
+    display: none !important;
+}
+
+/* シンプル画面時のレイアウト調整 */
+body.simple-mode .guardrail-banner {
+    padding-bottom: 8px !important;
+    border-radius: 18px !important;
+}
+
+body.simple-mode .speech-display-container {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
+}
+
+body.simple-mode .speech-box.user-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 !important;
+}
+
+/* 画面モード切り替え トースト通知 */
+.ui-mode-toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(10px);
+    color: #ffffff;
+    padding: 12px 28px;
+    border-radius: 30px;
+    font-size: 1.15rem;
+    font-weight: 800;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    z-index: 99999;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ui-mode-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.ui-mode-toast.simple {
+    border-color: #10b981;
+    background: linear-gradient(135deg, rgba(6, 95, 70, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+}
+
+.ui-mode-toast.detailed {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+}
+
+/* ヘッダー部屋バッジのタップアフォーダンス */
+.header .badge#room-badge {
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+.header .badge#room-badge:active {
+    transform: scale(0.96);
+}
+
