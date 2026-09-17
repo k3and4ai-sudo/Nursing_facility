@@ -24,5 +24,6 @@ CareLink（ケアリンク）見守りシステムの4大ユーザーインタ�
 - `assets/manual_images/resident_room_annotated_detailed.png`
 - `assets/manual_images/staff_dashboard_annotated.png`
 - `assets/manual_images/family_portal_mobile_annotated.png`
-- `assets/manual_images/family_portal_pc_annotated.png`
+- `assets/manual_images/family_portal_pc_top_annotated.png`
+- `assets/manual_images/family_portal_pc_bottom_annotated.png`
 - `assets/manual_images/barber_mode_annotated.png`
