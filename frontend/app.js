@@ -107,9 +107,20 @@ document.addEventListener("DOMContentLoaded", () => {
     checkServerHealth();
     setInterval(checkServerHealth, 10000);
 
-    // Restore Session if exists
+    // Restore Session if exists or check URL demo param
+    const appUrlParams = new URLSearchParams(window.location.search);
+    const demoParam = appUrlParams.get("demo") || appUrlParams.get("role");
     const savedSession = sessionStorage.getItem("care_link_session");
-    if (savedSession) {
+
+    if (demoParam === "barber") {
+        performLogin("barber01", "barber123");
+    } else if (demoParam === "staff") {
+        performLogin("staff01", "staff123");
+    } else if (demoParam === "patient") {
+        performLogin("patient01", "patient123");
+    } else if (demoParam === "family") {
+        performLogin("family01", "family123");
+    } else if (savedSession) {
         currentUser = JSON.parse(savedSession);
         initMode(currentUser);
     }

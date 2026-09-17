@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 1440px; height: 1650px; position: relative; overflow: hidden; background: #faf8f5; }
+  .bg { width: 1440px; height: 1650px; display: block; }
+  .overlay { position: absolute; top: 0; left: 0; width: 1440px; height: 1650px; pointer-events: none; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.94);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 24px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+    border: 2px solid #e11d48;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #e11d48;
+    color: #fff;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .badge.orange { border-color: #ea580c; }
+  .badge.orange .badge-num { background: #ea580c; }
+  .badge.blue { border-color: #2563eb; }
+  .badge.blue .badge-num { background: #2563eb; }
+  .badge.emerald { border-color: #059669; }
+  .badge.emerald .badge-num { background: #059669; }
+
+  .box-highlight {
+    position: absolute;
+    border: 3.5px dashed #e11d48;
+    border-radius: 16px;
+    box-shadow: 0 0 15px rgba(225, 29, 72, 0.35);
+  }
+  .box-highlight.blue { border-color: #2563eb; box-shadow: 0 0 15px rgba(37, 99, 235, 0.35); }
+  .box-highlight.orange { border-color: #ea580c; box-shadow: 0 0 15px rgba(234, 88, 12, 0.35); }
+  .box-highlight.emerald { border-color: #059669; box-shadow: 0 0 15px rgba(5, 150, 105, 0.35); }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/family_portal_pc_etegami.png">
+
+  <!-- Boxes -->
+  <!-- 1. Resident Summary & Intercom -->
+  <div class="box-highlight blue" style="top: 70px; left: 140px; width: 1160px; height: 215px;"></div>
+  <!-- 2. AI Conversation Episode -->
+  <div class="box-highlight orange" style="top: 390px; left: 140px; width: 550px; height: 530px;"></div>
+  <!-- 3. Digital Postcard Artwork -->
+  <div class="box-highlight" style="top: 390px; left: 720px; width: 580px; height: 1120px;"></div>
+  <!-- 4. Season Bar -->
+  <div class="box-highlight" style="top: 485px; left: 745px; width: 530px; height: 55px; border-style: dotted;"></div>
+  <!-- 5. Action Buttons -->
+  <div class="box-highlight" style="top: 1375px; left: 745px; width: 530px; height: 60px; border-style: dotted;"></div>
+  <!-- 6. BGM Player -->
+  <div class="box-highlight emerald" style="top: 1445px; left: 745px; width: 530px; height: 65px;"></div>
+
+  <!-- Badges -->
+  <div class="badge blue" style="top: 45px; left: 160px;">
+    <span class="badge-num">1</span>
+    <span>入居者様の最新体調 ＆ 居室直通インターホン通話ボタン</span>
+  </div>
+
+  <div class="badge orange" style="top: 360px; left: 160px;">
+    <span class="badge-num">2</span>
+    <span>本日のAI会話エピソード（対話サマリー ＆ 会話の1コマ）</span>
+  </div>
+
+  <div class="badge" style="top: 360px; left: 740px;">
+    <span class="badge-num">3</span>
+    <span>昭和レトロ水彩画風「デジタル絵手紙」カード</span>
+  </div>
+
+  <div class="badge" style="top: 450px; right: 170px; font-size: 14px; padding: 6px 12px;">
+    <span class="badge-num" style="width:20px; height:20px; font-size:12px;">4</span>
+    <span>四季の切り替え（秋・春・夏・冬）</span>
+  </div>
+
+  <div class="badge" style="top: 1340px; right: 170px; font-size: 14px; padding: 6px 12px;">
+    <span class="badge-num" style="width:20px; height:20px; font-size:12px;">5</span>
+    <span>絵手紙の画像保存 ＆ ハガキ印刷</span>
+  </div>
+
+  <div class="badge emerald" style="top: 1520px; right: 170px; font-size: 14px; padding: 6px 12px;">
+    <span class="badge-num" style="width:20px; height:20px; font-size:12px;">6</span>
+    <span>和風アンビエントBGM再生</span>
+  </div>
+</body>
+</html>

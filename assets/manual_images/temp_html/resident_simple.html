@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 1280px; height: 800px; position: relative; overflow: hidden; background: #000; }
+  .bg { width: 1280px; height: 800px; display: block; }
+  .overlay { position: absolute; top: 0; left: 0; width: 1280px; height: 800px; pointer-events: none; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.95);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 7px 14px;
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    border: 2px solid #38bdf8;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #38bdf8;
+    color: #0f172a;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .badge.orange { border-color: #ea580c; }
+  .badge.orange .badge-num { background: #ea580c; color: #fff; }
+  .badge.green { border-color: #10b981; }
+  .badge.green .badge-num { background: #10b981; color: #fff; }
+  .badge.purple { border-color: #a855f7; }
+  .badge.purple .badge-num { background: #a855f7; color: #fff; }
+
+  .box-highlight {
+    position: absolute;
+    border: 3.5px dashed #38bdf8;
+    border-radius: 16px;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+  }
+  .box-highlight.orange { border-color: #ea580c; box-shadow: 0 0 14px rgba(234, 88, 12, 0.6); }
+  .box-highlight.green { border-color: #10b981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.5); }
+  .box-highlight.purple { border-color: #a855f7; box-shadow: 0 0 14px rgba(168, 85, 247, 0.5); }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/resident_room_tablet.png">
+
+  <!-- Highlight Boxes -->
+  <!-- 1. Room Badge -->
+  <div class="box-highlight" style="top: 25px; left: 35px; width: 210px; height: 75px; border-radius: 35px;"></div>
+  <!-- 2. Mic Button -->
+  <div class="box-highlight orange" style="top: 590px; left: 35px; width: 95px; height: 95px; border-radius: 50%;"></div>
+  <!-- 3. Waveform Box -->
+  <div class="box-highlight" style="top: 580px; left: 150px; width: 260px; height: 175px;"></div>
+  <!-- 4. Local AI Guard -->
+  <div class="box-highlight green" style="top: 360px; left: 485px; width: 480px; height: 68px;"></div>
+  <!-- 5. Subtitle Display Box -->
+  <div class="box-highlight purple" style="top: 550px; left: 485px; width: 480px; height: 155px;"></div>
+
+  <!-- Badges -->
+  <div class="badge" style="top: 110px; left: 35px;">
+    <span class="badge-num">1</span>
+    <span>お部屋番号とお名前（押すと詳細画面へ切替）</span>
+  </div>
+
+  <div class="badge orange" style="top: 535px; left: 30px; font-size: 15px; padding: 7px 15px;">
+    <span class="badge-num">2</span>
+    <span>★ マイクボタン（ここを押してお話しする）</span>
+  </div>
+
+  <div class="badge" style="top: 535px; left: 170px;">
+    <span class="badge-num">3</span>
+    <span>声の大きさが見える波形</span>
+  </div>
+
+  <div class="badge green" style="top: 310px; left: 490px;">
+    <span class="badge-num">4</span>
+    <span>みまもりくん（危険や異変がないか見守るAI）</span>
+  </div>
+
+  <div class="badge purple" style="top: 715px; left: 490px;">
+    <span class="badge-num">5</span>
+    <span>お話しした言葉が文字になって出る字幕ボックス</span>
+  </div>
+</body>
+</html>

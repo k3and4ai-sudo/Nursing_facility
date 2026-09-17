@@ -117,8 +117,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     }
 
-    // Always start in Simple Mode upon launching
-    setUIMode("simple", false, true);
+    // Start in Simple Mode by default unless ui=detailed is requested in URL
+    const initialUIMode = (urlParams.get("ui") === "detailed" || urlParams.get("mode") === "detailed") ? "detailed" : "simple";
+    setUIMode(initialUIMode, false, true);
 
     if (roomBadge) {
         roomBadge.style.cursor = "pointer";

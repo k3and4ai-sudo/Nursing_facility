@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 1440px; height: 900px; position: relative; overflow: hidden; background: #000; }
+  .bg { width: 1440px; height: 900px; display: block; }
+  .overlay { position: absolute; top: 0; left: 0; width: 1440px; height: 900px; pointer-events: none; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 7px 14px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    border: 2px solid #38bdf8;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #38bdf8;
+    color: #0f172a;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .badge.red { border-color: #ef4444; }
+  .badge.red .badge-num { background: #ef4444; color: #fff; }
+  .badge.green { border-color: #10b981; }
+  .badge.green .badge-num { background: #10b981; color: #fff; }
+  .badge.purple { border-color: #a855f7; }
+  .badge.purple .badge-num { background: #a855f7; color: #fff; }
+
+  .box-highlight {
+    position: absolute;
+    border: 3px dashed #38bdf8;
+    border-radius: 12px;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+  }
+  .box-highlight.red { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); }
+  .box-highlight.green { border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+  .box-highlight.purple { border-color: #a855f7; box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/staff_dashboard.png">
+
+  <!-- Highlight Boxes -->
+  <!-- 1. Alert Banner -->
+  <div class="box-highlight red" style="top: 75px; left: 240px; width: 960px; height: 65px;"></div>
+  <!-- 2. Room Matrix -->
+  <div class="box-highlight" style="top: 155px; left: 240px; width: 560px; height: 360px;"></div>
+  <!-- 3. Vital Table -->
+  <div class="box-highlight green" style="top: 530px; left: 240px; width: 1160px; height: 350px;"></div>
+  <!-- 4. Quick Actions / Broadcast -->
+  <div class="box-highlight purple" style="top: 155px; left: 820px; width: 580px; height: 360px;"></div>
+
+  <!-- Badges -->
+  <div class="badge red" style="top: 40px; left: 250px;">
+    <span class="badge-num">1</span>
+    <span>緊急SOS・転倒検知アラート通知バー（全画面赤色警報・即座に応答）</span>
+  </div>
+
+  <div class="badge" style="top: 170px; left: 260px;">
+    <span class="badge-num">2</span>
+    <span>全居室見守りマトリクス（在室・呼出・対話状況を一目で把握）</span>
+  </div>
+
+  <div class="badge purple" style="top: 170px; left: 840px;">
+    <span class="badge-num">3</span>
+    <span>構内一斉放送マイク ＆ AIカルテ・日報ドラフト自動生成</span>
+  </div>
+
+  <div class="badge green" style="top: 545px; left: 260px;">
+    <span class="badge-num">4</span>
+    <span>リアルタイムバイタル記録テーブル（心拍数・SpO2・体温の秒単位監視）</span>
+  </div>
+</body>
+</html>

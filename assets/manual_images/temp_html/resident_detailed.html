@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 1280px; height: 800px; position: relative; overflow: hidden; background: #000; }
+  .bg { width: 1280px; height: 800px; display: block; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.95);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    border: 2px solid #38bdf8;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #38bdf8;
+    color: #0f172a;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 13px;
+  }
+  .badge.orange { border-color: #ea580c; }
+  .badge.orange .badge-num { background: #ea580c; color: #fff; }
+  .badge.emerald { border-color: #10b981; }
+  .badge.emerald .badge-num { background: #10b981; color: #fff; }
+
+  .box-highlight {
+    position: absolute;
+    border: 3px dashed #38bdf8;
+    border-radius: 16px;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+  }
+  .box-highlight.orange { border-color: #ea580c; box-shadow: 0 0 12px rgba(234, 88, 12, 0.5); }
+  .box-highlight.emerald { border-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.5); }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/resident_room_detailed_tablet.png">
+
+  <!-- Boxes -->
+  <!-- 1. Top Badges (Debug & Status) -->
+  <div class="box-highlight" style="top: 25px; left: 35px; width: 895px; height: 75px; border-radius: 35px;"></div>
+  <!-- 2. Mic Button -->
+  <div class="box-highlight orange" style="top: 590px; left: 35px; width: 95px; height: 95px; border-radius: 50%;"></div>
+  <!-- 3. User Speech Box -->
+  <div class="box-highlight" style="top: 565px; left: 485px; width: 230px; height: 155px;"></div>
+  <!-- 4. Gemini Response Box -->
+  <div class="box-highlight emerald" style="top: 565px; left: 730px; width: 235px; height: 155px;"></div>
+
+  <!-- Badges -->
+  <div class="badge" style="top: 110px; left: 45px;">
+    <span class="badge-num">1</span>
+    <span>上部バー（部屋名・時計・ウォッチ接続・Gemini Live状態）</span>
+  </div>
+
+  <div class="badge orange" style="top: 535px; left: 35px;">
+    <span class="badge-num">2</span>
+    <span>AI音声対話マイク</span>
+  </div>
+
+  <div class="badge" style="top: 515px; left: 490px;">
+    <span class="badge-num">3</span>
+    <span>あなたの声（音声認識字幕）</span>
+  </div>
+
+  <div class="badge emerald" style="top: 515px; left: 735px;">
+    <span class="badge-num">4</span>
+    <span>Geminiのお返事テキスト字幕</span>
+  </div>
+</body>
+</html>

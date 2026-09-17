@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 1280px; height: 800px; position: relative; overflow: hidden; background: #000; }
+  .bg { width: 1280px; height: 800px; display: block; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    border: 2px solid #38bdf8;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #38bdf8;
+    color: #0f172a;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .badge.yellow { border-color: #eab308; }
+  .badge.yellow .badge-num { background: #eab308; color: #000; }
+  .badge.green { border-color: #10b981; }
+  .badge.green .badge-num { background: #10b981; color: #fff; }
+
+  .box-highlight {
+    position: absolute;
+    border: 3.5px dashed #38bdf8;
+    border-radius: 12px;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+  }
+  .box-highlight.yellow { border-color: #eab308; box-shadow: 0 0 15px rgba(234, 179, 8, 0.5); }
+  .box-highlight.green { border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/barber_mode_dashboard.png">
+
+  <!-- Boxes -->
+  <!-- 1. Appointment Card -->
+  <div class="box-highlight" style="top: 105px; left: 20px; width: 610px; height: 280px;"></div>
+  <!-- 2. Warning Note -->
+  <div class="box-highlight yellow" style="top: 240px; left: 30px; width: 590px; height: 58px;"></div>
+  <!-- 3. Report Button -->
+  <div class="box-highlight green" style="top: 300px; left: 35px; width: 150px; height: 50px;"></div>
+
+  <!-- Badges -->
+  <div class="badge" style="top: 60px; left: 30px;">
+    <span class="badge-num">1</span>
+    <span>本日の施術予約カード（居室番号・お名前・メニュー）</span>
+  </div>
+
+  <div class="badge yellow" style="top: 190px; left: 50px; font-size: 15px; padding: 7px 16px;">
+    <span class="badge-num" style="width:24px; height:24px;">2</span>
+    <span>⚠️【最重要】姿勢・認知症の注意点（施術前必読・スタッフからの申し送り）</span>
+  </div>
+
+  <div class="badge green" style="top: 370px; left: 40px;">
+    <span class="badge-num">3</span>
+    <span>施術完了報告ボタン（カルテ・家族へ即座に共有）</span>
+  </div>
+</body>
+</html>

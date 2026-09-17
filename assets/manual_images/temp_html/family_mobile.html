@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Noto Sans CJK JP', sans-serif; }
+  body { width: 412px; height: 915px; position: relative; overflow: hidden; background: #faf8f5; }
+  .bg { width: 412px; height: 915px; display: block; }
+  
+  .badge {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(30, 41, 59, 0.94);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 16px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    border: 1.5px solid #e11d48;
+    z-index: 10;
+  }
+  .badge-num {
+    background: #e11d48;
+    color: #fff;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 11px;
+  }
+  .badge.blue { border-color: #2563eb; }
+  .badge.blue .badge-num { background: #2563eb; }
+  .badge.orange { border-color: #ea580c; }
+  .badge.orange .badge-num { background: #ea580c; }
+
+  .box-highlight {
+    position: absolute;
+    border: 2.5px dashed #e11d48;
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(225, 29, 72, 0.35);
+  }
+  .box-highlight.blue { border-color: #2563eb; }
+  .box-highlight.orange { border-color: #ea580c; }
+</style>
+</head>
+<body>
+  <img class="bg" src="/media/k3and4/For_AI_Data/Antigravity/TestApp/Nursing_facility/assets/screenshots/family_portal_mobile.png">
+
+  <!-- Boxes -->
+  <div class="box-highlight blue" style="top: 60px; left: 15px; width: 382px; height: 180px;"></div>
+  <div class="box-highlight orange" style="top: 250px; left: 15px; width: 382px; height: 50px;"></div>
+  <div class="box-highlight" style="top: 360px; left: 15px; width: 382px; height: 260px;"></div>
+
+  <!-- Badges -->
+  <div class="badge blue" style="top: 40px; left: 25px;">
+    <span class="badge-num">1</span>
+    <span>体調ステータス ＆ 居室直通通話ボタン</span>
+  </div>
+
+  <div class="badge orange" style="top: 305px; left: 25px;">
+    <span class="badge-num">2</span>
+    <span>タブ切り替え（絵手紙・バイタル・面会予約）</span>
+  </div>
+
+  <div class="badge" style="top: 625px; left: 25px;">
+    <span class="badge-num">3</span>
+    <span>今日のご様子 ＆ 会話ダイジェスト</span>
+  </div>
+</body>
+</html>
