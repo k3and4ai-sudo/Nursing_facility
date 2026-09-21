@@ -178,7 +178,11 @@ class GeminiLiveSession:
         on_thought_received: Optional[Callable[[str], None]] = None,
         on_recording_status_changed: Optional[Callable[[bool, str], None]] = None,
         on_ui_mode_changed: Optional[Callable[[str], None]] = None,
-        history: Optional[list] = None
+        on_etegami_updated: Optional[Callable[[str, str], None]] = None,
+        on_etegami_completed: Optional[Callable[[], None]] = None,
+        history: Optional[list] = None,
+        api_key: Optional[str] = None,
+        schedules: Optional[list] = None
     ):
         self.user = user
         self.on_audio_received = on_audio_received
@@ -187,18 +191,26 @@ class GeminiLiveSession:
         self.on_thought_received = on_thought_received
         self.on_recording_status_changed = on_recording_status_changed
         self.on_ui_mode_changed = on_ui_mode_changed
+        self.on_etegami_updated = on_etegami_updated
+        self.on_etegami_completed = on_etegami_completed
         self.recording_active = True
         self.last_recording_time = 0.0
         self.current_ui_mode = "simple"
         self.last_ui_mode_time = 0.0
+        self.is_etegami_updating = False
+        self.last_etegami_update_time = 0.0
         self.history = history or []
+        self.schedules = schedules or []
         self.ws = None
         self.is_connected = False
         self.is_closing = False
         self._interrupted = False
         self.pending_chunks = []
         self._connect_lock = asyncio.Lock()
-        self.api_key = os.getenv("GEMINI_API_KEY", getattr(config, "GEMINI_API_KEY", ""))
+        
+        # Resolve API Key: passed api_key > user profile gemini_api_key > system default
+        user_custom_key = (user.get("gemini_api_key") or "").strip() if user else ""
+        self.api_key = api_key or user_custom_key or os.getenv("GEMINI_API_KEY", getattr(config, "GEMINI_API_KEY", ""))
 
     def notify_ui_mode_changed(self, mode: str):
         """Updates internal UI mode state and triggers callback only if not redundant."""
@@ -216,10 +228,21 @@ class GeminiLiveSession:
         async with self._connect_lock:
             if self.is_connected and self.ws and getattr(self.ws, "open", True):
                 return
-            self.api_key = os.getenv("GEMINI_API_KEY", "") or getattr(config, "GEMINI_API_KEY", "")
+            if not self.api_key:
+                user_custom_key = (self.user.get("gemini_api_key") or "").strip() if self.user else ""
+                self.api_key = user_custom_key or os.getenv("GEMINI_API_KEY", "") or getattr(config, "GEMINI_API_KEY", "")
             if not self.api_key:
                 raise ValueError("GEMINI_API_KEY is not configured.")
                 
+            user_name = self.user.get("name", "利用者") if self.user else "利用者"
+            user_custom_key = (self.user.get("gemini_api_key") or "").strip() if self.user else ""
+            if user_custom_key and self.api_key == user_custom_key:
+                masked_key = f"{self.api_key[:6]}...{self.api_key[-4:]}" if len(self.api_key) > 10 else "***"
+                print(f"[Gemini Live Session]: Using individual Gemini API key for resident '{user_name}' (Key: {masked_key})")
+            else:
+                masked_key = f"{self.api_key[:6]}...{self.api_key[-4:]}" if len(self.api_key) > 10 else "***"
+                print(f"[Gemini Live Session]: Using system default Gemini API key for resident '{user_name}' (Key: {masked_key})")
+
             url = f"{GEMINI_WS_URL}?key={self.api_key}"
             try:
                 self.ws = await websockets.connect(url)
@@ -232,7 +255,7 @@ class GeminiLiveSession:
                 elif len(nickname) > 2:
                     nickname = nickname[1:] + "さん"
                     
-                model_name = getattr(config, "GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest")
+                model_name = getattr(config, "GEMINI_MODEL", "gemini-3.8-live")
                 if not model_name.startswith("models/"):
                     model_name = f"models/{model_name}"
                     
@@ -246,6 +269,16 @@ class GeminiLiveSession:
                             recent_turns.append(f"{sender_label}: {msg}")
                     if recent_turns:
                         history_text = "\n【直近の会話履歴】\n" + "\n".join(recent_turns)
+
+                # Resident schedules context for today
+                today_schedules_text = ""
+                if self.schedules:
+                    sched_lines = [f"・{s.get('time', '')} {s.get('title', '')} (場所: {s.get('location', '居室')})" for s in self.schedules]
+                    today_schedules_text = (
+                        f"\n【{nickname}様の今日のご予定（{datetime.now().strftime('%Y年%m月%d日')}）】\n" +
+                        "\n".join(sched_lines) +
+                        "\n※利用者様から「今日の予定は何だっけ？」「午後は何がある？」「お風呂は何時？」などと聞かれたら、上記のご予定をもとに優しく分かりやすく教えてあげてください。\n"
+                    )
 
                 setup_frame = {
                     "setup": {
@@ -283,12 +316,12 @@ class GeminiLiveSession:
                                         f"また、利用者様が「詳細画面にして」「元の画面にして」「画面を戻して」「詳しい画面にして」などと言われた場合は、必ず第一声で正確に：\n"
                                         f"「みまもりさん業務連絡、詳細画面に切り替えてください。」\n"
                                         f"続けて「はい、詳細な画面に戻しましたよ」と伝えてください。\n\n"
-                                        f"【重要指示3：回想法（昔の思い出話への誘導と情景の深掘り）】\n"
-                                        f"利用者様が「昔の話をしたい」「昔のこと」「子供の頃」「若い頃」「運動会」「お祭り」など、過去の思い出について話された時、または昔話を希望された時は、単に「はい」「そうですね」と受動的に聞くだけで終わらせず、大歓迎の共感とともに【季節・いつ頃・情景・時間】を優しく尋ねて思い出を広げてください：\n"
-                                        f"・季節や時期の質問：「わあ、ぜひ聞かせてください！それは春の頃でしたか、それとも秋など涼しい季節でしたか？」「何歳くらいの時のお話ですか？」\n"
-                                        f"・時間や情景・景色の質問：「どんなお天気でしたか？」「朝早くから準備されたのですか？」「どんな景色が広がっていましたか？」\n"
-                                        f"・人や食べ物の質問：「どなたとご一緒でしたか？」「お弁当にはどんな美味しいものが入っていましたか？」\n"
-                                        f"※利用者が心地よく情景を思い浮かべて語れるよう、1回の返答につき【1つの優しい質問】を必ず添えて会話を楽しくリードしてください。\n\n"
+                                        f"【重要指示3：回想法（昔の思い出話の傾聴と質問の制限ルール）】\n"
+                                        f"利用者様が「昔の話をしたい」「昔のこと」「子供の頃」「若い頃」「運動会」「お祭り」など、過去の思い出について話された時は、大歓迎の共感で受け止めてください。\n"
+                                        f"★【同じ質問の繰り返し・質問攻めの厳格な禁止】：\n"
+                                        f"・同じ質問や似た質問を何度も絶対に繰り返さないでください（例: 既に答えた季節や天気を再度尋ねる、何度も聞き直す等は厳禁です）。\n"
+                                        f"・利用者を質問攻め（尋問）にしてはいけません。質問は会話全体で【最大1〜2回】にとどめてください。\n"
+                                        f"・利用者様が言葉少なだったり、一言話しただけでも「そうだったのですね。素敵なお話を聞かせてくださりありがとうございます」と丸ごと温かく受容してください。\n\n"
                                         f"【重要指示4：相談事・お悩み・愚痴への寄り添い傾聴と優しい深掘りガイドライン】\n"
                                         f"利用者様がお金（税金・年金・貯金・相続など）、人間関係（家族・友人・仕事など）、日常の困りごとや手続き（ものの使い方・各種申請）、あるいは単なる愚痴や漠然とした不安を話された時は、以下の原則を徹底してください：\n"
                                         f"1. 傾聴・受容の最優先（認知症ケア・バリデーション）：絶対に否定や訂正をしないでください（「さっきも言いましたよ」「それは違いますよ」は厳禁）。論理が破綻していたり辻褄が合わなくても、「そう思われたのですね」「それは大変でしたね」「ご心配でしたね」と、お気持ち・ご不安そのものを優しく丸ごと受け止めてください。\n"
@@ -301,13 +334,33 @@ class GeminiLiveSession:
                                         f"3. 個人情報・具体的な金額への配慮：金額（年金、貯金、借金、費用など）や個人の資産状況をあなたから絶対に尋ねないでください。もし利用者様が具体的な金額を口にされても、「○○円ですね」と金額を復唱・オウム返ししないでください。「大切なお金のことですから、ご心配になりますよね」とお気持ちに寄り添ってください。\n"
                                         f"4. 制度・方法の相談と一般的知識の提供：税金、年金、申請方法、機械の使い方などを尋ねられた場合は、一般的な知識に基づき、高齢者向けに専門用語を使わず分かりやすく1〜2文で優しく説明してください。ただし個別の税務・法律判断は断定せず、「一般的な仕組みはこのようになっていますよ。必要ならご家族や役所の方、スタッフさんにも一緒に確認してもらいましょうね」と安心感を届けてください。\n"
                                         f"5. 被害念慮・物盗られへの対応：「物を取られた」「意地悪される」などの訴えには、否定も犯人決めつけもせず、「それはご不安ですね。落ち着いて一緒に探してみましょう」「お困りの時はいつでもスタッフさんを呼べるボタンもありますからね」と優しく安心させてください。\n\n"
+                                        f"【重要指示5：回想法・癒やし会話をベースにしたデジタル絵手紙の下絵即時作成・確認・修正】\n"
+                                        f"利用者の居室端末画面の一番下には、会話をもとにした「デジタル絵手紙」が表示されています。\n"
+                                        f"★【完全に情報が揃わなくても、一通り質問が終わったらすぐ下絵を描く】：\n"
+                                        f"・季節・天気・場所・登場人物などの情報が完全に揃うのを待つ必要は全くありません！\n"
+                                        f"・利用者が思い出の話題や日常の出来事を一通り話し、1〜2回のやり取りが終わったら、得られた断片情報（例: 運動会、お弁当、昔走った、縁側でお茶、小鳥等）から自由に想像を膨らませて、即座に下絵を描いてみてください。\n"
+                                        f"1. 下絵を描く・案内する時：\n"
+                                        f"必ず第一声で正確に：\n"
+                                        f"「みまもりさん、デジタル絵手紙更新して（モチーフ: ○○、文字: ○○）」\n"
+                                        f"（例: 「みまもりさん、デジタル絵手紙更新して（モチーフ: 秋晴れの運動会、文字: 力いっぱい走った日）」）と発言してください。\n"
+                                        f"続けて利用者様に優しく：\n"
+                                        f"「{nickname}様、お話ししてくださった思い出をもとに下絵を描いてみましたよ。画面の一番下に表示しましたので、ご覧になれますか？直したいところや、別の絵にしてほしいところはありますか？」と案内してください。\n"
+                                        f"2. 修正・描きかえの要望を受けた時：\n"
+                                        f"利用者様から「絵を更新して」「描きかえて」「別の絵にして」「小鳥がいい」「夕焼けにして」「文字を変えて」などの要望があった場合は、必ず第一声で正確に：\n"
+                                        f"「みまもりさん、デジタル絵手紙更新して（モチーフ: ○○、文字: ○○）」と発言してください。\n"
+                                        f"続けて「はい、ご希望に合わせて描きかえますね！いかがでしょうか？」と優しく確認してください。\n"
+                                        f"3. 完成・満足の意思を確認した時：\n"
+                                        f"利用者様が「これでいいよ」「気に入った」「完成」「これで送って」「素敵だね」などと満足されたら、必ず第一声で正確に：\n"
+                                        f"「みまもりさん、デジタル絵手紙完成」と発言してください。\n"
+                                        f"続けて「わあ、とっても素敵な絵手紙ができましたね！ご家族様にもこの完成した絵手紙をお届けしますね」と温かく祝福してください。\n\n"
                                         f"【会話展開ガイド（過去・現在・未来・相談の4軸傾聴）】\n"
                                         f"利用者様との会話は、以下の4つのどの話題でも大歓迎で温かく傾聴してください：\n"
-                                        f"1. 昔の思い出・体験談（回想法：季節、時間、場所、情景を優しく尋ねて深掘りし、同じ話でも毎回新鮮に楽しそうに聞く）\n"
+                                        f"1. 昔の思い出・体験談（回想法：季節や情景を優しく受け止め、同じ話でも毎回新鮮に楽しそうに聞く）\n"
                                         f"2. 今日・最近の出来事（美味しかった食事、体操、お散歩、趣味など）\n"
                                         f"3. 明日・これからの予定や楽しみ（ご家族の面会、レク、散髪など）\n"
                                         f"4. 相談事・お悩み・日々の愚痴や不安（無理に詮索せず受容・共感し、安心感を届ける）\n"
                                         f"※思考解説や英語は一切喋らず、利用者様への温かい日本語の返答のみ（1〜2文）を発話してください。\n"
+                                        f"{today_schedules_text}"
                                         f"{history_text}"
                                     )
                                 }
@@ -382,6 +435,121 @@ class GeminiLiveSession:
             self.pending_chunks.append(b64_audio)
             asyncio.create_task(self.ensure_connected())
 
+    def _handle_text_chunk(self, text_val: str):
+        """Processes incoming text or thought chunks for command detection and user forwarding."""
+        if not text_val:
+            return
+        text_val = text_val.strip()
+        if not text_val:
+            return
+
+        # Detect Mimamori-san UI mode switching commands from Gemini speech or thought
+        text_lower = text_val.lower()
+        is_to_simple = (
+            "単純画面に切り替" in text_val or 
+            "画面切り替" in text_val or 
+            "シンプル画面に切り替" in text_val or 
+            "単純画面" in text_val or
+            "simple screen" in text_lower or
+            "screen transition" in text_lower
+        )
+        is_to_detailed = (
+            "詳細画面に切り替" in text_val or 
+            "詳細画面" in text_val or
+            "detailed screen" in text_lower
+        )
+        now = time.time()
+        if is_to_simple:
+            print(f"[Gemini Live Session]: Detected simple mode command in text/thought: '{text_val}'")
+            self.notify_ui_mode_changed("simple")
+        elif is_to_detailed:
+            print(f"[Gemini Live Session]: Detected detailed mode command in text/thought: '{text_val}'")
+            self.notify_ui_mode_changed("detailed")
+
+        # Detect Mimamori-san recording commands from Gemini speech or thought (with duplicate suppression)
+        is_to_stop_recording = (
+            "会話記録を停止" in text_val or 
+            "会話記録の停止" in text_val or 
+            "記録停止" in text_val or 
+            "記録を停止" in text_val or
+            "conversation halt" in text_lower or
+            "cease recording" in text_lower or
+            "stop recording" in text_lower
+        )
+        is_to_resume_recording = (
+            "会話記録を再開" in text_val or 
+            "会話記録の再開" in text_val or 
+            "記録再開" in text_val or 
+            "記録を再開" in text_val or
+            "resume recording" in text_lower
+        )
+
+        if is_to_stop_recording:
+            if self.recording_active:
+                print(f"[Gemini Live Session]: Detected confidential recording stop command in text/thought: '{text_val}'")
+                self.recording_active = False
+                self.last_recording_time = now
+                if self.on_recording_status_changed:
+                    self.on_recording_status_changed(False, "会話記録停止")
+            else:
+                print(f"[Gemini Live Session]: Already in stopped recording state - ignoring duplicate command: '{text_val}'")
+        elif is_to_resume_recording:
+            if not self.recording_active:
+                print(f"[Gemini Live Session]: Detected recording resume command in text/thought: '{text_val}'")
+                self.recording_active = True
+                self.last_recording_time = now
+                if self.on_recording_status_changed:
+                    self.on_recording_status_changed(True, "会話記録再開")
+            else:
+                print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
+
+        # Detect Etegami Completion command from Gemini speech or thought
+        is_gemini_etegami_complete = (
+            "デジタル絵手紙完成" in text_val or
+            ("みまもりさん" in text_val and "絵手紙" in text_val and "完成" in text_val) or
+            "絵手紙完成" in text_val
+        )
+        if is_gemini_etegami_complete:
+            print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger: '{text_val}'")
+            if self.on_etegami_completed:
+                self.on_etegami_completed()
+
+        # Detect Etegami modification command from Gemini speech or thought
+        is_gemini_etegami = (
+            "デジタル絵手紙更新" in text_val or
+            "デジタル絵手紙を更新" in text_val or
+            ("みまもりさん" in text_val and "絵手紙" in text_val and "更新" in text_val) or
+            "絵手紙更新" in text_val
+        )
+        if is_gemini_etegami:
+            if self.is_etegami_updating:
+                print(f"[Gemini Live Session]: Already updating Etegami - ignoring duplicate trigger: '{text_val}'")
+            elif (now - self.last_etegami_update_time < 5.0):
+                print(f"[Gemini Live Session]: Etegami recently updated (<5s) - ignoring duplicate trigger: '{text_val}'")
+            else:
+                motif_match = re.search(r'モチーフ[:：]\s*([^、,）\)\n]+)', text_val)
+                msg_match = re.search(r'文字[:：]\s*([^、,）\)\n]+)', text_val)
+                motif = motif_match.group(1).strip() if motif_match else ""
+                msg = msg_match.group(1).strip() if msg_match else ""
+                if not motif:
+                    for kw in ["夕焼け", "夕暮れ", "縁側", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "朝顔", "風鈴", "雪", "椿", "コスモス"]:
+                        if kw in text_val:
+                            motif = kw
+                            break
+                print(f"[Gemini Live Session]: Detected Gemini Etegami Trigger: '{text_val}' -> motif='{motif}', msg='{msg}'")
+                self.last_etegami_update_time = now
+                if self.on_etegami_updated:
+                    self.on_etegami_updated(motif, msg)
+
+        if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
+            print(f"[Gemini Live Session Filtered Thought]: {text_val}")
+            if self.on_thought_received:
+                self.on_thought_received(text_val)
+            return
+
+        if text_val and self.on_text_received:
+            self.on_text_received(text_val)
+
     async def send_end_of_turn(self, text: str = ""):
         """Signals end of user utterance to trigger Gemini Live response generation (always sends turnComplete)."""
         if not await self.ensure_connected():
@@ -398,11 +566,9 @@ class GeminiLiveSession:
             parts.append({"text": transcription})
 
         # Gemini Live Bidi API requires turns when clientContent is present.
-        # Sending clientContent without turns triggers a 1007 invalid argument error.
-        # If there is no explicit text transcription, audio-driven VAD handles turn completion natively.
+        # When no explicit speech-to-text is available, send a placeholder turn to trigger model response.
         if not parts:
-            print(f"[Gemini Live Session]: Audio-driven turn completed (no text payload needed).")
-            return
+            parts.append({"text": "（利用者の音声発話）"})
 
         try:
             content_body = {
@@ -416,7 +582,7 @@ class GeminiLiveSession:
             }
             client_content = {"clientContent": content_body}
             await self.ws.send(json.dumps(client_content))
-            print(f"[Gemini Live Session]: End of turn signal sent (text: '{transcription}').")
+            print(f"[Gemini Live Session]: End of turn signal sent (text: '{transcription or '（利用者の音声発話）'}').")
         except Exception as e:
             print(f"[Gemini Live End of Turn Error]: {e}")
             self.is_connected = False
@@ -437,81 +603,20 @@ class GeminiLiveSession:
                     print(f"[Gemini Live Server API Error]: {data['error']}")
                 
                 server_content = data.get("serverContent", {})
+
+                # Check for outputTranscription (Gemini 3.8 Live text output format)
+                if "outputTranscription" in server_content:
+                    ot = server_content["outputTranscription"]
+                    if "text" in ot and ot["text"]:
+                        self._handle_text_chunk(ot["text"])
+
                 model_turn = server_content.get("modelTurn", {})
                 parts = model_turn.get("parts", [])
                 
                 for part in parts:
                     # Text response or thought
                     if "text" in part and part["text"]:
-                        text_val = part["text"].strip()
-
-                        # Detect Mimamori-san UI mode switching commands from Gemini speech or thought
-                        text_lower = text_val.lower()
-                        is_to_simple = (
-                            "単純画面に切り替" in text_val or 
-                            "画面切り替" in text_val or 
-                            "シンプル画面に切り替" in text_val or 
-                            "単純画面" in text_val or
-                            "simple screen" in text_lower or
-                            "screen transition" in text_lower
-                        )
-                        is_to_detailed = (
-                            "詳細画面に切り替" in text_val or 
-                            "詳細画面" in text_val or
-                            "detailed screen" in text_lower
-                        )
-                        now = time.time()
-                        if is_to_simple:
-                            print(f"[Gemini Live Session]: Detected simple mode command in text/thought: '{text_val}'")
-                            self.notify_ui_mode_changed("simple")
-                        elif is_to_detailed:
-                            print(f"[Gemini Live Session]: Detected detailed mode command in text/thought: '{text_val}'")
-                            self.notify_ui_mode_changed("detailed")
-
-                        # Detect Mimamori-san recording commands from Gemini speech or thought (with duplicate suppression)
-                        is_to_stop_recording = (
-                            "会話記録を停止" in text_val or 
-                            "会話記録の停止" in text_val or 
-                            "記録停止" in text_val or 
-                            "記録を停止" in text_val or
-                            "conversation halt" in text_lower or
-                            "cease recording" in text_lower or
-                            "stop recording" in text_lower
-                        )
-                        is_to_resume_recording = (
-                            "会話記録を再開" in text_val or 
-                            "会話記録の再開" in text_val or 
-                            "記録再開" in text_val or 
-                            "記録を再開" in text_val or
-                            "resume recording" in text_lower
-                        )
-
-                        if is_to_stop_recording:
-                            if self.recording_active and (now - self.last_recording_time >= 4.0):
-                                print(f"[Gemini Live Session]: Detected confidential recording stop command in text/thought: '{text_val}'")
-                                self.recording_active = False
-                                self.last_recording_time = now
-                                if self.on_recording_status_changed:
-                                    self.on_recording_status_changed(False, "会話記録停止")
-                            else:
-                                print(f"[Gemini Live Session]: Already in stopped recording state - ignoring duplicate command: '{text_val}'")
-                        elif is_to_resume_recording:
-                            if not self.recording_active and (now - self.last_recording_time >= 4.0):
-                                print(f"[Gemini Live Session]: Detected recording resume command in text/thought: '{text_val}'")
-                                self.recording_active = True
-                                self.last_recording_time = now
-                                if self.on_recording_status_changed:
-                                    self.on_recording_status_changed(True, "会話記録再開")
-                            else:
-                                print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
-
-                        if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
-                            print(f"[Gemini Live Session Filtered Thought]: {text_val}")
-                            if self.on_thought_received:
-                                self.on_thought_received(text_val)
-                            continue
-                        if text_val and self.on_text_received:
-                            self.on_text_received(text_val)
+                        self._handle_text_chunk(part["text"])
                     
                     # Audio chunk response
                     inline_data = part.get("inlineData", {})

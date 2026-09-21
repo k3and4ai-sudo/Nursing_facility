@@ -51,6 +51,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
                     <span>訪問理美容管理</span>
                 </button>
+                <button class="menu-btn" data-tab="schedules">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>予定・スケジュール管理</span>
+                </button>
             </nav>
             <div class="sidebar-footer">
                 <div class="user-info">
@@ -208,6 +212,20 @@
                                 <div class="form-group">
                                     <label for="p-notes">ケア用特記事項 (持病、制限等)</label>
                                     <textarea id="p-notes" rows="3" placeholder="例: 高血圧のため塩分制限あり。右足に軽い関節痛。"></textarea>
+                                </div>
+                                <div class="intercom-settings-box" style="margin-top: 14px; border-left: 4px solid var(--primary, #3b82f6); background: rgba(59, 130, 246, 0.04);">
+                                    <div class="intercom-settings-title" style="color: var(--primary, #3b82f6);">🔑 Gemini Live API 個別アカウント設定</div>
+                                    <div class="form-group" style="margin-top: 8px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <label for="p-gemini-key" style="font-weight: 600; margin-bottom: 0;">個別 Gemini APIキー (任意)</label>
+                                            <span id="p-gemini-key-status" class="badge" style="font-size: 11px; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 10px;">未設定 (共通キー使用)</span>
+                                        </div>
+                                        <input type="password" id="p-gemini-key" placeholder="AIzaSy... (未設定時はシステム共通キーを使用)" autocomplete="off">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                                            <span style="font-size: 11px; color: var(--text-light);">※各居住者ごとのGemini APIキー・使用量クォータを適用する場合に入力</span>
+                                            <button type="button" id="btn-clear-gemini-key" class="btn btn-sm" style="display: none; padding: 2px 8px; font-size: 11px; color: #ef4444; border: 1px solid #fca5a5; background: #fff; border-radius: 4px; cursor: pointer;">キーを削除</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="intercom-settings-box">
                                     <div class="intercom-settings-title">📞 インターホン通話・「でる」待ち時間設定</div>
@@ -504,6 +522,83 @@
                         <div class="card-body scroll-y">
                             <div id="barber-reservations-list" class="reservation-list-box">
                                 <div class="text-center pad-20">予約情報を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Schedules Management (予定・スケジュール管理) -->
+            <section id="tab-schedules" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Schedule Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📅 居住者 予定登録・編集</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="schedule-form" class="standard-form">
+                                <div class="form-group">
+                                    <label for="sched-user-id">対象利用者 *</label>
+                                    <select id="sched-user-id" required>
+                                        <option value="">選択してください</option>
+                                    </select>
+                                </div>
+                                <div class="form-row" style="display: flex; gap: 12px;">
+                                    <div class="form-group" style="flex: 1;">
+                                        <label for="sched-date">日付 *</label>
+                                        <input type="date" id="sched-date" required>
+                                    </div>
+                                    <div class="form-group" style="flex: 1;">
+                                        <label for="sched-time">時刻 *</label>
+                                        <input type="time" id="sched-time" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-category">区分・カテゴリ *</label>
+                                    <select id="sched-category" required>
+                                        <option value="general">📝 一般・日常</option>
+                                        <option value="rehab">🏃 リハビリ・機能訓練</option>
+                                        <option value="bath">♨️ 入浴</option>
+                                        <option value="barber">✂️ 訪問理美容</option>
+                                        <option value="visit">👨‍👩‍👧 ご家族面会</option>
+                                        <option value="meal">🍵 食事・おやつ</option>
+                                        <option value="medication">💊 服薬・医療</option>
+                                        <option value="event">🌸 レク・行事</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-title">予定内容・タイトル *</label>
+                                    <input type="text" id="sched-title" required placeholder="例: リハビリ・機能訓練（歩行訓練）">
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-location">場所</label>
+                                    <input type="text" id="sched-location" placeholder="例: 機能訓練室、居室、1Fラウンジ">
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-notes">詳細・連絡メモ</label>
+                                    <textarea id="sched-notes" rows="2" placeholder="例: 理学療法士同行。体調確認の上実施。"></textarea>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button type="submit" class="btn btn-primary" style="flex: 1;">予定を登録</button>
+                                    <button type="button" id="btn-trigger-schedule-announcement" class="btn btn-secondary" title="選択中の利用者の居室端末へ予定を音声連絡">🔊 端末へ連絡</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Schedules Timeline List -->
+                    <div class="card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3>📋 登録済みスケジュール一覧</h3>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="date" id="sched-filter-date" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                                <button id="btn-refresh-schedules" class="btn btn-secondary btn-sm">🔄 更新</button>
+                            </div>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="staff-schedules-list" class="reservation-list-box">
+                                <div class="text-center pad-20">予定を読み込んでいます...</div>
                             </div>
                         </div>
                     </div>

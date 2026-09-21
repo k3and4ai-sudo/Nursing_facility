@@ -39,7 +39,7 @@ TTS_ENGINE = os.getenv("TTS_ENGINE", "gtts")  # "gtts" or "local" (mock/system)
 
 # Gemini API / Gemini Live Settings (Debug Mode)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-native-audio-latest")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-live")
 
 # Release Flag: Set ENABLE_DEBUG_MODE=false in production to completely abolish debug features
 ENABLE_DEBUG_MODE = os.getenv("ENABLE_DEBUG_MODE", "true").lower() == "true"

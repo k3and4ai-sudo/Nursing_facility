@@ -30,11 +30,12 @@ def db_init():
                 intercom_auto_answer INTEGER DEFAULT 1,     -- 1: Hands-free auto-answer, 0: Manual
                 intercom_auto_delay INTEGER DEFAULT 15,     -- Delay in seconds before auto-answer (default 15s)
                 allow_force_answer_staff INTEGER DEFAULT 1, -- Allow staff emergency force-answer
-                allow_force_answer_family INTEGER DEFAULT 0 -- Allow family emergency force-answer
+                allow_force_answer_family INTEGER DEFAULT 0, -- Allow family emergency force-answer
+                gemini_api_key TEXT                         -- Encrypted custom Gemini API Key
             )
         """)
 
-        # Migration: Ensure new intercom columns exist for existing databases
+        # Migration: Ensure new columns exist for existing databases
         cursor.execute("PRAGMA table_info(users)")
         existing_cols = {col["name"] for col in cursor.fetchall()}
         if "intercom_auto_answer" not in existing_cols:
@@ -45,6 +46,8 @@ def db_init():
             cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_staff INTEGER DEFAULT 1")
         if "allow_force_answer_family" not in existing_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN allow_force_answer_family INTEGER DEFAULT 0")
+        if "gemini_api_key" not in existing_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN gemini_api_key TEXT")
         
         # Upgrade existing <= 10s delay to 15s as requested by user
         cursor.execute("UPDATE users SET intercom_auto_delay = 15 WHERE intercom_auto_delay <= 10")
@@ -206,6 +209,22 @@ def db_init():
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
+
+        # 13. Schedules table (居住者予定・スケジュール管理)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                date TEXT NOT NULL,              -- YYYY-MM-DD
+                time TEXT NOT NULL,              -- HH:MM
+                title TEXT NOT NULL,             -- 例: リハビリ・機能訓練、入浴、訪問理美容、ご家族面会
+                category TEXT DEFAULT 'general', -- rehab, bath, barber, visit, meal, medication, event, other
+                location TEXT,                   -- 例: 機能訓練室、居室、浴室、1Fラウンジ
+                notes TEXT,                      -- 詳細・連絡事項
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
         
         conn.commit()
 
@@ -319,6 +338,29 @@ def seed_default_accounts():
                 )
                 conn.commit()
 
+        # Seed default schedules if empty for users
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT id FROM users")
+        all_users = cursor.fetchall()
+        for u in all_users:
+            cursor.execute("SELECT COUNT(*) FROM schedules WHERE user_id = ?", (u["id"],))
+            if cursor.fetchone()[0] == 0:
+                sample_schedules = [
+                    (u["id"], today_str, "09:30", "朝の体操・水分補給", "general", "デイルーム", "軽めのストレッチと健康チェック"),
+                    (u["id"], today_str, "10:30", "リハビリ・機能訓練", "rehab", "機能訓練室", "歩行訓練・理学療法士担当"),
+                    (u["id"], today_str, "12:00", "ご昼食（秋の味覚御膳）", "meal", "食堂", "管理栄養士特製メニュー"),
+                    (u["id"], today_str, "14:00", "訪問理美容（ヘアカット）", "barber", "1F理美容室", "訪問理容 鈴木様担当"),
+                    (u["id"], today_str, "15:00", "おやつとお茶の時間", "meal", "デイルーム", "温かい緑茶と季節の和菓子"),
+                    (u["id"], today_str, "16:00", "ご家族面会（長女・花子様）", "visit", "居室・オンライン", "長女花子様とオンライン面会予定")
+                ]
+                for u_id, s_date, s_time, s_title, s_cat, s_loc, s_notes in sample_schedules:
+                    cursor.execute(
+                        """INSERT INTO schedules (user_id, date, time, title, category, location, notes, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (u_id, s_date, s_time, s_title, s_cat, s_loc, s_notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    )
+                conn.commit()
+
 # Group Management
 def add_group(group_name: str, patient_id: int):
     with get_db_connection() as conn:
@@ -390,21 +432,34 @@ def _format_user_row(row):
     data["intercom_auto_delay"] = 15 if data.get("intercom_auto_delay") is None else int(data["intercom_auto_delay"])
     data["allow_force_answer_staff"] = 1 if data.get("allow_force_answer_staff") is None else int(data["allow_force_answer_staff"])
     data["allow_force_answer_family"] = 0 if data.get("allow_force_answer_family") is None else int(data["allow_force_answer_family"])
+    # Custom Gemini API Key decryption
+    raw_api_key = data.get("gemini_api_key")
+    if raw_api_key:
+        try:
+            data["gemini_api_key"] = decrypt_data(raw_api_key)
+        except Exception:
+            data["gemini_api_key"] = None
+    else:
+        data["gemini_api_key"] = None
     return data
 
 def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
              intercom_auto_answer: int = 1, intercom_auto_delay: int = 15,
-             allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
+             allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0,
+             gemini_api_key: Optional[str] = None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        enc_api_key = encrypt_data(gemini_api_key.strip()) if gemini_api_key and gemini_api_key.strip() else None
         cursor.execute(
             """INSERT INTO users (name, age, room_number, terminal_id, dementia_level, notes, attention_points,
-                                  intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                  intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                                  gemini_api_key) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 encrypt_data(name), age, room_number, terminal_id, dementia_level, 
                 encrypt_data(notes), encrypt_data(attention_points),
-                intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family
+                intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                enc_api_key
             )
         )
         conn.commit()
@@ -412,21 +467,53 @@ def add_user(name: str, age: int, room_number: str, terminal_id: str, dementia_l
 
 def update_user(user_id: int, name: str, age: int, room_number: str, terminal_id: str, dementia_level: str, notes: str, attention_points: str,
                 intercom_auto_answer: int = 1, intercom_auto_delay: int = 15,
-                allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0):
+                allow_force_answer_staff: int = 1, allow_force_answer_family: int = 0,
+                gemini_api_key: Optional[str] = None, clear_gemini_api_key: bool = False):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """UPDATE users 
-               SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?,
-                   intercom_auto_answer = ?, intercom_auto_delay = ?, allow_force_answer_staff = ?, allow_force_answer_family = ?
-               WHERE id = ?""",
-            (
-                encrypt_data(name), age, room_number, terminal_id, dementia_level, 
-                encrypt_data(notes), encrypt_data(attention_points),
-                intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
-                user_id
+        if clear_gemini_api_key:
+            cursor.execute(
+                """UPDATE users 
+                   SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?,
+                       intercom_auto_answer = ?, intercom_auto_delay = ?, allow_force_answer_staff = ?, allow_force_answer_family = ?,
+                       gemini_api_key = NULL
+                   WHERE id = ?""",
+                (
+                    encrypt_data(name), age, room_number, terminal_id, dementia_level, 
+                    encrypt_data(notes), encrypt_data(attention_points),
+                    intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                    user_id
+                )
             )
-        )
+        elif gemini_api_key is not None and gemini_api_key.strip() != "":
+            cursor.execute(
+                """UPDATE users 
+                   SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?,
+                       intercom_auto_answer = ?, intercom_auto_delay = ?, allow_force_answer_staff = ?, allow_force_answer_family = ?,
+                       gemini_api_key = ?
+                   WHERE id = ?""",
+                (
+                    encrypt_data(name), age, room_number, terminal_id, dementia_level, 
+                    encrypt_data(notes), encrypt_data(attention_points),
+                    intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                    encrypt_data(gemini_api_key.strip()),
+                    user_id
+                )
+            )
+        else:
+            # Keep existing key if not provided or empty string without clear flag
+            cursor.execute(
+                """UPDATE users 
+                   SET name = ?, age = ?, room_number = ?, terminal_id = ?, dementia_level = ?, notes = ?, attention_points = ?,
+                       intercom_auto_answer = ?, intercom_auto_delay = ?, allow_force_answer_staff = ?, allow_force_answer_family = ?
+                   WHERE id = ?""",
+                (
+                    encrypt_data(name), age, room_number, terminal_id, dementia_level, 
+                    encrypt_data(notes), encrypt_data(attention_points),
+                    intercom_auto_answer, intercom_auto_delay, allow_force_answer_staff, allow_force_answer_family,
+                    user_id
+                )
+            )
         conn.commit()
 
 def get_user(user_id: int):
@@ -835,6 +922,75 @@ def get_multimedia_history(user_id: int = None, terminal_id: str = None, limit: 
                 item["payload"] = {}
             results.append(item)
     return results
+
+# ==============================================================================
+# Schedule Management (居住者予定・スケジュール管理)
+# ==============================================================================
+
+def add_schedule(user_id: int, date_str: str, time_str: str, title: str, category: str = "general", location: str = "", notes: str = "") -> int:
+    """Adds a new schedule item for a resident."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO schedules (user_id, date, time, title, category, location, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, date_str, time_str, title, category, location, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def get_schedules_by_user_and_date(user_id: int, date_str: str) -> List[dict]:
+    """Fetches all schedules for a specific resident on a specific date (sorted by time ASC)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM schedules WHERE user_id = ? AND date = ? ORDER BY time ASC""",
+            (user_id, date_str)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_upcoming_schedules(user_id: int, from_date: str = None, limit: int = 30) -> List[dict]:
+    """Fetches upcoming schedules from a specified date onwards."""
+    if not from_date:
+        from_date = datetime.now().strftime("%Y-%m-%d")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM schedules WHERE user_id = ? AND date >= ? ORDER BY date ASC, time ASC LIMIT ?""",
+            (user_id, from_date, limit)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_all_schedules_by_user(user_id: int, limit: int = 50) -> List[dict]:
+    """Fetches all schedules for a resident (most recent first)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM schedules WHERE user_id = ? ORDER BY date DESC, time DESC LIMIT ?""",
+            (user_id, limit)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+def delete_schedule(schedule_id: int) -> bool:
+    """Deletes a schedule item by ID."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def update_schedule(schedule_id: int, date_str: str, time_str: str, title: str, category: str = "general", location: str = "", notes: str = "") -> bool:
+    """Updates an existing schedule item."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """UPDATE schedules 
+               SET date = ?, time = ?, title = ?, category = ?, location = ?, notes = ?
+               WHERE id = ?""",
+            (date_str, time_str, title, category, location, notes, schedule_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 

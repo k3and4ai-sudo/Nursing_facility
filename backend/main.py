@@ -4,6 +4,7 @@ import time
 import re
 import json
 import base64
+from datetime import datetime
 import urllib.request
 import requests
 import numpy as np
@@ -57,6 +58,7 @@ class UserCreate(BaseModel):
     intercom_auto_delay: int = 15
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
+    gemini_api_key: Optional[str] = None
 
 class UserUpdate(BaseModel):
     name: str
@@ -70,6 +72,8 @@ class UserUpdate(BaseModel):
     intercom_auto_delay: int = 15
     allow_force_answer_staff: int = 1
     allow_force_answer_family: int = 0
+    gemini_api_key: Optional[str] = None
+    clear_gemini_api_key: Optional[bool] = False
 
 class HandoverCreate(BaseModel):
     author: str
@@ -112,6 +116,22 @@ def login_user(login_data: LoginRequest):
         "terminal_id": user_acc["terminal_id"]
     }
 
+def _mask_user_api_key(user_dict: dict) -> dict:
+    if not user_dict:
+        return user_dict
+    d = dict(user_dict)
+    key = d.get("gemini_api_key")
+    if key and str(key).strip():
+        k = str(key).strip()
+        d["has_gemini_api_key"] = True
+        d["masked_gemini_api_key"] = f"{k[:6]}...{k[-4:]}" if len(k) > 10 else "********"
+    else:
+        d["has_gemini_api_key"] = False
+        d["masked_gemini_api_key"] = ""
+    # Strip raw sensitive key from response payload
+    d.pop("gemini_api_key", None)
+    return d
+
 @app.post("/api/users")
 def create_user(user: UserCreate):
     try:
@@ -126,7 +146,8 @@ def create_user(user: UserCreate):
             intercom_auto_answer=user.intercom_auto_answer,
             intercom_auto_delay=user.intercom_auto_delay,
             allow_force_answer_staff=user.allow_force_answer_staff,
-            allow_force_answer_family=user.allow_force_answer_family
+            allow_force_answer_family=user.allow_force_answer_family,
+            gemini_api_key=user.gemini_api_key
         )
         return {"id": user_id, "status": "success"}
     except Exception as e:
@@ -147,7 +168,9 @@ def update_user_details(user_id: int, user: UserUpdate):
             intercom_auto_answer=user.intercom_auto_answer,
             intercom_auto_delay=user.intercom_auto_delay,
             allow_force_answer_staff=user.allow_force_answer_staff,
-            allow_force_answer_family=user.allow_force_answer_family
+            allow_force_answer_family=user.allow_force_answer_family,
+            gemini_api_key=user.gemini_api_key,
+            clear_gemini_api_key=bool(user.clear_gemini_api_key)
         )
         return {"status": "success"}
     except Exception as e:
@@ -155,21 +178,22 @@ def update_user_details(user_id: int, user: UserUpdate):
 
 @app.get("/api/users")
 def list_users():
-    return db.get_all_users()
+    users = db.get_all_users()
+    return [_mask_user_api_key(u) for u in users]
 
 @app.get("/api/users/{user_id}")
 def get_user_details(user_id: int):
     u = db.get_user(user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    return u
+    return _mask_user_api_key(u)
 
 @app.get("/api/users/terminal/{terminal_id}")
 def get_user_by_terminal_id(terminal_id: str):
     u = db.get_user_by_terminal(terminal_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not bound to this terminal")
-    return u
+    return _mask_user_api_key(u)
 
 @app.delete("/api/users/{user_id}")
 def delete_user_record(user_id: int):
@@ -806,7 +830,8 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
 5. 【重要指示】あなた自身にはスタッフを呼ぶ機能はありません。「スタッフに連絡します」「スタッフをお呼びします」などの発言は絶対にしないでください。体調不良時は「スタッフに連絡する場合はボタンを押してください」と案内してください。
 """
 
-    gemini_key = os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
+    user_custom_key = (user.get("gemini_api_key") or "").strip() if user else ""
+    gemini_key = user_custom_key or os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
     if gemini_key:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={gemini_key}"
@@ -873,7 +898,8 @@ AI対話時の注意点: {user.get("attention_points", "優しく傾聴")}
 4. 【禁止事項】あなた自身にはスタッフを呼ぶ機能はありません。「スタッフに連絡します」「スタッフをお呼びします」などの発言は絶対にしないでください。体調不良時は「ご無理をなさらず、ナースコール（または画面の呼び出しボタン）を押してくださいね」とだけ案内してください。
 """
 
-    gemini_key = os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
+    user_custom_key = (user.get("gemini_api_key") or "").strip() if user else ""
+    gemini_key = user_custom_key or os.getenv("GEMINI_API_KEY", config.GEMINI_API_KEY)
     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
 
     if gemini_key:
@@ -961,6 +987,18 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
         return
 
     user_id = user["id"]
+    
+    # Push today's schedules upon successful user connection
+    try:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_schedules = db.get_schedules_by_user_and_date(user_id, today_str)
+        await websocket.send_json({
+            "type": "today_schedules",
+            "date": today_str,
+            "schedules": today_schedules
+        })
+    except Exception as e:
+        print(f"Error pushing initial schedules ({terminal_id}): {e}")
     
     try:
         while True:
@@ -1515,8 +1553,138 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     def on_gemini_error(err_msg: str):
         print(f"Gemini Live Session Error ({terminal_id}): {err_msg}")
 
-    # Fetch recent conversation history for memory context sync
+    # Fetch recent conversation history and today schedules for memory context sync
     recent_history = db.get_chat_history(user["id"], limit=6)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
+
+    etegami_lock = asyncio.Lock()
+
+    async def on_live_etegami_update(motif: str, msg: str):
+        # Prevent duplicate update if already updating
+        if getattr(session, "is_etegami_updating", False):
+            print(f"[Gemini Live Session ({terminal_id})]: Already updating digital etegami - skipping duplicate request.")
+            return
+
+        async with etegami_lock:
+            if getattr(session, "is_etegami_updating", False):
+                return
+            session.is_etegami_updating = True
+            session.last_etegami_update_time = time.time()
+            try:
+                print(f"[Gemini Live Session ({terminal_id})]: Live Etegami Update executing with motif='{motif}', msg='{msg}'")
+                # 1. Notify user terminal that update has started (show spinner/badge)
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": True
+                })
+
+                card_info = await asyncio.to_thread(
+                    multimedia.modify_or_create_etegami,
+                    user_id=user["id"],
+                    terminal_id=terminal_id,
+                    motif_hint=motif,
+                    message_hint=msg
+                )
+                # 2. Send real-time update to user terminal
+                await websocket.send_json({
+                    "type": "etegami_update",
+                    **card_info
+                })
+                # Broadcast to staff dashboard
+                await manager.broadcast_to_staff({
+                    "type": "etegami_updated",
+                    "terminal_id": terminal_id,
+                    "user_name": user.get("name", "利用者"),
+                    "etegami": card_info
+                })
+            except Exception as e:
+                print(f"Error handling live etegami update ({terminal_id}): {e}")
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": False
+                })
+            finally:
+                session.is_etegami_updating = False
+
+    async def on_live_etegami_complete():
+        # Prevent duplicate update if already updating
+        if getattr(session, "is_etegami_updating", False):
+            print(f"[Gemini Live Session ({terminal_id})]: Already updating digital etegami - skipping duplicate complete request.")
+            return
+
+        async with etegami_lock:
+            if getattr(session, "is_etegami_updating", False):
+                return
+            session.is_etegami_updating = True
+            session.last_etegami_update_time = time.time()
+            try:
+                print(f"[Gemini Live Session ({terminal_id})]: Live Etegami Complete executing...")
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": True
+                })
+
+                card_info = await asyncio.to_thread(
+                    multimedia.modify_or_create_etegami,
+                    user_id=user["id"],
+                    terminal_id=terminal_id,
+                    is_completed=True
+                )
+                await websocket.send_json({
+                    "type": "etegami_update",
+                    **card_info
+                })
+                await manager.broadcast_to_staff({
+                    "type": "etegami_updated",
+                    "terminal_id": terminal_id,
+                    "user_name": user.get("name", "利用者"),
+                    "etegami": card_info
+                })
+            except Exception as e:
+                print(f"Error handling live etegami completion ({terminal_id}): {e}")
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": False
+                })
+            finally:
+                session.is_etegami_updating = False
+
+    etegami_complete_keywords = [
+        "これでいい", "これで決定", "絵手紙完成", "デジタル絵手紙完成",
+        "これで完成", "完成でいい", "完成に", "気に入った", "ばっちり",
+        "これで送って", "家族に送って", "これで仕上げ"
+    ]
+
+    etegami_resident_keywords = [
+        "絵を更新", "絵の更新", "絵更新",
+        "描きかえ", "描き替え", "描きなお", "描き直",
+        "デジタル絵手紙を更新", "デジタル絵手紙更新", "絵手紙を更新", "絵手紙更新",
+        "新しくして", "新しく描いて", "新しく作って", "新しくしてほしい",
+        "別の絵にして", "別の絵を描いて", "違う絵にして", "絵を変えて", "絵を変え"
+    ]
+
+    def check_resident_etegami_trigger(speech_text: str):
+        if not speech_text or getattr(session, "is_etegami_updating", False):
+            return
+        if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 5.0):
+            return
+        clean = speech_text.replace(" ", "").replace("　", "")
+
+        # Check completion keywords first
+        if any(kw in clean for kw in etegami_complete_keywords):
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident completion request in '{speech_text}'")
+            asyncio.create_task(on_live_etegami_complete())
+            return
+
+        if any(kw in clean for kw in etegami_resident_keywords):
+            detected_motif = ""
+            for motif_cand in ["夕焼け", "夕暮れ", "縁側", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "つばき", "コスモス"]:
+                if motif_cand in clean:
+                    detected_motif = motif_cand
+                    break
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident request in '{speech_text}' (motif='{detected_motif}')")
+            asyncio.create_task(on_live_etegami_update(detected_motif, ""))
 
     # Initialize Gemini Live Session
     def on_gemini_thought(thought: str):
@@ -1533,7 +1701,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         on_thought_received=on_gemini_thought,
         on_recording_status_changed=lambda active, msg: asyncio.create_task(on_live_recording_status(active, msg)),
         on_ui_mode_changed=lambda mode: asyncio.create_task(on_live_ui_mode_change(mode)),
-        history=recent_history
+        on_etegami_updated=lambda motif, msg: asyncio.create_task(on_live_etegami_update(motif, msg)),
+        on_etegami_completed=lambda: asyncio.create_task(on_live_etegami_complete()),
+        history=recent_history,
+        schedules=today_schedules
     )
 
     # Triggered when Parallel Whisper/Ollama PII Inspector detects forbidden personal info
@@ -1654,6 +1825,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             session.recording_active = True
             asyncio.create_task(on_live_recording_status(True, "会話記録再開"))
 
+        # 2-2. Check for resident etegami update triggers from Whisper STT
+        check_resident_etegami_trigger(transcribed_text)
+
         # 3. Run local LLM safety guardrail inspection in background
         asyncio.create_task(_run_live_guardrail(transcribed_text))
 
@@ -1682,6 +1856,39 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"[Gemini Live Session Notice]: {e}. Operating in local Ollama fallback mode.")
 
+        # Send initial Etegami card on connect so the terminal immediately shows the artwork
+        try:
+            latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id)
+            if latest_row and latest_row.get("payload"):
+                existing = latest_row["payload"]
+                meta = existing.get("postcard_metadata", {})
+                await websocket.send_json({
+                    "type": "etegami_update",
+                    "title": meta.get("headline", existing.get("theme", "【手作り絵手紙】")),
+                    "image_url": existing.get("generated_image_url") or "/family/assets/sample_postcard.jpg",
+                    "calligraphy": meta.get("calligraphy_message", "心穏やかに 寄り添う日々"),
+                    "stamp_icon": meta.get("stamp_icon", "🌸"),
+                    "season": existing.get("season", "autumn"),
+                    "date_str": meta.get("date_str", ""),
+                    "is_completed": existing.get("is_completed", False),
+                    "status": existing.get("status", "drafting"),
+                    "badge_text": existing.get("badge_text", "🎨 会話をもとに下絵を制作中"),
+                    "base_source": existing.get("base_source", "reminiscence")
+                })
+            else:
+                initial_card = multimedia.modify_or_create_etegami(
+                    user_id=user["id"],
+                    terminal_id=terminal_id,
+                    motif_hint="秋",
+                    message_hint="心穏やかに 寄り添う日々"
+                )
+                await websocket.send_json({
+                    "type": "etegami_update",
+                    **initial_card
+                })
+        except Exception as e:
+            print(f"Error sending initial etegami card ({terminal_id}): {e}")
+
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
@@ -1707,6 +1914,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
                 if user_text:
                     print(f"[Live Session EOS]: Received user text: '{user_text}'")
+
+                    # Check for resident etegami update trigger from user text (Double safety net)
+                    check_resident_etegami_trigger(user_text)
+
                     # Check for confidential / secret conversation recording pause triggers
                     if any(w in user_text for w in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止", "録音を停止"]):
                         print(f"[Live Session Confidential Mode]: User initiated recording pause: '{user_text}'")
@@ -1773,6 +1984,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 # User acknowledged warning and clicks resume
                 pii_monitor.reset()
                 await websocket.send_json({"type": "session_resumed", "status": "ok"})
+
+            elif msg_type in ["complete_etegami", "etegami_complete"]:
+                print(f"[Client WS ({terminal_id})]: Received explicit complete_etegami action")
+                asyncio.create_task(on_live_etegami_complete())
 
             elif msg_type == "user_emergency_call":
                 reason = data.get("reason", "利用者様が画面のスタッフ連絡ボタンを押しました")
@@ -2130,6 +2345,159 @@ class BarberReportUpdate(BaseModel):
 def api_update_barber_report(req: BarberReportUpdate):
     db.update_barber_report(req.reservation_id, req.status, req.report)
     return {"status": "success", "message": "施術報告を更新しました。"}
+
+# ==============================================================================
+# Resident Schedules Management APIs (居住者予定・スケジュール管理)
+# ==============================================================================
+class ScheduleCreate(BaseModel):
+    date: str
+    time: str
+    title: str
+    category: Optional[str] = "general"
+    location: Optional[str] = ""
+    notes: Optional[str] = ""
+
+class ScheduleUpdate(BaseModel):
+    date: str
+    time: str
+    title: str
+    category: Optional[str] = "general"
+    location: Optional[str] = ""
+    notes: Optional[str] = ""
+
+@app.get("/api/users/{user_id}/schedules")
+def api_get_user_schedules(user_id: int, date: Optional[str] = None):
+    """Retrieves schedules for a specific resident (by date or upcoming)."""
+    if date:
+        return db.get_schedules_by_user_and_date(user_id, date)
+    return db.get_upcoming_schedules(user_id)
+
+@app.post("/api/users/{user_id}/schedules")
+async def api_create_user_schedule(user_id: int, item: ScheduleCreate):
+    """Creates a new schedule for a resident and notifies connected staff and user terminal."""
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    sched_id = db.add_schedule(
+        user_id=user_id,
+        date_str=item.date,
+        time_str=item.time,
+        title=item.title,
+        category=item.category or "general",
+        location=item.location or "",
+        notes=item.notes or ""
+    )
+
+    # Broadcast update to staff
+    await manager.broadcast_to_staff({
+        "type": "schedule_updated",
+        "user_id": user_id,
+        "schedule_id": sched_id,
+        "date": item.date
+    })
+
+    # If terminal is online, notify terminal
+    term_id = user.get("terminal_id")
+    if term_id and term_id in manager.user_connections:
+        await manager.send_to_user(term_id, {
+            "type": "schedule_updated",
+            "date": item.date
+        })
+
+    return {"status": "success", "id": sched_id, "message": "予定を登録しました。"}
+
+@app.put("/api/schedules/{schedule_id}")
+async def api_update_schedule(schedule_id: int, item: ScheduleUpdate):
+    """Updates an existing schedule item."""
+    success = db.update_schedule(
+        schedule_id=schedule_id,
+        date_str=item.date,
+        time_str=item.time,
+        title=item.title,
+        category=item.category or "general",
+        location=item.location or "",
+        notes=item.notes or ""
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"status": "success", "message": "予定を更新しました。"}
+
+@app.delete("/api/schedules/{schedule_id}")
+async def api_delete_schedule(schedule_id: int):
+    """Deletes a schedule item."""
+    success = db.delete_schedule(schedule_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"status": "success", "message": "予定を削除しました。"}
+
+@app.get("/api/users/terminal/{terminal_id}/today_schedules")
+async def api_get_terminal_today_schedules(terminal_id: str):
+    """Fetches today's schedules and generates spoken announcement audio for user terminal on boot."""
+    user = db.get_user_by_terminal(terminal_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Terminal not bound to user")
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
+    
+    raw_name = user.get("name", "山田")
+    nickname = raw_name.split()[0] if raw_name else "利用者"
+    
+    # Generate warm spoken announcement text
+    if schedules:
+        parts = []
+        for s in schedules:
+            t = s.get("time", "")
+            title = s.get("title", "")
+            try:
+                hh, mm = t.split(":")
+                hh_int = int(hh)
+                period = "午前" if hh_int < 12 else "午後"
+                display_hh = hh_int if hh_int <= 12 else hh_int - 12
+                mm_str = f"{int(mm)}分" if int(mm) > 0 else ""
+                parts.append(f"{period}{display_hh}時{mm_str}から、{title}")
+            except Exception:
+                parts.append(f"{t}から、{title}")
+        
+        sched_summary = "、".join(parts)
+        announcement_text = f"{nickname}様、おはようございます！本日のご予定をお知らせしますね。本日は、{sched_summary}がございますよ。今日もどうぞ穏やかにお過ごしくださいね。"
+    else:
+        announcement_text = f"{nickname}様、おはようございます！本日は特別なご予定は入っておりませんので、どうぞご自身のお部屋やデイルームでごゆっくりおくつろぎくださいね。"
+    
+    # Generate speech synthesis audio
+    audio_b64 = ""
+    try:
+        clean_text = clean_text_for_tts(announcement_text)
+        audio_bytes = await asyncio.to_thread(speech.synthesize_speech, clean_text)
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    except Exception as e:
+        print(f"Error synthesizing schedule announcement audio: {e}")
+
+    return {
+        "user_id": user["id"],
+        "user_name": raw_name,
+        "room_number": user.get("room_number", ""),
+        "date": today_str,
+        "schedules": schedules,
+        "announcement_text": announcement_text,
+        "audio_base64": audio_b64
+    }
+
+@app.post("/api/users/terminal/{terminal_id}/announce_schedules")
+async def api_announce_terminal_today_schedules(terminal_id: str):
+    """Triggers speech announcement of today's schedules directly over WebSocket to user terminal."""
+    info = await api_get_terminal_today_schedules(terminal_id)
+    if terminal_id in manager.user_connections and info.get("audio_base64"):
+        await manager.send_to_user(terminal_id, {
+            "type": "play_voice",
+            "text": info["announcement_text"],
+            "audio": info["audio_base64"]
+        })
+        return {"status": "success", "message": "居室端末へ予定アナウンスを送信しました。"}
+    return {"status": "info", "message": "端末接続または音声生成不可のためテキストのみ返却", "info": info}
+
 
 # Family Access & Patient Summary API (Group Restricted)
 class VisitationReservationReq(BaseModel):

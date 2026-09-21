@@ -147,5 +147,90 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
 
         await session.close()
 
+    def test_per_user_gemini_api_key_resolution(self):
+        """Test resolution priority for resident individual Gemini API keys."""
+        # 1. Resident with custom individual API key
+        user_with_custom_key = {
+            "name": "山田 太郎",
+            "gemini_api_key": "custom_user_key_ai_9999"
+        }
+        session1 = GeminiLiveSession(
+            user=user_with_custom_key,
+            on_audio_received=MagicMock(),
+            on_error=MagicMock()
+        )
+        self.assertEqual(session1.api_key, "custom_user_key_ai_9999")
+
+        # 2. Resident without custom key (falls back to system default)
+        user_without_key = {
+            "name": "鈴木 花子",
+            "gemini_api_key": None
+        }
+        session2 = GeminiLiveSession(
+            user=user_without_key,
+            on_audio_received=MagicMock(),
+            on_error=MagicMock()
+        )
+        self.assertTrue(bool(session2.api_key))
+        self.assertNotEqual(session2.api_key, "custom_user_key_ai_9999")
+
+        # 3. Explicit api_key parameter override takes top priority
+        session3 = GeminiLiveSession(
+            user=user_with_custom_key,
+            on_audio_received=MagicMock(),
+            on_error=MagicMock(),
+            api_key="explicit_override_key_777"
+        )
+        self.assertEqual(session3.api_key, "explicit_override_key_777")
+
+    @patch("backend.gemini_live.websockets.connect", new_callable=AsyncMock)
+    async def test_gemini_etegami_trigger_and_duplicate_prevention(self, mock_ws_connect):
+        """Test detection of 'みまもりさん、デジタル絵手紙更新して' and duplicate prevention."""
+        mock_ws = AsyncWsMock()
+        mock_ws_connect.return_value = mock_ws
+
+        etegami_callback = MagicMock()
+        session = GeminiLiveSession(
+            user=self.user,
+            on_audio_received=MagicMock(),
+            on_error=MagicMock(),
+            on_text_received=MagicMock(),
+            on_etegami_updated=etegami_callback
+        )
+        session.api_key = "test_key"
+        await session.connect()
+
+        # Verify prompt setup contains the instruction
+        sent_json = mock_ws.send.call_args[0][0]
+        self.assertIn("みまもりさん、デジタル絵手紙更新して", sent_json)
+
+        # 1. Normal trigger from Gemini
+        frame1 = json.dumps({
+            "serverContent": {
+                "modelTurn": {
+                    "parts": [{"text": "みまもりさん、デジタル絵手紙更新して（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
+                }
+            }
+        })
+        mock_ws.messages.append(frame1)
+        await session._receive_loop()
+        etegami_callback.assert_called_once_with("寄り添う小鳥", "いつもありがとう")
+
+        # 2. Duplicate trigger while is_etegami_updating is True -> should do nothing
+        etegami_callback.reset_mock()
+        session.is_etegami_updating = True
+        frame2 = json.dumps({
+            "serverContent": {
+                "modelTurn": {
+                    "parts": [{"text": "みまもりさん、デジタル絵手紙更新して"}]
+                }
+            }
+        })
+        mock_ws.messages.append(frame2)
+        await session._receive_loop()
+        etegami_callback.assert_not_called()
+
+        await session.close()
+
 if __name__ == "__main__":
     unittest.main()

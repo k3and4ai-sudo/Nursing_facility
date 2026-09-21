@@ -3,136 +3,613 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Care-Link 介護スタッフステーション Gateway</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e293b 100%);
-            color: #f8fafc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            text-align: center;
-        }
-        .card {
-            background: rgba(30, 41, 59, 0.65);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 28px;
-            padding: 44px 28px;
-            max-width: 440px;
-            width: 88%;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.55);
-        }
-        .icon {
-            font-size: 3.2rem;
-            margin-bottom: 12px;
-        }
-        .spinner {
-            width: 46px;
-            height: 46px;
-            border: 4px solid rgba(59, 130, 246, 0.25);
-            border-top-color: #3b82f6;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        h2 {
-            margin: 0 0 10px;
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: #38bdf8;
-            letter-spacing: -0.01em;
-        }
-        p {
-            margin: 0;
-            font-size: 0.95rem;
-            color: #94a3b8;
-            line-height: 1.6;
-        }
-        .error-box {
-            display: none;
-            background: rgba(239, 68, 68, 0.15);
-            border: 1.5px solid #ef4444;
-            color: #fca5a5;
-            padding: 16px;
-            border-radius: 16px;
-            margin-top: 24px;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            text-align: left;
-        }
-        .retry-btn {
-            display: inline-block;
-            margin-top: 16px;
-            padding: 10px 24px;
-            background: #2563eb;
-            color: #ffffff;
-            border-radius: 12px;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 0.95rem;
-            cursor: pointer;
-            border: none;
-            transition: background 0.2s;
-        }
-        .retry-btn:hover {
-            background: #1d4ed8;
-        }
-    </style>
+    <title>スタッフステーション - Nursing Care Dashboard</title>
+    <link rel="stylesheet" href="style.css?v=20260911_3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-    <div class="card">
-        <div class="icon">🏥</div>
-        <div id="spinner" class="spinner"></div>
-        <h2 id="title">介護スタッフステーションへ接続中...</h2>
-        <p id="desc">施設内サーバーへの暗号化トンネルを確立しています</p>
-        <div id="error-box" class="error-box">
-            <div id="error-msg"></div>
-            <button class="retry-btn" onclick="location.reload()">🔄 再試行</button>
-        </div>
+<body class="dark-mode">
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4.5 16.5c-1.5 1.26-2.5 3.19-2.5 5.5h20c0-2.31-1-4.24-2.5-5.5"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <circle cx="12" cy="11" r="3"/>
+                </svg>
+                <h2>ケア・リンク</h2>
+            </div>
+            <nav class="sidebar-menu">
+                <button class="menu-btn active" data-tab="dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                    <span>ダッシュボード</span>
+                </button>
+                <button class="menu-btn" data-tab="patients">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>利用者マスター</span>
+                </button>
+                <button class="menu-btn" data-tab="vitals">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <span>バイタル分析</span>
+                </button>
+                <button class="menu-btn" data-tab="live-console">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>対話・インターホン</span>
+                </button>
+                <button class="menu-btn" data-tab="handover">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>申し送り・スタッフチャット</span>
+                </button>
+                <button class="menu-btn" data-tab="prompts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <span>プロンプト雛形設定</span>
+                </button>
+                <button class="menu-btn" data-tab="barber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                    <span>訪問理美容管理</span>
+                </button>
+                <button class="menu-btn" data-tab="schedules">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>予定・スケジュール管理</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">NS</div>
+                    <div>
+                        <div class="name">スタッフステーション</div>
+                        <div class="role">管理者</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Panel Contents -->
+        <main class="main-panel">
+            <!-- Header -->
+            <header class="main-header">
+                <h1 id="tab-title">ダッシュボード</h1>
+                <div class="header-actions">
+                    <div id="family-tunnel-badge" class="status-badge family-tunnel checking" style="cursor: pointer;" title="ご家族ポータル向け外部公開トンネル状態（クリックでURLコピー）">
+                        <span class="status-dot"></span>
+                        <span id="family-tunnel-status-text">ご家族トンネル: 確認中...</span>
+                    </div>
+                    <div id="alert-badge" class="alert-indicator hidden">
+                        <span class="pulse-ring"></span>
+                        <span class="alert-text">異常検知あり！</span>
+                    </div>
+                    <div id="conn-status" class="status-badge connected">サーバー接続中</div>
+                </div>
+            </header>
+
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-content active">
+                <!-- Alerts Section -->
+                <div class="dashboard-grid">
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>🚨 アクティブアラート（緊急警告）</h3>
+                            <button id="clear-alerts-btn" class="btn btn-secondary btn-sm">クリア</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="alert-list" class="alert-container-list">
+                                <div class="no-alerts-msg">現在、異常値アラートは発生していません。</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Google Fit Cloud Sync & Smartwatch Banner -->
+                    <div class="card full-width google-fit-status-card">
+                        <div class="google-fit-banner">
+                            <div class="gfit-info">
+                                <span class="gfit-icon">⌚</span>
+                                <div class="gfit-text">
+                                    <div class="gfit-title">
+                                        <strong>Google Fit（Google LLC）クラウド自動見守り連携</strong>
+                                        <span id="gfit-sync-badge" class="badge badge-success">🟢 自動同期稼働中</span>
+                                    </div>
+                                    <div class="gfit-desc" id="gfit-sync-desc">
+                                        スマートウォッチ（B16Pro）から同期された心拍数・歩数・SpO2データをリアルタイムにカルテへ自動反映中
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="gfit-actions">
+                                <span id="gfit-last-sync-time" class="gfit-time">最終同期: 取得中...</span>
+                                <button id="gfit-manual-sync-btn" class="btn btn-primary btn-sm">
+                                    <span class="btn-icon">🔄</span> 今すぐGoogle Fitと同期
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Left: Recent Vitals -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📋 最近測定されたバイタル情報</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>部屋</th>
+                                        <th>氏名</th>
+                                        <th>測定時間</th>
+                                        <th>心拍/SpO2</th>
+                                        <th>歩数</th>
+                                        <th>体温</th>
+                                        <th>血圧(上/下)</th>
+                                        <th>体重</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-vitals-tbody">
+                                    <tr>
+                                        <td colspan="8" class="text-center">データを読み込んでいます...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right: Conversation Summaries -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>🧠 本日の会話要約・感情分析</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="summary-list" class="summary-cards-container">
+                                <div class="no-data-msg">本日の会話サマリーはまだ生成されていません。</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Patient Master -->
+            <section id="tab-patients" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Register/Edit Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 id="form-title">➕ 利用者 新規登録</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="patient-form" class="standard-form">
+                                <input type="hidden" id="p-id">
+                                <div class="form-group">
+                                    <label for="p-name">氏名 *</label>
+                                    <input type="text" id="p-name" required placeholder="例: 山田 太郎">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="p-age">年齢</label>
+                                        <input type="number" id="p-age" placeholder="例: 85">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="p-room">居室番号</label>
+                                        <input type="text" id="p-room" placeholder="例: 101">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-terminal">紐付け用端末ID (1対1) *</label>
+                                    <input type="text" id="p-terminal" required placeholder="例: user_tablet_1234">
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-dementia">認知症レベル</label>
+                                    <select id="p-dementia">
+                                        <option value="none">なし (正常)</option>
+                                        <option value="mild">軽度 (Dementia-1)</option>
+                                        <option value="moderate">中等度 (Dementia-2)</option>
+                                        <option value="severe">重度 (Dementia-3)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-attention">AI対話時の注意点 (感情トリガー等)</label>
+                                    <textarea id="p-attention" rows="3" placeholder="例: 「帰りたい」と言われたら否定せず、「ここにいて安心」と話しかける。孫の話をすると喜びます。"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="p-notes">ケア用特記事項 (持病、制限等)</label>
+                                    <textarea id="p-notes" rows="3" placeholder="例: 高血圧のため塩分制限あり。右足に軽い関節痛。"></textarea>
+                                </div>
+                                <div class="intercom-settings-box" style="margin-top: 14px; border-left: 4px solid var(--primary, #3b82f6); background: rgba(59, 130, 246, 0.04);">
+                                    <div class="intercom-settings-title" style="color: var(--primary, #3b82f6);">🔑 Gemini Live API 個別アカウント設定</div>
+                                    <div class="form-group" style="margin-top: 8px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <label for="p-gemini-key" style="font-weight: 600; margin-bottom: 0;">個別 Gemini APIキー (任意)</label>
+                                            <span id="p-gemini-key-status" class="badge" style="font-size: 11px; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 10px;">未設定 (共通キー使用)</span>
+                                        </div>
+                                        <input type="password" id="p-gemini-key" placeholder="AIzaSy... (未設定時はシステム共通キーを使用)" autocomplete="off">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                                            <span style="font-size: 11px; color: var(--text-light);">※各居住者ごとのGemini APIキー・使用量クォータを適用する場合に入力</span>
+                                            <button type="button" id="btn-clear-gemini-key" class="btn btn-sm" style="display: none; padding: 2px 8px; font-size: 11px; color: #ef4444; border: 1px solid #fca5a5; background: #fff; border-radius: 4px; cursor: pointer;">キーを削除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="intercom-settings-box">
+                                    <div class="intercom-settings-title">📞 インターホン通話・「でる」待ち時間設定</div>
+                                    <div class="form-row" style="align-items: center; gap: 16px;">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="checkbox-label" for="p-auto-answer">
+                                                <input type="checkbox" id="p-auto-answer" checked>
+                                                <span style="font-weight: 700;">設定時間経過で自動的に「でる」にする</span>
+                                            </label>
+                                            <div style="font-size: 11px; color: var(--text-light); margin-top: 3px; padding-left: 22px;">
+                                                ※居室で「でる」を押す前は会話は始まりません。この秒数を超えると強制的に「でる」になり通話が開始されます。
+                                            </div>
+                                        </div>
+                                        <div class="form-group" style="width: 170px; flex: none;">
+                                            <label for="p-auto-delay" style="font-weight: 600;">自動で「でる」までの時間</label>
+                                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                                                <input type="number" id="p-auto-delay" value="15" min="1" max="60" style="width: 70px; text-align: center; font-weight: 700; font-size: 15px;">
+                                                <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">秒後</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-row" style="margin-top: 10px; border-top: 1px dashed var(--border-color, #e2e8f0); padding-top: 8px;">
+                                        <div class="form-group">
+                                            <label class="checkbox-label" for="p-allow-force-staff">
+                                                <input type="checkbox" id="p-allow-force-staff" checked>
+                                                <span style="font-size: 12px;">スタッフの緊急強制受話を許可</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="checkbox-label" for="p-allow-force-family">
+                                                <input type="checkbox" id="p-allow-force-family">
+                                                <span style="font-size: 12px;">ご家族の緊急強制受話を許可</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" id="save-patient-btn" class="btn btn-primary">登録する</button>
+                                    <button type="button" id="cancel-edit-btn" class="btn btn-secondary hidden">キャンセル</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Patient List -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>👥 登録されている利用者一覧</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="patient-list" class="patient-grid-list">
+                                <div class="text-center pad-20">登録者データを読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Vitals Analytics -->
+            <section id="tab-vitals" class="tab-content">
+                <div class="card">
+                    <div class="card-header selection-bar">
+                        <h3>📈 バイタルサイン推移グラフ</h3>
+                        <div class="selector">
+                            <label for="vital-user-selector">利用者の選択:</label>
+                            <select id="vital-user-selector">
+                                <option value="">-- 利用者を選択してください --</option>
+                            </select>
+                            <button id="vitals-tab-sync-btn" class="btn btn-secondary btn-sm" style="margin-left: 10px;">
+                                🔄 Google Fit同期
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="vitals-chart-empty" class="chart-empty-msg">
+                            チャートを表示するには、対象の利用者を選択してください。
+                        </div>
+                        <div id="vitals-chart-wrapper" class="chart-container hidden">
+                            <!-- Smartwatch Activity Summary Banner -->
+                            <div id="vitals-activity-summary-banner" class="activity-summary-banner">
+                                <div class="summary-kpis" id="vitals-summary-kpis">
+                                    <!-- Populated dynamically -->
+                                </div>
+                                <div class="summary-karte-text" id="vitals-summary-karte">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="chart-grid">
+                                <div class="chart-box">
+                                    <h4>❤️ 心拍数推移 (bpm) <span class="chart-sub">（スマートウォッチ／Google Fit）</span></h4>
+                                    <canvas id="heartRateChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>🚶 時間別歩数・活動量 (歩) <span class="chart-sub">（1時間ごとの歩行実績）</span></h4>
+                                    <canvas id="stepsChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>🫁 血中酸素飽和度 (SpO2 %)</h4>
+                                    <canvas id="spo2Chart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>体温の推移 (℃)</h4>
+                                    <canvas id="tempChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>血圧の推移 (mmHg)</h4>
+                                    <canvas id="bpChart"></canvas>
+                                </div>
+                                <div class="chart-box">
+                                    <h4>体重の推移 (kg)</h4>
+                                    <canvas id="weightChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Live Console & Intercom -->
+            <section id="tab-live-console" class="tab-content">
+                <div class="dashboard-grid intercom-grid">
+                    <!-- Left: Active Users List and Intercom Controller -->
+                    <div class="card flex-col">
+                        <div class="card-header">
+                            <h3>📞 リアルタイムインターホン（対話・監視）</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="room-call-list" id="intercom-room-list">
+                                <!-- Rooms to select for calling -->
+                                <div class="text-center pad-20">利用者を選択してください</div>
+                            </div>
+                            
+                            <!-- Call Control Card -->
+                            <div id="call-control-card" class="call-control-panel disabled">
+                                <h4 id="call-target-name">通話先が選択されていません</h4>
+                                <p id="call-target-room">-</p>
+                                <div id="call-target-status-wrapper" style="margin: 2px 0 6px 0;"></div>
+                                <div class="call-timer" id="call-timer">00:00</div>
+                                
+                                <div class="call-btns" style="display: flex; flex-direction: column; gap: 8px;">
+                                    <div id="call-buttons-box" class="call-buttons-box" style="display: flex; gap: 10px; justify-content: center;">
+                                        <button id="staff-call-btn" class="btn btn-success" disabled style="flex: 1;">
+                                            <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/></svg>
+                                            <span>通常呼出</span>
+                                        </button>
+                                        <button id="staff-force-call-btn" class="btn btn-warning" disabled style="flex: 1;" title="緊急用: 利用者側の設定に関わらず即座にハンズフリー通話を開始します">
+                                            <svg viewBox="0 0 24 24" fill="currentColor" width="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                                            <span>強制呼出</span>
+                                        </button>
+                                    </div>
+                                    <div id="call-offline-notice" class="offline-notice hidden">
+                                        ⚠️ 端末がオフラインのため発信できません
+                                    </div>
+                                    <button id="staff-hangup-btn" class="btn btn-danger hidden">
+                                        <svg viewBox="0 0 24 24" fill="currentColor" width="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                                        <span>通話を切る</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Conversations & Override (Pattern B) -->
+                    <div class="card flex-col flex-2">
+                        <div class="card-header selection-bar" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3>👁️ AI対話の監視・割り込み送信</h3>
+                                <div id="active-monitor-badge" class="badge-sm" style="display: none;">監視中: 山田様</div>
+                            </div>
+                            <button id="live-line-btn" class="btn btn-line btn-sm" style="display: none;">家族へLINE連絡</button>
+                        </div>
+                        <div class="card-body chat-console-body">
+                            <!-- Real-time Chat log between User and AI -->
+                            <div class="chat-log-window" id="live-chat-window">
+                                <div class="chat-log-placeholder">
+                                    左のリストから利用者を選択すると、リアルタイムの会話ログを表示・監視できます。
+                                </div>
+                            </div>
+                            
+                            <!-- Override input (Pattern B) -->
+                            <div class="chat-override-input" id="chat-override-box">
+                                <input type="text" id="override-input-text" disabled placeholder="AIとの会話に割り込んで、利用者の端末に音声を送ります...">
+                                <button id="override-send-btn" class="btn btn-primary" disabled>割り込み送信</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Handover / Staff Chat -->
+            <section id="tab-handover" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Handover notes -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📝 申し送り事項 (引継ぎ用)</h3>
+                        </div>
+                        <div class="card-body flex-col">
+                            <form id="handover-form" class="standard-form inline">
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="h-author">作成者</label>
+                                        <input type="text" id="h-author" required placeholder="例: 看護師 田中">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="h-content">申し送り内容</label>
+                                    <textarea id="h-content" required rows="3" placeholder="例: 101号室の山田様、夕方から血圧高め(145)のため、夜間の見回りを多めにお願いします。"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">申し送りを保存</button>
+                            </form>
+                            <hr class="divider">
+                            <div class="handover-list scroll-y" id="handover-list-box">
+                                <div class="text-center pad-10">読み込み中...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Staff Chat Room -->
+                    <div class="card flex-col">
+                        <div class="card-header">
+                            <h3>💬 スタッフ間リアルタイムチャット</h3>
+                        </div>
+                        <div class="card-body chat-console-body">
+                            <div class="chat-log-window scroll-y" id="staff-chat-window">
+                                <!-- Staff group messages -->
+                                <div class="text-center pad-20">メッセージを読み込んでいます...</div>
+                            </div>
+                            <div class="chat-override-input">
+                                <input type="text" id="staff-chat-input" placeholder="スタッフへメッセージを送信...">
+                                <button id="staff-chat-send" class="btn btn-primary">送信</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Prompt Templates Library -->
+            <section id="tab-prompts" class="tab-content">
+                <div class="dashboard-grid">
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>📚 認知症対応プロンプト雛形ライブラリ (Gemini-Live / Ollama 共同利用)</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <p class="text-secondary mb-15">ワンタップで利用者の状態や認知症のレベルに合わせたAIの会話ペルソナを設定・カスタマイズできます。</p>
+                            <div id="prompt-templates-list" class="prompt-grid-container">
+                                <div class="text-center pad-20">プロンプト雛形を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Barber Management -->
+            <section id="tab-barber" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Reservation Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>✂️ 訪問理美容 予約登録</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="barber-form" class="standard-form">
+                                <div class="form-group">
+                                    <label for="b-user-id">対象利用者 *</label>
+                                    <select id="b-user-id" required>
+                                        <option value="">選択してください</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-date">予約日時 *</label>
+                                    <input type="datetime-local" id="b-date" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-menu">メニュー *</label>
+                                    <input type="text" id="b-menu" required placeholder="例: カット・顔剃り・シャンプー">
+                                </div>
+                                <div class="form-group">
+                                    <label for="b-notes">姿勢・認知症の注意点</label>
+                                    <textarea id="b-notes" rows="2" placeholder="例: 首を後ろに傾けるのが難しいため角度注意。洗髪時声かけ要。"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">訪問理美容を予約</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Reservations List & Reports -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>💈 訪問理美容 予約一覧 & 施術報告</h3>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="barber-reservations-list" class="reservation-list-box">
+                                <div class="text-center pad-20">予約情報を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Schedules Management (予定・スケジュール管理) -->
+            <section id="tab-schedules" class="tab-content">
+                <div class="dashboard-grid">
+                    <!-- Left: Schedule Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>📅 居住者 予定登録・編集</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="schedule-form" class="standard-form">
+                                <div class="form-group">
+                                    <label for="sched-user-id">対象利用者 *</label>
+                                    <select id="sched-user-id" required>
+                                        <option value="">選択してください</option>
+                                    </select>
+                                </div>
+                                <div class="form-row" style="display: flex; gap: 12px;">
+                                    <div class="form-group" style="flex: 1;">
+                                        <label for="sched-date">日付 *</label>
+                                        <input type="date" id="sched-date" required>
+                                    </div>
+                                    <div class="form-group" style="flex: 1;">
+                                        <label for="sched-time">時刻 *</label>
+                                        <input type="time" id="sched-time" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-category">区分・カテゴリ *</label>
+                                    <select id="sched-category" required>
+                                        <option value="general">📝 一般・日常</option>
+                                        <option value="rehab">🏃 リハビリ・機能訓練</option>
+                                        <option value="bath">♨️ 入浴</option>
+                                        <option value="barber">✂️ 訪問理美容</option>
+                                        <option value="visit">👨‍👩‍👧 ご家族面会</option>
+                                        <option value="meal">🍵 食事・おやつ</option>
+                                        <option value="medication">💊 服薬・医療</option>
+                                        <option value="event">🌸 レク・行事</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-title">予定内容・タイトル *</label>
+                                    <input type="text" id="sched-title" required placeholder="例: リハビリ・機能訓練（歩行訓練）">
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-location">場所</label>
+                                    <input type="text" id="sched-location" placeholder="例: 機能訓練室、居室、1Fラウンジ">
+                                </div>
+                                <div class="form-group">
+                                    <label for="sched-notes">詳細・連絡メモ</label>
+                                    <textarea id="sched-notes" rows="2" placeholder="例: 理学療法士同行。体調確認の上実施。"></textarea>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button type="submit" class="btn btn-primary" style="flex: 1;">予定を登録</button>
+                                    <button type="button" id="btn-trigger-schedule-announcement" class="btn btn-secondary" title="選択中の利用者の居室端末へ予定を音声連絡">🔊 端末へ連絡</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Right: Schedules Timeline List -->
+                    <div class="card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3>📋 登録済みスケジュール一覧</h3>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="date" id="sched-filter-date" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                                <button id="btn-refresh-schedules" class="btn btn-secondary btn-sm">🔄 更新</button>
+                            </div>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="staff-schedules-list" class="reservation-list-box">
+                                <div class="text-center pad-20">予定を読み込んでいます...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
     </div>
 
-    <script>
-        async function routeToStaffStation() {
-            const title = document.getElementById("title");
-            const desc = document.getElementById("desc");
-            const spinner = document.getElementById("spinner");
-            const errorBox = document.getElementById("error-box");
-            const errorMsg = document.getElementById("error-msg");
+    <!-- Alert Sound Element -->
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav" preload="auto" loop></audio>
 
-            try {
-                // キャッシュを回避して最新のトンネルエンドポイントを取得
-                const res = await fetch(`../tunnel_endpoint.json?t=${Date.now()}`);
-                if (!res.ok) throw new Error("エンドポイント情報 (tunnel_endpoint.json) を取得できませんでした。");
-                const data = await res.json();
-
-                if (data.status === "online" && data.backend_url) {
-                    desc.textContent = "暗号化接続を確立しました。スタッフ画面へ転送します...";
-                    
-                    const search = window.location.search || "";
-                    const targetUrl = `${data.backend_url}/staff/${search}`;
-                    
-                    window.location.replace(targetUrl);
-                } else {
-                    throw new Error("現在、外部接続トンネルが稼働していません。<br>施設側PCで <code>./start_tunnel.sh</code> を起動してください。");
-                }
-            } catch (err) {
-                spinner.style.display = "none";
-                title.textContent = "接続待機中";
-                title.style.color = "#f87171";
-                desc.textContent = "スタッフステーションへの接続に失敗しました。";
-                errorBox.style.display = "block";
-                errorMsg.innerHTML = err.message;
-            }
-        }
-        routeToStaffStation();
-    </script>
+    <script src="app.js?v=20260912_1"></script>
 </body>
 </html>
