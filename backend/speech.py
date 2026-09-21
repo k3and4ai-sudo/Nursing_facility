@@ -1,5 +1,6 @@
 import os
 import io
+import asyncio
 import wave
 import ctypes
 import numpy as np
@@ -260,17 +261,39 @@ def synthesize_speech(text: str) -> bytes:
     if not clean_text:
         clean_text = text
     
-    if TTS_ENGINE == "gtts":
-        try:
-            from gtts import gTTS
-            tts = gTTS(text=clean_text, lang='ja')
-            fp = io.BytesIO()
-            tts.write_to_fp(fp)
-            return fp.getvalue()
-        except Exception as e:
-            print(f"gTTS failed (e.g. rate limit / 429 or offline): {e}. Returning empty audio for native TTS fallback.")
-            return b""
-            
+    # 1. Primary: Microsoft Edge Neural TTS (Natural Japanese, Nanami voice, high quality, no 429 rate limit)
+    try:
+        import edge_tts
+        import concurrent.futures
+
+        async def _edge_gen():
+            communicate = edge_tts.Communicate(clean_text, voice="ja-JP-NanamiNeural")
+            chunks = []
+            async for chunk in communicate.stream():
+                if chunk.get("type") == "audio":
+                    chunks.append(chunk["data"])
+            return b"".join(chunks)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: asyncio.run(_edge_gen()))
+            audio_bytes = future.result(timeout=8.0)
+            if audio_bytes and len(audio_bytes) > 500:
+                return audio_bytes
+    except Exception as e:
+        print(f"Edge-TTS synthesis error: {e}. Trying fallback...")
+
+    # 2. Secondary Fallback: gTTS
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=clean_text, lang='ja')
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        val = fp.getvalue()
+        if val:
+            return val
+    except Exception as e:
+        print(f"gTTS fallback failed: {e}")
+
     return b""
 
 def generate_fallback_audio(text: str) -> bytes:
