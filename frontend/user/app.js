@@ -589,8 +589,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialize display ID
     displayTerminalId.textContent = terminalId;
 
+    let hasAnnouncedTodaySchedulesOnBoot = false;
+
     // Fetch user details from Server API
-    async function checkRegistration() {
+    async function checkRegistration(triggerAnnouncement = false) {
         try {
             const response = await fetch(`/api/users/terminal/${terminalId}`);
             if (response.status === 404) {
@@ -599,7 +601,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     terminalId = "user_tablet_1";
                     localStorage.setItem("nursing_terminal_id", terminalId);
                     if (displayTerminalId) displayTerminalId.textContent = terminalId;
-                    return await checkRegistration();
+                    return await checkRegistration(triggerAnnouncement);
                 }
                 showRegisterScreen();
                 return false;
@@ -611,9 +613,9 @@ document.addEventListener("DOMContentLoaded", () => {
             hideRegisterScreen();
             micBtn.disabled = false;
             statusText.textContent = "お話しする準備ができました";
-            // 📅 起動時に本日のご予定を読み込み＆音声案内
+            // 📅 起動時に本日のご予定を読み込み＆初回のみ音声案内
             if (typeof loadTodaySchedules === "function") {
-                loadTodaySchedules(true);
+                loadTodaySchedules(triggerAnnouncement && !hasAnnouncedTodaySchedulesOnBoot);
             }
             return true;
         } catch (err) {
@@ -644,7 +646,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("WebSocket connected");
             connectionStatus.className = "status-dot online";
             reportTerminalStatus("idle");
-            const registered = await checkRegistration();
+            const registered = await checkRegistration(false);
             if (!registered) {
                 statusText.textContent = "端末の登録をお待ちしています...";
             }
@@ -1803,27 +1805,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function playBase64Audio(base64Data, onEnded) {
-        if (activeAudio) {
-            activeAudio.pause();
-        }
-        
-        // standard HTML5 audio playback from base64
-        activeAudio = new Audio("data:audio/mp3;base64," + base64Data);
-        activeAudio.onended = () => {
-            activeAudio = null;
-            if (onEnded) onEnded();
-        };
-        activeAudio.onerror = (e) => {
-            console.error("Audio playback error:", e);
-            if (onEnded) onEnded();
-        };
-        activeAudio.play().catch(err => {
-            console.error("Audio play blocked/failed:", err);
-            if (onEnded) onEnded();
-        });
-    }
-
     // =========================================================================
     // 📅 今日のご予定 (Schedules Management & Boot Announcement)
     // =========================================================================
@@ -1833,6 +1814,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const todaySchedulesList = document.getElementById("today-schedules-list");
     let currentScheduleAnnouncementAudio = null;
     let currentScheduleAnnouncementText = "";
+    let isAnnouncementPlaying = false;
+    let bootAnnouncementTimeout = null;
 
     function escapeScheduleHtml(str) {
         if (!str) return "";
@@ -1911,10 +1894,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            // 起動時の自動音声連絡 (autoAnnounce = true)
-            if (autoAnnounce && currentScheduleAnnouncementAudio) {
-                console.log("[Care-Link Boot]: Announcing today's schedules with synthesized voice...");
-                setTimeout(() => {
+            // 起動時の自動音声連絡 (autoAnnounce = true かつ 初回のみ1回だけ実行)
+            if (autoAnnounce && currentScheduleAnnouncementAudio && !hasAnnouncedTodaySchedulesOnBoot && !isAnnouncementPlaying) {
+                hasAnnouncedTodaySchedulesOnBoot = true;
+                console.log("[Care-Link Boot]: Announcing today's schedules with synthesized voice (one-time on boot)...");
+                if (bootAnnouncementTimeout) clearTimeout(bootAnnouncementTimeout);
+                bootAnnouncementTimeout = setTimeout(() => {
                     playScheduleAnnouncement();
                 }, 1200);
             }
@@ -1927,12 +1912,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function playScheduleAnnouncement() {
+        if (isAnnouncementPlaying) {
+            console.log("[Schedule Announcement]: Already playing, ignoring duplicate trigger.");
+            return;
+        }
+
         if (!currentScheduleAnnouncementAudio) {
             loadTodaySchedules(false).then(() => {
-                if (currentScheduleAnnouncementAudio) playScheduleAnnouncement();
+                if (currentScheduleAnnouncementAudio && !isAnnouncementPlaying) playScheduleAnnouncement();
             });
             return;
         }
+
+        isAnnouncementPlaying = true;
+        isAISpeaking = true;
+        isTTSAnnouncing = true;
 
         if (btnReAnnounceSchedules) {
             btnReAnnounceSchedules.classList.add("playing");
@@ -1943,20 +1937,36 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         statusText.textContent = "今日の予定をご案内中...";
+        setLiveLampState("speaking");
         setAvatarState("speaking");
+
+        // Suppress SpeechRec recognition buffer during system announcement
+        window.isSpeechRecActive = false;
 
         playBase64Audio(currentScheduleAnnouncementAudio, () => {
             if (btnReAnnounceSchedules) {
                 btnReAnnounceSchedules.classList.remove("playing");
             }
-            statusText.textContent = "お話しする準備ができました";
-            setAvatarState("idle");
+            // Keep microphone muted for 1000ms after announcement to eliminate room reverberation
+            setTimeout(() => {
+                isAnnouncementPlaying = false;
+                isAISpeaking = false;
+                isTTSAnnouncing = false;
+                window.isSpeechRecActive = false;
+                if (!isModalOpen) {
+                    statusText.textContent = "お話しする準備ができました";
+                    setLiveLampState("idle");
+                    setAvatarState("idle");
+                }
+            }, 1000);
         });
     }
 
     if (btnReAnnounceSchedules) {
         btnReAnnounceSchedules.addEventListener("click", () => {
-            playScheduleAnnouncement();
+            if (!isAnnouncementPlaying) {
+                playScheduleAnnouncement();
+            }
         });
     }
 
