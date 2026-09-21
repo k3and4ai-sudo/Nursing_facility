@@ -776,6 +776,7 @@ document.addEventListener("DOMContentLoaded", () => {
         liveWs.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === "live_audio_output") {
+                console.log("[LiveWS]: Received live_audio_output chunk (b64 len:", data.data ? data.data.length : 0, ", rate:", data.sample_rate || 24000, ")");
                 setLiveLampState("speaking");
                 setAvatarState("speaking");
                 playPCM24Chunk(data.data, data.sample_rate || 24000);

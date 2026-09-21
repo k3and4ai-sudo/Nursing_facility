@@ -1783,7 +1783,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # 3. Handle 3 stages of anomaly detection
         if status in ["CAUTION", "ALERT", "EMERGENCY"]:
-            if status == "EMERGENCY" and session.is_connected:
+            is_genuine_emergency = (
+                status == "EMERGENCY" and 
+                any(k in text_to_check for k in ["助けて", "くるしい", "苦しい", "痛い", "倒れ", "胸が", "息が", "救急", "死にそう", "誰か来て"])
+            )
+            if is_genuine_emergency and session.is_connected:
+                print(f"[Guardrail Emergency Halt] Genuine SOS detected in '{text_to_check}' - sending session interruption.")
                 asyncio.create_task(session.send_interruption())
             await manager.broadcast_to_staff({
                 "type": "guardrail_alert",

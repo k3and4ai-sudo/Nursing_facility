@@ -94,9 +94,9 @@ class PIIGuardrailMonitor:
             # Convert int16 PCM bytes to float32 numpy array for Whisper
             audio_np = np.frombuffer(buf_copy, dtype=np.int16).astype(np.float32) / 32768.0
             
-            # Energy check: Skip Whisper if audio is essentially silence (prevents hallucinations)
+            # Energy check: Skip Whisper if audio is essentially silence / room noise (prevents hallucinations)
             rms = float(np.sqrt(np.mean(audio_np ** 2)))
-            if rms < 0.009:
+            if rms < 0.016:
                 return
 
             # Execute Faster-Whisper / Whisper STT in threadpool executor
@@ -109,20 +109,21 @@ class PIIGuardrailMonitor:
             text = await loop.run_in_executor(None, _stt)
             text = (text or "").strip()
             
-            if not text:
+            if not text or len(text) < 3:
                 return
 
             # Filter out silence hallucinations & system audio echo
-            from backend.speech import has_repetitive_loop
-            if has_repetitive_loop(text):
-                print(f"[PII Guardrail Whisper Filtered Repetitive Loop]: '{text}'")
+            from backend.speech import has_repetitive_loop, is_japanese_speech
+            if has_repetitive_loop(text) or not is_japanese_speech(text):
+                print(f"[PII Guardrail Whisper Filtered Invalid/Loop]: '{text}'")
                 return
 
             hallucinations = [
                 "ご視聴", "チャンネル登録", "お会いしましょう", "会話が終了します",
                 "今回の会話はここまで", "動画をご覧", "高評価", "字幕", "提供",
                 "個人情報保護のため", "会話を一時停止", "個人情報は話さない",
-                "スタッフに連絡する場合は", "ボタンを押してください"
+                "スタッフに連絡する場合は", "ボタンを押してください",
+                "逃げ出せ", "逃げろ", "逃げて", "おやすみなさい"
             ]
             if any(h in text for h in hallucinations):
                 print(f"[PII Guardrail Whisper Filtered Hallucination/Echo]: '{text}'")
@@ -559,31 +560,21 @@ class GeminiLiveSession:
         self._interrupted = False
         transcription = text.strip()
         parts = []
-        if transcription:
+        if transcription and transcription != "（利用者の音声発話）" and transcription != "<audio-only>":
             if len(transcription) > 80:
                 subparts = [p.strip() for p in re.split(r'[。！？?\n]', transcription) if p.strip()]
                 if subparts:
                     transcription = subparts[-1]
             parts.append({"text": transcription})
 
-        # Gemini Live Bidi API requires turns when clientContent is present.
-        # When no explicit speech-to-text is available, send a placeholder turn to trigger model response.
-        if not parts:
-            parts.append({"text": "（利用者の音声発話）"})
-
         try:
-            content_body = {
-                "turnComplete": True,
-                "turns": [
-                    {
-                        "role": "user",
-                        "parts": parts
-                    }
-                ]
-            }
+            content_body = {"turnComplete": True}
+            if parts:
+                content_body["turns"] = [{"role": "user", "parts": parts}]
+                
             client_content = {"clientContent": content_body}
             await self.ws.send(json.dumps(client_content))
-            print(f"[Gemini Live Session]: End of turn signal sent (text: '{transcription or '（利用者の音声発話）'}').")
+            print(f"[Gemini Live Session]: End of turn signal sent (has_text={bool(parts)}, text='{transcription if parts else '(audio-streamed)'}').")
         except Exception as e:
             print(f"[Gemini Live End of Turn Error]: {e}")
             self.is_connected = False
@@ -624,9 +615,11 @@ class GeminiLiveSession:
                     mime_type = inline_data.get("mimeType", "")
                     if "audio/pcm" in mime_type and "data" in inline_data:
                         if self._interrupted:
+                            print(f"[Gemini Live Session]: Dropping audio chunk ({len(inline_data.get('data', ''))} chars) due to active interruption.")
                             continue
                         audio_b64 = inline_data["data"]
                         raw_pcm24 = base64.b64decode(audio_b64)
+                        print(f"[Gemini Live Session]: Received audio chunk ({len(raw_pcm24)} bytes PCM24). Forwarding to client...")
                         if self.on_audio_received:
                             self.on_audio_received(raw_pcm24)
         except websockets.exceptions.ConnectionClosed as e:
