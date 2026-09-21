@@ -1472,8 +1472,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Dialogue Interaction (Full-Duplex Gemini Live Streaming)
-    micBtn.addEventListener("click", toggleDialogueRecording);
-
     let chunkAccumulator = [];
     let lastChunkSendTime = 0;
 
@@ -1591,6 +1589,14 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 isRecording = true;
                 
+                // Unlock Web Audio Context on user click for reliable Gemini Live playback
+                if (!liveAudioCtx || liveAudioCtx.state === "closed") {
+                    liveAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                }
+                if (liveAudioCtx.state === "suspended") {
+                    liveAudioCtx.resume();
+                }
+
                 // Ensure Gemini Live WebSocket is active
                 if (!liveWs || liveWs.readyState !== WebSocket.OPEN) {
                     connectLiveWS();
@@ -1772,7 +1778,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function playBase64Audio(base64Data, onEnded) {
+    function playBase64Audio(base64Data, onEnded, onError) {
         if (activeAudio) {
             activeAudio.pause();
         }
@@ -1785,23 +1791,14 @@ document.addEventListener("DOMContentLoaded", () => {
         activeAudio.onerror = (e) => {
             console.error("Audio playback error:", e);
             activeAudio = null;
-            if (onEnded) onEnded();
+            if (onError) onError(e);
+            else if (onEnded) onEnded();
         };
         activeAudio.play().catch(err => {
-            console.error("Audio play blocked/failed:", err);
+            console.warn("Audio play blocked/failed:", err);
             activeAudio = null;
-            if (onEnded) onEnded();
-        });
-    }
-
-    function handleStaffOverride(text, base64Audio) {
-        subtitleBox.textContent = `スタッフ: "${text}"`;
-        statusText.textContent = "スタッフからの連絡中...";
-        setAvatarState("speaking");
-        
-        playBase64Audio(base64Audio, () => {
-            statusText.textContent = "お話しする準備ができました";
-            setAvatarState("idle");
+            if (onError) onError(err);
+            else if (onEnded) onEnded();
         });
     }
 
@@ -1943,23 +1940,53 @@ document.addEventListener("DOMContentLoaded", () => {
         // Suppress SpeechRec recognition buffer during system announcement
         window.isSpeechRecActive = false;
 
-        playBase64Audio(currentScheduleAnnouncementAudio, () => {
-            if (btnReAnnounceSchedules) {
-                btnReAnnounceSchedules.classList.remove("playing");
-            }
-            // Keep microphone muted for 1000ms after announcement to eliminate room reverberation
-            setTimeout(() => {
+        playBase64Audio(
+            currentScheduleAnnouncementAudio, 
+            () => {
+                // Success: announcement completed
+                if (btnReAnnounceSchedules) {
+                    btnReAnnounceSchedules.classList.remove("playing");
+                }
+                // Keep microphone muted for 1000ms after announcement to eliminate room reverberation
+                setTimeout(() => {
+                    isAnnouncementPlaying = false;
+                    isAISpeaking = false;
+                    isTTSAnnouncing = false;
+                    window.isSpeechRecActive = false;
+                    if (!isModalOpen) {
+                        statusText.textContent = "お話しする準備ができました";
+                        setLiveLampState("idle");
+                        setAvatarState("idle");
+                    }
+                }, 1000);
+            },
+            (err) => {
+                // Error / Autoplay Blocked
+                console.warn("[Schedule Announcement] Playback blocked or failed:", err);
                 isAnnouncementPlaying = false;
                 isAISpeaking = false;
                 isTTSAnnouncing = false;
                 window.isSpeechRecActive = false;
+                if (btnReAnnounceSchedules) {
+                    btnReAnnounceSchedules.classList.remove("playing");
+                }
                 if (!isModalOpen) {
-                    statusText.textContent = "お話しする準備ができました";
+                    statusText.textContent = "画面をタップするか「予定を聞く」を押してください";
                     setLiveLampState("idle");
                     setAvatarState("idle");
                 }
-            }, 1000);
-        });
+                // On first user touch/click, automatically unlock and play
+                const unlockOnGesture = () => {
+                    window.removeEventListener("click", unlockOnGesture);
+                    window.removeEventListener("touchstart", unlockOnGesture);
+                    if (currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
+                        playScheduleAnnouncement();
+                    }
+                };
+                window.addEventListener("click", unlockOnGesture, { once: true });
+                window.addEventListener("touchstart", unlockOnGesture, { once: true });
+            }
+        );
     }
 
     if (btnReAnnounceSchedules) {
@@ -2788,7 +2815,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             await checkSystemInfo();
             updateDebugUI();
-            await checkRegistration();
+            await checkRegistration(true);
             connectWS();
             initSmartwatchModule();
             if (isDebugMode) {
