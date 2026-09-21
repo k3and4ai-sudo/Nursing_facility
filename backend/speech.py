@@ -268,12 +268,10 @@ def synthesize_speech(text: str) -> bytes:
             tts.write_to_fp(fp)
             return fp.getvalue()
         except Exception as e:
-            print(f"gTTS failed (likely offline): {e}. Falling back to local offline generator.")
-            # Fallback to local audio generator
+            print(f"gTTS failed (e.g. rate limit / 429 or offline): {e}. Returning empty audio for native TTS fallback.")
+            return b""
             
-    # Local fallback: Generate a simple WAV beep/tone or silent audio
-    # to prevent application crashes and provide system robustness
-    return generate_fallback_audio(text)
+    return b""
 
 def generate_fallback_audio(text: str) -> bytes:
     """

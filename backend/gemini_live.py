@@ -6,6 +6,7 @@ import base64
 import re
 import numpy as np
 import websockets
+from datetime import datetime
 from typing import Callable, Optional
 from backend import config
 from backend.speech import get_whisper_model, is_japanese_speech

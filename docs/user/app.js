@@ -1915,8 +1915,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!currentScheduleAnnouncementAudio) {
+            if (currentScheduleAnnouncementText) {
+                // Immediate native TTS speech announcement
+                playTTSVoice(currentScheduleAnnouncementText);
+                return;
+            }
             loadTodaySchedules(false).then(() => {
-                if (currentScheduleAnnouncementAudio && !isAnnouncementPlaying) playScheduleAnnouncement();
+                if (currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
+                    playScheduleAnnouncement();
+                } else if (currentScheduleAnnouncementText) {
+                    playTTSVoice(currentScheduleAnnouncementText);
+                }
             });
             return;
         }
@@ -1961,30 +1970,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 1000);
             },
             (err) => {
-                // Error / Autoplay Blocked
-                console.warn("[Schedule Announcement] Playback blocked or failed:", err);
+                // Error / Autoplay Blocked: fallback to Web Speech API or gesture unlock
+                console.warn("[Schedule Announcement] MP3 play blocked/failed, trying native speech synthesis:", err);
                 isAnnouncementPlaying = false;
                 isAISpeaking = false;
                 isTTSAnnouncing = false;
-                window.isSpeechRecActive = false;
-                if (btnReAnnounceSchedules) {
-                    btnReAnnounceSchedules.classList.remove("playing");
+                if (currentScheduleAnnouncementText) {
+                    playTTSVoice(currentScheduleAnnouncementText);
                 }
-                if (!isModalOpen) {
-                    statusText.textContent = "画面をタップするか「予定を聞く」を押してください";
-                    setLiveLampState("idle");
-                    setAvatarState("idle");
-                }
-                // On first user touch/click, automatically unlock and play
-                const unlockOnGesture = () => {
-                    window.removeEventListener("click", unlockOnGesture);
-                    window.removeEventListener("touchstart", unlockOnGesture);
-                    if (currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
-                        playScheduleAnnouncement();
-                    }
-                };
-                window.addEventListener("click", unlockOnGesture, { once: true });
-                window.addEventListener("touchstart", unlockOnGesture, { once: true });
             }
         );
     }
