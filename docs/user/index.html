@@ -108,10 +108,25 @@
             const errorMsg = document.getElementById("error-msg");
 
             try {
-                // キャッシュ回避パラメータ付きで最新のエンドポイントを取得
-                const res = await fetch(`../tunnel_endpoint.json?t=${Date.now()}`);
-                if (!res.ok) throw new Error("エンドポイント情報 (tunnel_endpoint.json) を取得できませんでした。");
-                const data = await res.json();
+                // キャッシュ遅延を回避するため raw.githubusercontent.com と 相対パスの両方を試行
+                let data = null;
+                const endpoints = [
+                    `https://raw.githubusercontent.com/k3and4ai-sudo/Nursing_facility/main/docs/tunnel_endpoint.json?t=${Date.now()}`,
+                    `../tunnel_endpoint.json?t=${Date.now()}`
+                ];
+                for (const ep of endpoints) {
+                    try {
+                        const res = await fetch(ep, { cache: "no-store" });
+                        if (res.ok) {
+                            const parsed = await res.json();
+                            if (parsed && parsed.status === "online" && parsed.backend_url) {
+                                data = parsed;
+                                break;
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (!data) throw new Error("現在、外部接続トンネルが稼働していません。<br>施設側PCで <code>./start_all.sh</code> を起動してください。");
 
                 if (data.status === "online" && data.backend_url) {
                     desc.textContent = "接続先を確立しました。自動転送します...";
