@@ -75,6 +75,8 @@ class TestSmartwatchIntegration(unittest.TestCase):
                 "source": "smartwatch_ble"
             })
             resp = client_ws.receive_json()
+            if resp.get("type") == "today_schedules":
+                resp = client_ws.receive_json()
             self.assertEqual(resp["type"], "vital_recorded")
             self.assertEqual(resp["heart_rate"], 74)
             self.assertEqual(resp["spo2"], 99)

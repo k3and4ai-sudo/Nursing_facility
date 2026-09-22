@@ -3,482 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260916_simplemode">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
-    <!-- 📋 In-Memory Diagnostic Log Collector for One-Tap Copy -->
-    <script>
-        (function() {
-            window.__carelink_logs = window.__carelink_logs || [];
-            var origLog = console.log;
-            var origWarn = console.warn;
-            var origError = console.error;
-            function pushLog(type, args) {
-                try {
-                    var now = new Date();
-                    var timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
-                    var str = Array.prototype.slice.call(args).map(function(a) {
-                        if (typeof a === 'object' && a !== null) {
-                            try { return JSON.stringify(a); } catch(e) { return String(a); }
-                        }
-                        return String(a);
-                    }).join(' ');
-                    window.__carelink_logs.push('[' + timeStr + '][' + type + '] ' + str);
-                    if (window.__carelink_logs.length > 200) window.__carelink_logs.shift();
-                } catch(e) {}
-            }
-            console.log = function() { pushLog('LOG', arguments); origLog.apply(console, arguments); };
-            console.warn = function() { pushLog('WARN', arguments); origWarn.apply(console, arguments); };
-            console.error = function() { pushLog('ERR', arguments); origError.apply(console, arguments); };
-        })();
-    </script>
-    <!-- 🛠️ Mobile Remote Debugger (Eruda) for Debug Mode -->
-    <script>
-        (function () {
-            try {
-                var urlParams = new URLSearchParams(window.location.search);
-                var isDebug = urlParams.get("debug") === "true" || urlParams.get("eruda") === "true" || localStorage.getItem("nursing_debug_mode") === "true";
-                if (isDebug) {
-                    var script = document.createElement("script");
-                    script.src = "https://cdn.jsdelivr.net/npm/eruda";
-                    script.onload = function () {
-                        if (window.eruda) {
-                            window.eruda.init();
-                            console.log("[Care-Link] 🛠️ Eruda Mobile DevTools Initialized in Debug Mode");
-                        }
-                    };
-                    document.head.appendChild(script);
-                }
-            } catch (e) {
-                console.warn("[Care-Link] Eruda loader error:", e);
-            }
-        })();
-    </script>
+    <title>Care-Link 居室端末 Gateway</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            text-align: center;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 28px;
+            padding: 44px 28px;
+            max-width: 420px;
+            width: 88%;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.45);
+        }
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+        .spinner {
+            width: 46px;
+            height: 46px;
+            border: 4px solid rgba(59, 130, 246, 0.25);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        h2 {
+            margin: 0 0 10px;
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #60a5fa;
+            letter-spacing: -0.02em;
+        }
+        p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .error-box {
+            display: none;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1.5px solid #ef4444;
+            color: #fca5a5;
+            padding: 16px;
+            border-radius: 16px;
+            margin-top: 24px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            text-align: left;
+        }
+        .retry-btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 24px;
+            background: #2563eb;
+            color: #ffffff;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .retry-btn:hover {
+            background: #1d4ed8;
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Top status bar -->
-        <header class="header">
-            <div id="room-badge" class="badge">確認中...</div>
-            <div id="watch-badge" class="badge watch-badge" title="スマートウォッチ連携 / シミュレータを開く">⌚ ウォッチ未接続</div>
-            <div id="recording-status-badge" class="badge recording-active-badge">🟢 記録中</div>
-            <div id="debug-badge" class="badge debug-badge hidden">🛠️ デバッグモード (Gemini Live)</div>
-            <button id="header-btn-copy-logs" class="badge hidden" style="background: #2563eb; color: #ffffff; border: none; cursor: pointer; font-weight: 800;" title="デバッグログをクリップボードにコピー">📋 ログコピー</button>
-            <div id="connection-status" class="status-dot offline"></div>
-        </header>
-
-        <!-- Layout Body for responsive splitting -->
-        <div class="body-columns">
-            <!-- Main UI: Friendly Avatar and Big Button -->
-            <main class="main-content">
-                <!-- AI Wave Avatar -->
-                <div class="avatar-container">
-                    <div id="ai-avatar" class="avatar-circle idle">
-                        <div class="inner-circle"></div>
-                        <div class="wave wave1"></div>
-                        <div class="wave wave2"></div>
-                    </div>
-                </div>
-
-                <!-- Legible Status text -->
-                <h1 id="status-text" class="status-message">接続しています...</h1>
-
-                <!-- Mic Button Shifted to Left + Live Audio Waveform Visualizer on Right -->
-                <div class="mic-waveform-row">
-                    <button id="mic-btn" class="huge-mic-btn" disabled>
-                        <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                        </svg>
-                    </button>
-                    <div class="waveform-box">
-                        <div class="waveform-header">
-                            <span class="waveform-icon">📊</span>
-                            <span>音声レベル (マイク入力波形)</span>
-                        </div>
-                        <canvas id="waveform-canvas" width="340" height="90"></canvas>
-                    </div>
-                </div>
-                
-                <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
-
-                <!-- 📅 本日のご予定カード (居室端末・今日の予定連絡) -->
-                <div id="today-schedules-card" class="today-schedules-card">
-                    <div class="schedules-card-header">
-                        <div class="schedules-header-title">
-                            <span class="schedules-icon">📅</span>
-                            <span class="schedules-title-text">今日のご予定</span>
-                            <span id="today-date-badge" class="schedules-date-badge">確認中...</span>
-                        </div>
-                        <button id="btn-re-announce-schedules" class="schedules-sound-btn" title="今日の予定を音声で案内します">
-                            <span class="sound-icon">🔊</span>
-                            <span>予定を聞く</span>
-                        </button>
-                    </div>
-                    <div id="today-schedules-list" class="schedules-list">
-                        <div class="schedules-loading-msg">本日の予定を確認しています...</div>
-                    </div>
-                </div>
-            </main>
-
-            <!-- Two Separate Text Displays: User Speech vs Gemini Live Response -->
-            <footer class="footer">
-                <!-- 🛡️ LLM Safety Guardrail Monitor Banner -->
-                <div id="guardrail-monitor-banner" class="guardrail-banner status-normal">
-                    <div class="guardrail-top">
-                        <div class="guardrail-title">
-                            <span class="guardrail-icon">🛡️</span>
-                            <span class="guardrail-name">ローカル安全監視 (<span id="guardrail-model">Qwen 2.5:7B</span>)</span>
-                        </div>
-                        <div class="guardrail-meta">
-                            <span id="guardrail-badge" class="guardrail-badge badge-normal">🟢 監視中: 安全</span>
-                            <span id="guardrail-latency" class="guardrail-latency">0.00秒</span>
-                        </div>
-                    </div>
-                    <div class="guardrail-bottom">
-                        <div id="guardrail-detail" class="guardrail-detail">発話のプライバシーと生命安全をローカルGPUで常時監視しています</div>
-                        <button id="guardrail-inline-call-btn" class="hidden guardrail-call-btn">🚨 スタッフ呼出</button>
-                    </div>
-                </div>
-
-                <!-- Gemini Live Real-time Status Lamps Bar -->
-                <div id="status-lamps-bar" class="status-lamps-container">
-                    <div id="lamp-sending" class="status-lamp">
-                        <span class="lamp-dot"></span>
-                        <span class="lamp-label">🎤 「あなたの声」送信中</span>
-                    </div>
-                    <div id="lamp-thinking" class="status-lamp">
-                        <span class="lamp-dot"></span>
-                        <span class="lamp-label">🧠 Gemini考え中...</span>
-                    </div>
-                    <div id="lamp-speaking" class="status-lamp">
-                        <span class="lamp-dot"></span>
-                        <span class="lamp-label">🔊 Gemini応答中</span>
-                    </div>
-                </div>
-
-                <div class="speech-display-container">
-                    <!-- User Speech (Microphone STT Result) -->
-                    <div class="speech-box user-box">
-                        <div class="box-title">
-                            <span class="box-icon">🎤</span>
-                            <span>あなたの声 (マイク認識結果)</span>
-                        </div>
-                        <div id="user-speech-box" class="box-content">お話しになるとここに認識結果が表示されます...</div>
-                    </div>
-                    
-                    <!-- Gemini Live Response -->
-                    <div class="speech-box ai-box">
-                        <div class="box-title">
-                            <span class="box-icon">✨</span>
-                            <span>Gemini Live からの返答</span>
-                        </div>
-                        <div id="ai-response-box" class="box-content">ここにGeminiのお返事・音声内容が表示されます...</div>
-                    </div>
-                </div>
-
-                <!-- 🎨 今日のデジタル絵手紙 (一番下に配置) -->
-                <div id="etegami-card" class="etegami-card">
-                    <div class="etegami-card-header">
-                        <div class="etegami-badge-group">
-                            <span class="etegami-main-badge">🎨 今日のデジタル絵手紙</span>
-                            <span id="etegami-season-tag" class="etegami-season-tag">🍁 秋</span>
-                            <span id="etegami-status-badge" class="etegami-status-badge badge-drafting">🎨 下絵制作中</span>
-                        </div>
-                        <div class="etegami-header-actions">
-                            <button id="btn-complete-etegami" class="etegami-complete-btn" title="下絵の手直しを終了して完成にする">
-                                <span>💮</span>
-                                <span>これで完成！</span>
-                            </button>
-                            <button id="btn-open-etegami-modal" class="etegami-zoom-btn" title="大画面で鑑賞する">
-                                <span>🔍</span>
-                                <span>大きく見る</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 和風色紙フレーム (クリックで拡大鑑賞) -->
-                    <div id="etegami-shikishi-frame" class="etegami-shikishi" title="クリックして大画面で鑑賞">
-                        <div class="etegami-img-viewport">
-                            <img id="etegami-card-img" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer current">
-                            <img id="etegami-card-img-next" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer next">
-                        </div>
-                        <!-- 筆文字メッセージ & 落款印オーバーレイ -->
-                        <div class="etegami-shikishi-overlay">
-                            <div id="etegami-calligraphy" class="etegami-calligraphy-text">おだやかな 秋の日に… お元気で</div>
-                            <div id="etegami-stamp" class="etegami-stamp-seal">🌸</div>
-                        </div>
-                        <!-- リアルタイム更新インジケータ -->
-                        <div id="etegami-updating-badge" class="etegami-updating-badge hidden">
-                            <span class="spin-icon">✨</span>
-                            <span>絵手紙を新しく描いています...</span>
-                        </div>
-                    </div>
-
-                    <!-- カードフッター (題名と日付・音声変更のヒント) -->
-                    <div class="etegami-card-footer">
-                        <div class="etegami-meta-row">
-                            <div id="etegami-title" class="etegami-title-text">【手作り絵手紙】秋の訪れとコスモス庭園</div>
-                            <div id="etegami-date" class="etegami-date-text">2026年9月</div>
-                        </div>
-                        <div class="etegami-voice-hint">
-                            💡 「小鳥にして」「夕焼けの縁側に変えて」「文字を変えて」とお話しして手直しできます。気に入ったら「これで完成！」とお話しいただくか右上のボタンを押してください
-                        </div>
-                    </div>
-                </div>
-            </footer>
+    <div class="card">
+        <div class="icon">🏠</div>
+        <div id="spinner" class="spinner"></div>
+        <h2 id="title">居室端末へ接続中...</h2>
+        <p id="desc">最新の暗号化トンネルへ安全に転送しています</p>
+        <div id="error-box" class="error-box">
+            <div id="error-msg"></div>
+            <button class="retry-btn" onclick="location.reload()">🔄 再試行</button>
         </div>
-
-        <!-- Terminal Register Overlay (if not bound to a user) -->
-        <div id="register-overlay" class="modal-overlay hidden">
-            <div class="modal-card">
-                <h2>端末の登録が必要です</h2>
-                <p>この端末はまだ利用者に紐付けられていません。</p>
-                <div class="terminal-id-box">
-                    <span>この端末のID:</span>
-                    <strong id="display-terminal-id">-</strong>
-                </div>
-                <p class="instruction">スタッフステーション画面で、このIDを新しい利用者に登録してください。</p>
-                <button id="retry-btn" class="modal-btn">再接続</button>
-            </div>
-        </div>
-
-        <!-- Intercom Call Overlay (Pattern A) -->
-        <div id="intercom-overlay" class="modal-overlay hidden">
-            <div id="call-card" class="modal-card call-card">
-                <div id="force-call-banner" class="force-call-banner hidden">
-                    ⚠️ スタッフ緊急ハンズフリー通話
-                </div>
-                <div class="ringing-animation">
-                    <div class="ring"></div>
-                    <div class="ring"></div>
-                    <div class="ring"></div>
-                    <div class="phone-icon-box">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-2.2 2.2a15.045 15.045 0 01-6.59-6.59l2.2-2.21a.96.96 0 00.25-1A11.36 11.36 0 018.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.62c0-.55-.45-1-1-1z"/>
-                        </svg>
-                    </div>
-                </div>
-                <h2 id="call-status">スタッフから呼び出し中...</h2>
-                <p id="call-substatus" style="font-size: 1.15rem; color: #64748b; margin-top: -6px; margin-bottom: 22px; font-weight: 600;"></p>
-                <div class="call-actions">
-                    <button id="answer-btn" class="call-btn answer hidden">出る</button>
-                    <button id="hangup-btn" class="call-btn hangup">切る</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Emergency & Staff Contact Modal (Full Screen Overlay Triggered by Local LLM Verdict) -->
-        <div id="emergency-assist-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card emergency-card" style="text-align: center; padding: 40px 32px; max-width: 680px; width: 95%; border: 4px solid #ef4444; border-radius: 36px; background: #ffffff; box-shadow: 0 25px 60px rgba(239, 68, 68, 0.45); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div id="emergency-icon" style="font-size: 4.5rem; margin-bottom: 8px; line-height: 1;">🚨</div>
-                <h2 id="emergency-modal-title" style="color: #dc2626; margin-bottom: 12px; font-size: 2.2rem; font-weight: 900; letter-spacing: 0.03em;">スタッフに連絡しますか？</h2>
-                <p id="emergency-modal-desc" style="font-size: 1.35rem; line-height: 1.7; color: #1f2937; margin-bottom: 32px; font-weight: 700;">
-                    スタッフへの連絡や体調の変化を検知しました。<br>
-                    スタッフに連絡する場合はボタンを押してください。
-                </p>
-                <!-- Side-by-side Large Action Buttons (Same Scale as Talk Button) -->
-                <div style="display: flex; flex-direction: row; gap: 20px; justify-content: center; align-items: stretch; width: 100%;">
-                    <button id="call-staff-now-btn" class="modal-btn emergency-huge-btn" style="flex: 1; min-height: 130px; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #ffffff; font-size: 1.45rem; font-weight: 900; padding: 16px 20px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(239, 68, 68, 0.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: transform 0.15s, box-shadow 0.15s;">
-                        <span style="font-size: 2.5rem; line-height: 1;">🚨</span>
-                        <span>スタッフに連絡</span>
-                    </button>
-                    <button id="dismiss-emergency-btn" class="modal-btn resume-huge-btn" style="flex: 1; min-height: 130px; background: linear-gradient(135deg, #10b981 0%, #047857 100%); color: #ffffff; font-size: 1.45rem; font-weight: 900; padding: 16px 20px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(16, 185, 129, 0.45); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; transition: transform 0.15s, box-shadow 0.15s;">
-                        <span style="font-size: 2.5rem; line-height: 1;">💬</span>
-                        <span>会話をつづける</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- PII Guardrail Warning Overlay -->
-        <div id="pii-warning-overlay" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card pii-card" style="text-align: center; padding: 40px 32px; max-width: 640px; width: 95%; border: 4px solid #3b82f6; border-radius: 36px; background: #ffffff; box-shadow: 0 25px 60px rgba(59, 130, 246, 0.4); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div style="font-size: 4.5rem; margin-bottom: 8px; line-height: 1;">🛡️</div>
-                <h2 style="color: #1d4ed8; margin-bottom: 12px; font-size: 2.2rem; font-weight: 900;">プライバシー保護のため一時停止</h2>
-                <p id="pii-warning-text" style="font-size: 1.3rem; line-height: 1.7; color: #1f2937; margin-bottom: 32px; font-weight: 700;">
-                    お名前や口座番号などの個人情報が含まれていたため、会話を安全に一時停止しました。<br>
-                    個人情報は話さないようお願いいたします。
-                </p>
-                <div style="display: flex; justify-content: center; width: 100%;">
-                    <button id="resume-pii-btn" class="modal-btn resume-huge-btn" style="width: 100%; max-width: 380px; min-height: 100px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.5rem; font-weight: 900; padding: 16px 28px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.45); display: flex; align-items: center; justify-content: center; gap: 12px;">
-                        <span style="font-size: 2.2rem; line-height: 1;">💬</span>
-                        <span>会話を再開する</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 🔒 みまもりさん 会話記録停止・再開 ポップアップモーダル -->
-        <div id="mimamori-popup" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(30, 27, 46, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card mimamori-card" style="text-align: center; padding: 36px 28px; max-width: 580px; width: 95%; border: 4px solid #8b5cf6; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(139, 92, 246, 0.4); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div id="mimamori-popup-icon" style="font-size: 4.2rem; margin-bottom: 8px; line-height: 1;">🔒</div>
-                <div style="display: inline-block; background: #f3e8ff; color: #7c3aed; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 1rem; margin-bottom: 12px;">🛡️ ローカルAI「みまもりさん」より</div>
-                <h2 id="mimamori-popup-title" style="color: #6d28d9; margin-bottom: 12px; font-size: 2.1rem; font-weight: 900;">会話記録を停止しました</h2>
-                <p id="mimamori-popup-desc" style="font-size: 1.25rem; line-height: 1.7; color: #1f2937; margin-bottom: 28px; font-weight: 700;">
-                    「ここだけの秘密のお話として、安心してお話しくださいね。<br>
-                    この会話は記録や日誌には一切残りません。」
-                </p>
-                <div id="mimamori-popup-actions" style="display: flex; flex-direction: row; gap: 14px; justify-content: center; width: 100%;">
-                    <button id="btn-resume-recording" class="modal-btn" style="flex: 1; min-height: 80px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.25rem; font-weight: 900; padding: 12px 18px; border-radius: 24px; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <span>▶️</span>
-                        <span>記録を再開する</span>
-                    </button>
-                    <button id="btn-close-mimamori-popup" class="modal-btn" style="flex: 1; min-height: 80px; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: #ffffff; font-size: 1.25rem; font-weight: 900; padding: 12px 18px; border-radius: 24px; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35); display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <span>💬</span>
-                        <span>閉じて話す</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <!-- ⌚ スマートウォッチ連携 & バイタルシミュレータ モーダル -->
-        <div id="watch-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card watch-modal-card" style="text-align: left; padding: 32px; max-width: 680px; width: 95%; border: 3px solid #3b82f6; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(59, 130, 246, 0.35); max-height: 90vh; overflow-y: auto;">
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 2.2rem;">⌚</span>
-                        <h2 style="color: #1e3a8a; font-size: 1.8rem; font-weight: 800; margin: 0;">スマートウォッチ・バイタル連携</h2>
-                    </div>
-                    <button id="btn-close-watch-modal" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748b; padding: 4px 8px;">✖</button>
-                </div>
-
-                <!-- 現在の生体ステータス表示 -->
-                <div style="display: flex; gap: 16px; margin-bottom: 24px; background: #f8fafc; border-radius: 20px; padding: 16px; border: 1px solid #e2e8f0;">
-                    <div style="flex: 1; text-align: center; border-right: 1px solid #cbd5e1; padding-right: 12px;">
-                        <div style="font-size: 0.95rem; color: #64748b; font-weight: 700;">❤️ 心拍数 (bpm)</div>
-                        <div id="modal-hr-display" style="font-size: 2.4rem; font-weight: 900; color: #ef4444; margin-top: 4px;">-- <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">bpm</span></div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding-left: 12px;">
-                        <div style="font-size: 0.95rem; color: #64748b; font-weight: 700;">🫁 血中酸素 (SpO2)</div>
-                        <div id="modal-spo2-display" style="font-size: 2.4rem; font-weight: 900; color: #0284c7; margin-top: 4px;">-- <span style="font-size: 1.1rem; color: #64748b; font-weight: 600;">%</span></div>
-                    </div>
-                </div>
-
-                <!-- Section 1: 実機 Bluetooth (BLE) 接続 -->
-                <div style="margin-bottom: 28px; background: #eff6ff; border-radius: 20px; padding: 20px; border: 1.5px solid #bfdbfe;">
-                    <div style="font-weight: 800; color: #1d4ed8; font-size: 1.2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                        <span>📶 実機スマートウォッチ (Web Bluetooth)</span>
-                    </div>
-                    <p style="font-size: 0.95rem; color: #334155; margin-bottom: 14px; line-height: 1.5;">
-                        標準心拍サービス（Heart Rate 0x180D）対応のスマートウォッチと直接ペアリングし、心拍データをリアルタイムに取得します。
-                    </p>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button id="btn-ble-connect" class="modal-btn" style="flex: 1; min-height: 52px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.05rem; font-weight: 800; border-radius: 16px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);">
-                            <span>🔍</span>
-                            <span>Bluetoothスキャン (確実)</span>
-                        </button>
-                        <button id="btn-ble-fast" class="modal-btn" style="flex: 1; min-height: 52px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #ffffff; font-size: 1.05rem; font-weight: 800; border-radius: 16px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                            <span>⚡</span>
-                            <span>B16Pro 高速スキャン</span>
-                        </button>
-                        <button id="btn-ble-disconnect" class="modal-btn hidden" style="flex: 1; min-height: 52px; background: #fee2e2; color: #dc2626; font-size: 1rem; font-weight: 800; border-radius: 16px; border: 1px solid #fca5a5; cursor: pointer;">
-                            切断
-                        </button>
-                    </div>
-                    <div style="font-size: 0.85rem; color: #475569; margin-top: 8px; line-height: 1.4;">
-                        💡 <strong>接続のコツ</strong>: B16Pro の画面をタップして<strong>点灯（画面ON）</strong>にしておいてください。<br>
-                        一覧に出ない場合はウォッチ側面ボタン長押しで<strong>【再起動】</strong>（※リセットは選ばないでください）すると「B16Pro」として即座に認識されます。
-                    </div>
-                    <div id="ble-device-info" style="font-size: 0.9rem; color: #64748b; margin-top: 10px; font-weight: 600;">
-                        未接続
-                    </div>
-                    <!-- 📋 ワンタップ Bluetooth＆診断ログ コピーボタン -->
-                    <div style="margin-top: 14px; padding: 12px 14px; background: #ffffff; border-radius: 14px; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                        <div style="font-size: 0.85rem; font-weight: 700; color: #1e40af;">
-                            <span>📋 Bluetooth＆システム診断ログ</span>
-                            <div style="font-size: 0.78rem; font-weight: 500; color: #64748b;">エラーや接続状況をワンタップでコピー</div>
-                        </div>
-                        <button id="btn-copy-debug-logs" style="padding: 8px 16px; background: #2563eb; color: #ffffff; border: none; border-radius: 12px; font-weight: 800; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3); white-space: nowrap;">
-                            <span>📋</span>
-                            <span>ログをコピー</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Section 2: 検証用バイタル・SOSシミュレータ -->
-                <div style="background: #fdf4ff; border-radius: 20px; padding: 20px; border: 1.5px solid #f0abfc;">
-                    <div style="font-weight: 800; color: #a21caf; font-size: 1.2rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                        <span>🧪 検証用バイタル・SOSシミュレータ</span>
-                    </div>
-                    <p style="font-size: 0.95rem; color: #475569; margin-bottom: 14px; line-height: 1.5;">
-                        実機ウォッチが手元にない場合でも、ワンクリックで各種生体測定や緊急SOSを送信してスタッフ画面への連携をテストできます。
-                    </p>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-                        <button id="sim-btn-normal" style="padding: 12px; background: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 14px; color: #065f46; font-weight: 800; cursor: pointer; text-align: left;">
-                            <div>🟢 正常バイタル</div>
-                            <div style="font-size: 0.85rem; font-weight: 600; color: #047857;">心拍 72bpm / SpO2 98%</div>
-                        </button>
-
-                        <button id="sim-btn-tachycardia" style="padding: 12px; background: #fff7ed; border: 1.5px solid #fdba74; border-radius: 14px; color: #9a3412; font-weight: 800; cursor: pointer; text-align: left;">
-                            <div>⚠️ 頻脈アラート</div>
-                            <div style="font-size: 0.85rem; font-weight: 600; color: #c2410c;">心拍 128bpm (異常)</div>
-                        </button>
-
-                        <button id="sim-btn-hypoxia" style="padding: 12px; background: #f0f9ff; border: 1.5px solid #7dd3fc; border-radius: 14px; color: #075985; font-weight: 800; cursor: pointer; text-align: left;">
-                            <div>🫁 低酸素アラート</div>
-                            <div style="font-size: 0.85rem; font-weight: 600; color: #0284c7;">SpO2 91% (要注意)</div>
-                        </button>
-
-                        <button id="sim-btn-auto-pulse" style="padding: 12px; background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 14px; color: #6b21a8; font-weight: 800; cursor: pointer; text-align: left;">
-                            <div id="auto-pulse-label">▶️ 自動心拍パルス</div>
-                            <div style="font-size: 0.85rem; font-weight: 600; color: #7e22ce;">5秒毎に連続測定送信</div>
-                        </button>
-                    </div>
-
-                    <!-- 転倒・緊急SOS検知テストボタン -->
-                    <button id="sim-btn-sos" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; border-radius: 16px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <span>🚨 転倒・緊急SOSを検知発信 (スタッフ即時通知テスト)</span>
-                    </button>
-                </div>
-
-                <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
-                    <button id="btn-close-watch-modal-footer" style="padding: 10px 24px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 14px; font-weight: 700; color: #475569; cursor: pointer;">
-                        閉じる
-                    </button>
-                </div>
-
-        <!-- 🖼️ デジタル絵手紙 全画面鑑賞モーダル（大画面で絵を鑑賞しながら音声対話可能） -->
-        <div id="etegami-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(14px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card etegami-modal-card">
-                <div class="etegami-modal-header">
-                    <div class="etegami-modal-title-wrap">
-                        <span style="font-size: 1.8rem;">🎨</span>
-                        <h2 id="etegami-modal-title" style="margin: 0; font-size: 1.6rem; color: #1e293b; font-weight: 900;">【手作り絵手紙】秋の訪れとコスモス庭園</h2>
-                        <span id="etegami-modal-season-tag" class="etegami-season-tag">🍁 秋</span>
-                    </div>
-                    <button id="btn-close-etegami-modal" class="etegami-modal-close-btn" title="閉じる">✕</button>
-                </div>
-
-                <!-- 大画面 色紙風フレーム -->
-                <div class="etegami-modal-shikishi-body">
-                    <div class="etegami-modal-img-wrap">
-                        <img id="etegami-modal-img" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙 大画面">
-                    </div>
-                    <div class="etegami-modal-overlay">
-                        <div id="etegami-modal-calligraphy" class="etegami-modal-calligraphy-text">おだやかな 秋の日に… お元気で</div>
-                        <div id="etegami-modal-stamp" class="etegami-modal-stamp-seal">🌸</div>
-                    </div>
-                </div>
-
-                <!-- モーダル下部 音声ガイド & 閉じる -->
-                <div class="etegami-modal-footer">
-                    <div class="etegami-modal-guide">
-                        <span>🎙️</span>
-                        <span>この画面を開いたままマイクでお話しいただけます。「小鳥を描いて」「夕焼けの縁側に変えて」「文字を○○にして」と話しかけてみてください。</span>
-                    </div>
-                    <button id="btn-close-etegami-modal-bottom" class="modal-btn" style="padding: 10px 24px; background: #3b82f6; color: #ffffff; border-radius: 16px; font-weight: 800; border: none; cursor: pointer;">
-                        閉じる
-                    </button>
-                </div>
-            </div>
-        </div>
-
     </div>
-    <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260921_etegami2"></script>
+
+    <script>
+        async function routeToUserTerminal() {
+            const title = document.getElementById("title");
+            const desc = document.getElementById("desc");
+            const spinner = document.getElementById("spinner");
+            const errorBox = document.getElementById("error-box");
+            const errorMsg = document.getElementById("error-msg");
+
+            try {
+                // キャッシュ回避パラメータ付きで最新のエンドポイントを取得
+                const res = await fetch(`../tunnel_endpoint.json?t=${Date.now()}`);
+                if (!res.ok) throw new Error("エンドポイント情報 (tunnel_endpoint.json) を取得できませんでした。");
+                const data = await res.json();
+
+                if (data.status === "online" && data.backend_url) {
+                    desc.textContent = "接続先を確立しました。自動転送します...";
+                    
+                    // 現在のクエリパラメータ（?terminal_id=... や ?debug=true など）をそのまま引き継ぐ
+                    const search = window.location.search || "";
+                    const targetUrl = `${data.backend_url}/user/${search}`;
+                    
+                    // 履歴を残さずスムーズに転送
+                    window.location.replace(targetUrl);
+                } else {
+                    throw new Error("現在、外部接続トンネルが停止しています。<br>PC側で <code>./start_all.sh</code> を起動してください。");
+                }
+            } catch (err) {
+                spinner.style.display = "none";
+                title.textContent = "接続待機中";
+                title.style.color = "#f87171";
+                desc.textContent = "トンネルサーバーへの接続に失敗しました。";
+                errorBox.style.display = "block";
+                errorMsg.innerHTML = err.message;
+            }
+        }
+        routeToUserTerminal();
+    </script>
 </body>
 </html>
