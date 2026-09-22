@@ -1501,16 +1501,40 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"Error sending live audio to client ({terminal_id}): {e}")
 
+    gemini_text_buffer = []
+    gemini_flush_timer = None
+    user_pcm_chunk_count = 0
+
+    def flush_gemini_text_to_db():
+        nonlocal gemini_flush_timer
+        if gemini_flush_timer and not gemini_flush_timer.cancelled():
+            gemini_flush_timer.cancel()
+            gemini_flush_timer = None
+        if not gemini_text_buffer:
+            return
+        full_text = "".join(gemini_text_buffer).strip()
+        gemini_text_buffer.clear()
+        is_internal_command = full_text.startswith("みまもりさんへ業務連絡") or full_text.startswith("みまもりさん業務連絡")
+        if session.recording_active and full_text and not is_internal_command:
+            db.add_chat_message(user["id"], "ai", full_text)
+            print(f"[Gemini Live Session ({terminal_id})]: Saved complete turn AI text to DB ({len(full_text)} chars): '{full_text[:35]}...'")
+
     async def on_gemini_text(text: str):
         try:
             await websocket.send_json({
                 "type": "live_text_output",
                 "text": text
             })
-            # Save Gemini message to database only if recording is active and not an internal command
-            is_internal_command = text.startswith("みまもりさんへ業務連絡") or text.startswith("みまもりさん業務連絡")
-            if session.recording_active and not is_internal_command:
-                db.add_chat_message(user["id"], "ai", text)
+            # Buffer text chunks and schedule single DB insert when turn completes
+            gemini_text_buffer.append(text)
+            nonlocal gemini_flush_timer
+            if gemini_flush_timer and not gemini_flush_timer.cancelled():
+                gemini_flush_timer.cancel()
+            try:
+                loop = asyncio.get_running_loop()
+                gemini_flush_timer = loop.call_later(0.8, flush_gemini_text_to_db)
+            except Exception:
+                pass
         except Exception as e:
             print(f"Error sending live text to client ({terminal_id}): {e}")
 
@@ -1902,6 +1926,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 # Incoming raw 16kHz PCM chunk (base64) from client
                 b64_chunk = data.get("data", "")
                 if b64_chunk:
+                    # User is actively speaking into mic: flush any pending AI response text to DB
+                    if gemini_text_buffer:
+                        flush_gemini_text_to_db()
+                    user_pcm_chunk_count += 1
+
                     pcm_bytes = base64.b64decode(b64_chunk)
                     # 1. Ensure Gemini Live WebSocket session is active and relay PCM
                     if not session.is_connected:
@@ -1913,12 +1942,23 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     pii_monitor.add_pcm_chunk_sync(pcm_bytes)
 
             elif msg_type in ["eos", "end_of_speech"]:
+                # Ensure pending AI speech text from prior turn is saved
+                flush_gemini_text_to_db()
+
                 # End of user utterance / silence detected
                 user_text = data.get("text", "").strip()
+                current_chunks = user_pcm_chunk_count
+                user_pcm_chunk_count = 0  # Reset for next utterance
+
+                # Empty utterance guard: drop false silence triggers (room noise / acoustic echo without voice)
+                if not user_text and current_chunks < 5:
+                    print(f"[Live Session EOS Ignored] ({terminal_id}): Dropping empty silence EOS frame (chunks={current_chunks}, text=''). No turnComplete sent.")
+                    continue
+
                 await websocket.send_json({"type": "gemini_thinking"})
 
                 if user_text:
-                    print(f"[Live Session EOS]: Received user text: '{user_text}'")
+                    print(f"[Live Session EOS]: Received user text: '{user_text}' (audio chunks: {current_chunks})")
 
                     # Check for resident etegami update trigger from user text (Double safety net)
                     check_resident_etegami_trigger(user_text)
@@ -2011,6 +2051,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     except Exception as e:
         print(f"Error in user live websocket ({terminal_id}): {e}")
     finally:
+        flush_gemini_text_to_db()
         await session.close()
         # Automatically extract and save image generation prompt JSON from conversation in background
         try:

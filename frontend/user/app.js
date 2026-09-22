@@ -1306,12 +1306,14 @@ document.addEventListener("DOMContentLoaded", () => {
     let nextAudioStartTime = 0;
     let isPlayingPCM24 = false;
     let pcm24EndTimer = null;
+    let lastAIAudioEndTime = 0;
     const JITTER_BUFFER_SEC = 0.12; // 120ms initial buffer for seamless stutter-free playback
 
     function stopLiveAudioPlayback() {
         if (pcm24EndTimer) clearTimeout(pcm24EndTimer);
         isAISpeaking = false;
         isPlayingPCM24 = false;
+        lastAIAudioEndTime = Date.now();
         nextAudioStartTime = 0;
         if (liveAudioCtx && liveAudioCtx.state !== "closed") {
             try {
@@ -1383,6 +1385,7 @@ document.addEventListener("DOMContentLoaded", () => {
             pcm24EndTimer = setTimeout(() => {
                 isAISpeaking = false;
                 isPlayingPCM24 = false;
+                lastAIAudioEndTime = Date.now();
                 setLiveLampState("idle");
                 setAvatarState("idle");
                 if (statusText && !isModalOpen) statusText.textContent = "お話しする準備ができました";
@@ -1624,14 +1627,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 let vadSilenceFrames = 0;
                 let isSpeakingUtterance = false;
                 let voiceHangoverFrames = 0;
+                let chunksSentInUtterance = 0;
                 let preSpeechRingBuffer = []; // ring buffer of last 3 chunks (~150ms) to preserve initial consonants
                 const NOISE_GATE_THRESHOLD = 0.0075; // Cut off mic hiss, room fan, air conditioner, rustling
+                const AI_ECHO_GUARD_MS = 1200; // 1.2s post-playback acoustic echo cooldown guard
 
                 recorder.onChunkCallback = (resampledChunk) => {
-                    // Mute microphone completely when AI is speaking, modal is open, or system is announcing
-                    if (isPlayingPCM24 || isAISpeaking || isModalOpen || isTTSAnnouncing) {
+                    // Mute microphone completely when AI is speaking, modal is open, system is announcing,
+                    // or within post-playback acoustic echo cooldown window
+                    const isEchoCooldown = (Date.now() - lastAIAudioEndTime < AI_ECHO_GUARD_MS);
+                    if (isPlayingPCM24 || isAISpeaking || isModalOpen || isTTSAnnouncing || isEchoCooldown) {
                         preSpeechRingBuffer = [];
                         voiceHangoverFrames = 0;
+                        isSpeakingUtterance = false;
+                        chunksSentInUtterance = 0;
+                        vadSilenceFrames = 0;
                         return;
                     }
 
@@ -1657,6 +1667,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                         type: "live_pcm_chunk",
                                         data: preChunk
                                     }));
+                                    chunksSentInUtterance++;
                                 }
                             }
                             preSpeechRingBuffer = [];
@@ -1676,6 +1687,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 type: "live_pcm_chunk",
                                 data: b64Pcm
                             }));
+                            chunksSentInUtterance++;
                         }
                     } else if (voiceHangoverFrames > 0) {
                         // Trailing speech hangover window: stream chunk to avoid cutting word endings
@@ -1685,6 +1697,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 type: "live_pcm_chunk",
                                 data: b64Pcm
                             }));
+                            chunksSentInUtterance++;
                         }
                     } else {
                         // Below noise floor: DO NOT SEND to Gemini Live! (Room noise completely blocked)
@@ -1705,10 +1718,18 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const cleanText = (currentUtteranceText || "").trim();
                                 const isEcho = SYSTEM_ECHO_KEYWORDS.some(k => cleanText.includes(k));
                                 const textToSend = (!isEcho && cleanText) ? cleanText : "";
-                                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                                    console.log("[Mic VAD] Speech concluded. Sending EOS frame (text:", textToSend || "<audio-only>", ")");
-                                    liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));
+
+                                // Only send EOS if actual human speech occurred (either text recognized OR >= 6 chunks streamed)
+                                if (chunksSentInUtterance >= 6 || textToSend) {
+                                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                                        console.log("[Mic VAD] Speech concluded. Sending EOS frame (chunks:", chunksSentInUtterance, ", text:", textToSend || "<audio-only>", ")");
+                                        liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));
+                                    }
+                                } else {
+                                    console.log("[Mic VAD] Dropping empty / noise-only silence trigger (chunks:", chunksSentInUtterance, ", text: empty). No EOS sent.");
+                                    setLiveLampState("idle");
                                 }
+                                chunksSentInUtterance = 0;
                                 currentUtteranceText = "";
                             }
                         }

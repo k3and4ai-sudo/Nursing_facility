@@ -208,6 +208,7 @@ class GeminiLiveSession:
         self.is_closing = False
         self._interrupted = False
         self.pending_chunks = []
+        self.audio_chunks_in_turn = 0
         self._connect_lock = asyncio.Lock()
         
         # Resolve API Key: passed api_key > user profile gemini_api_key > system default
@@ -410,6 +411,7 @@ class GeminiLiveSession:
     async def send_audio_chunk(self, pcm_16k_bytes: bytes):
         """Sends raw 16kHz PCM audio chunk to Gemini Live API as realtime_input."""
         self._interrupted = False
+        self.audio_chunks_in_turn += 1
         b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
         if not self.is_connected or not self.ws:
             # Buffer chunk while reconnecting (keep last 50 chunks = ~2.5s)
@@ -553,7 +555,7 @@ class GeminiLiveSession:
             self.on_text_received(text_val)
 
     async def send_end_of_turn(self, text: str = ""):
-        """Signals end of user utterance to trigger Gemini Live response generation (always sends turnComplete)."""
+        """Signals end of user utterance to trigger Gemini Live response generation (suppresses empty turns)."""
         if not await self.ensure_connected():
             return
             
@@ -567,6 +569,13 @@ class GeminiLiveSession:
                     transcription = subparts[-1]
             parts.append({"text": transcription})
 
+        # Failsafe: if no transcribed text and audio was essentially silent/empty, do NOT send turnComplete
+        chunks_count = getattr(self, "audio_chunks_in_turn", 0)
+        self.audio_chunks_in_turn = 0
+        if not parts and chunks_count < 4:
+            print(f"[Gemini Live Session]: Skipping empty turnComplete (no text, chunks={chunks_count}). Gemini will not re-speak.")
+            return
+
         try:
             content_body = {"turnComplete": True}
             if parts:
@@ -574,7 +583,7 @@ class GeminiLiveSession:
                 
             client_content = {"clientContent": content_body}
             await self.ws.send(json.dumps(client_content))
-            print(f"[Gemini Live Session]: End of turn signal sent (has_text={bool(parts)}, text='{transcription if parts else '(audio-streamed)'}').")
+            print(f"[Gemini Live Session]: End of turn signal sent (has_text={bool(parts)}, chunks={chunks_count}, text='{transcription if parts else '(audio-streamed)'}').")
         except Exception as e:
             print(f"[Gemini Live End of Turn Error]: {e}")
             self.is_connected = False
