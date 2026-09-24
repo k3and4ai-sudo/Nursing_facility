@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260924_mimamori_report">
+    <link rel="stylesheet" href="style.css?v=20260924_schedule_responsive">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -113,20 +113,23 @@
                 <!-- 📅 予定カード (居室端末・予定連絡) -->
                 <div id="today-schedules-card" class="today-schedules-card">
                     <div class="schedules-card-header">
-                        <div class="schedules-header-title">
-                            <span class="schedules-icon">📅</span>
-                            <span class="schedules-title-text">予定カード</span>
-                            <div class="schedules-date-select-wrap">
-                                <input type="date" id="schedule-date-picker" class="schedules-date-picker" title="日付を指定して予定を表示" />
+                        <div class="schedules-header-top-row">
+                            <div class="schedules-header-title">
+                                <span class="schedules-icon">📅</span>
+                                <span class="schedules-title-text">予定カード</span>
                                 <span id="today-date-badge" class="schedules-date-badge">確認中...</span>
                             </div>
+                            <button id="btn-close-schedule-card" class="schedules-close-btn" title="予定カードを終了する">✕</button>
                         </div>
-                        <div class="schedules-header-actions">
+                        <div class="schedules-header-sub-row">
+                            <div class="schedules-date-select-wrap">
+                                <span class="schedules-date-label">📅 日にち指定:</span>
+                                <input type="date" id="schedule-date-picker" class="schedules-date-picker" title="日付を指定して予定を表示" />
+                            </div>
                             <button id="btn-re-announce-schedules" class="schedules-sound-btn" title="予定を音声で案内します">
                                 <span class="sound-icon">🔊</span>
                                 <span>予定を聞く</span>
                             </button>
-                            <button id="btn-close-schedule-card" class="schedules-close-btn" title="予定カードを終了する">✕</button>
                         </div>
                     </div>
                     <div id="today-schedules-list" class="schedules-list">
@@ -502,6 +505,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260924_schedule_card"></script>
+    <script src="app.js?v=20260924_tdz_fix"></script>
 </body>
 </html>

@@ -1432,12 +1432,24 @@ body {
         line-height: 1.25;
     }
     .status-lamps-container {
-        gap: 3px;
-        margin: 0;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 4px !important;
+        margin: 0 0 4px 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
     .status-lamp {
-        padding: 2px 6px;
-        font-size: 9.5px;
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+        gap: 5px !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+    .status-lamp .lamp-dot {
+        width: 7px !important;
+        height: 7px !important;
     }
     .guardrail-banner {
         padding: 4px 8px;
@@ -1452,6 +1464,75 @@ body {
     .guardrail-detail {
         font-size: 9.5px;
         padding-left: 14px;
+    }
+
+    /* 📅 予定カード スマホ画面最適化 */
+    .today-schedules-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 8px 0 6px !important;
+        border-radius: 16px !important;
+        box-sizing: border-box !important;
+    }
+    .schedules-card-header {
+        padding: 8px 10px !important;
+        gap: 6px !important;
+    }
+    .schedules-title-text {
+        font-size: 1.15rem !important;
+    }
+    .schedules-date-badge {
+        font-size: 0.8rem !important;
+        padding: 2px 7px !important;
+    }
+    .schedules-close-btn {
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 1.05rem !important;
+    }
+    .schedules-header-sub-row {
+        gap: 6px !important;
+    }
+    .schedules-date-select-wrap {
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+        gap: 4px !important;
+    }
+    .schedules-date-label {
+        font-size: 0.78rem !important;
+    }
+    .schedules-date-picker {
+        font-size: 0.82rem !important;
+        padding: 2px 4px !important;
+        max-width: 122px !important;
+    }
+    .schedules-sound-btn {
+        font-size: 0.85rem !important;
+        padding: 5px 10px !important;
+        border-radius: 12px !important;
+        flex-shrink: 0 !important;
+    }
+    .schedule-item {
+        padding: 8px 10px !important;
+        gap: 8px !important;
+    }
+    .schedule-time-badge {
+        font-size: 1.1rem !important;
+        padding: 3px 8px !important;
+    }
+    .schedule-item-title {
+        font-size: 1.05rem !important;
+    }
+    .mimamori-schedule-report-card {
+        padding: 8px 10px !important;
+        gap: 6px !important;
+    }
+    .mimamori-report-title {
+        font-size: 0.95rem !important;
+    }
+    .mimamori-report-text {
+        font-size: 0.92rem !important;
+        padding: 6px 10px !important;
     }
 }
 
@@ -1996,66 +2077,92 @@ body.simple-mode .etegami-shikishi {
 
 .schedules-card-header {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    padding: 10px 14px;
+    border-bottom: 2px solid #d1fae5;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.schedules-header-top-row {
+    display: flex;
     justify-content: space-between;
     align-items: center;
-    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-    padding: 12px 18px;
-    border-bottom: 2px solid #d1fae5;
+    width: 100%;
 }
 
 .schedules-header-title {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .schedules-icon {
-    font-size: 1.4rem;
+    font-size: 1.35rem;
+    line-height: 1;
 }
 
 .schedules-title-text {
     font-family: 'Zen Maru Gothic', sans-serif;
-    font-size: 1.35rem;
+    font-size: 1.3rem;
     font-weight: 900;
     color: #065f46;
     letter-spacing: 0.02em;
+    white-space: nowrap;
 }
 
 .schedules-date-badge {
     background: #10b981;
     color: #ffffff;
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 800;
-    padding: 3px 10px;
+    padding: 2px 9px;
     border-radius: 12px;
-    margin-left: 4px;
+    margin-left: 2px;
+    white-space: nowrap;
 }
 
-.schedules-header-actions {
+.schedules-header-sub-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 8px;
+    width: 100%;
+    flex-wrap: wrap;
 }
 
 .schedules-date-select-wrap {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-left: 6px;
+    flex: 1;
+    min-width: 160px;
+}
+
+.schedules-date-label {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #065f46;
+    white-space: nowrap;
 }
 
 .schedules-date-picker {
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: #065f46;
     background: #ffffff;
     border: 1.5px solid #a7f3d0;
     border-radius: 10px;
-    padding: 3px 8px;
+    padding: 3px 6px;
     cursor: pointer;
     outline: none;
     transition: all 0.2s ease;
+    max-width: 136px;
 }
 
 .schedules-date-picker:focus {

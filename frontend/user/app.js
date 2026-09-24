@@ -34,6 +34,74 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnResumeRecording = document.getElementById("btn-resume-recording");
     const btnCloseMimamoriPopup = document.getElementById("btn-close-mimamori-popup");
 
+    // 📅 予定カード (Schedule Card UI Elements & State)
+    const todaySchedulesCard = document.getElementById("today-schedules-card");
+    const todayDateBadge = document.getElementById("today-date-badge");
+    const scheduleDatePicker = document.getElementById("schedule-date-picker");
+    const btnCloseScheduleCard = document.getElementById("btn-close-schedule-card");
+    const btnShowScheduleCard = document.getElementById("btn-show-schedule-card");
+    const btnReAnnounceSchedules = document.getElementById("btn-re-announce-schedules");
+    const todaySchedulesList = document.getElementById("today-schedules-list");
+    const mimamoriScheduleReportCard = document.getElementById("mimamori-schedule-report-card");
+    const mimamoriScheduleReportText = document.getElementById("mimamori-schedule-report-text");
+
+    let isScheduleCardVisible = true;
+    let scheduleCardHideTimer = null;
+    let isBootScheduleAnnouncement = false;
+    let currentScheduleAnnouncementAudio = null;
+    let currentScheduleAnnouncementText = "";
+    let cachedTodaySchedules = [];
+    let isAnnouncementPlaying = false;
+    let bootAnnouncementTimeout = null;
+    const notified2MinScheduleIds = new Set();
+
+    function updateShowScheduleBtnVisibility() {
+        if (!btnShowScheduleCard) return;
+        // シンプル画面では予定ボタンを表示しない
+        if (currentUIMode === "simple") {
+            btnShowScheduleCard.classList.add("hidden");
+        } else {
+            // 詳細画面では予定カードを消すと予定ボタンを表示
+            if (!isScheduleCardVisible) {
+                btnShowScheduleCard.classList.remove("hidden");
+            } else {
+                btnShowScheduleCard.classList.add("hidden");
+            }
+        }
+    }
+
+    function hideScheduleCard() {
+        if (scheduleCardHideTimer) {
+            clearTimeout(scheduleCardHideTimer);
+            scheduleCardHideTimer = null;
+        }
+        if (todaySchedulesCard) {
+            todaySchedulesCard.classList.add("hidden");
+        }
+        isScheduleCardVisible = false;
+        console.log("[Schedule Card]: Card hidden.");
+        updateShowScheduleBtnVisibility();
+    }
+
+    function showScheduleCard(speakAnnouncement = false) {
+        if (scheduleCardHideTimer) {
+            clearTimeout(scheduleCardHideTimer);
+            scheduleCardHideTimer = null;
+        }
+        if (todaySchedulesCard) {
+            todaySchedulesCard.classList.remove("hidden");
+        }
+        isScheduleCardVisible = true;
+        console.log("[Schedule Card]: Card shown.");
+        updateShowScheduleBtnVisibility();
+
+        if (speakAnnouncement && currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
+            if (typeof playScheduleAnnouncement === "function") {
+                playScheduleAnnouncement();
+            }
+        }
+    }
+
     // 🎨 Etegami UI Elements & Handlers
     let isEtegamiUpdating = false;
     const etegamiCard = document.getElementById("etegami-card");
@@ -1956,72 +2024,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 📅 予定カード (Schedules Management & Boot Announcement)
+    // 📅 予定カード (Schedules Management & Boot Announcement Listeners)
     // =========================================================================
-    const todaySchedulesCard = document.getElementById("today-schedules-card");
-    const todayDateBadge = document.getElementById("today-date-badge");
-    const scheduleDatePicker = document.getElementById("schedule-date-picker");
-    const btnCloseScheduleCard = document.getElementById("btn-close-schedule-card");
-    const btnShowScheduleCard = document.getElementById("btn-show-schedule-card");
-    const btnReAnnounceSchedules = document.getElementById("btn-re-announce-schedules");
-    const todaySchedulesList = document.getElementById("today-schedules-list");
-    const mimamoriScheduleReportCard = document.getElementById("mimamori-schedule-report-card");
-    const mimamoriScheduleReportText = document.getElementById("mimamori-schedule-report-text");
-
-    let isScheduleCardVisible = true;
-    let scheduleCardHideTimer = null;
-    let isBootScheduleAnnouncement = false;
-    let currentScheduleAnnouncementAudio = null;
-    let currentScheduleAnnouncementText = "";
-    let cachedTodaySchedules = [];
-    let isAnnouncementPlaying = false;
-    let bootAnnouncementTimeout = null;
-    const notified2MinScheduleIds = new Set();
-
-    function hideScheduleCard() {
-        if (scheduleCardHideTimer) {
-            clearTimeout(scheduleCardHideTimer);
-            scheduleCardHideTimer = null;
-        }
-        if (todaySchedulesCard) {
-            todaySchedulesCard.classList.add("hidden");
-        }
-        isScheduleCardVisible = false;
-        console.log("[Schedule Card]: Card hidden.");
-        updateShowScheduleBtnVisibility();
-    }
-
-    function showScheduleCard(speakAnnouncement = false) {
-        if (scheduleCardHideTimer) {
-            clearTimeout(scheduleCardHideTimer);
-            scheduleCardHideTimer = null;
-        }
-        if (todaySchedulesCard) {
-            todaySchedulesCard.classList.remove("hidden");
-        }
-        isScheduleCardVisible = true;
-        console.log("[Schedule Card]: Card shown.");
-        updateShowScheduleBtnVisibility();
-
-        if (speakAnnouncement && currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
-            playScheduleAnnouncement();
-        }
-    }
-
-    function updateShowScheduleBtnVisibility() {
-        if (!btnShowScheduleCard) return;
-        // シンプル画面では予定ボタンを表示しない
-        if (currentUIMode === "simple") {
-            btnShowScheduleCard.classList.add("hidden");
-        } else {
-            // 詳細画面では予定カードを消すと予定ボタンを表示
-            if (!isScheduleCardVisible) {
-                btnShowScheduleCard.classList.remove("hidden");
-            } else {
-                btnShowScheduleCard.classList.add("hidden");
-            }
-        }
-    }
 
     if (btnCloseScheduleCard) {
         btnCloseScheduleCard.addEventListener("click", () => {
