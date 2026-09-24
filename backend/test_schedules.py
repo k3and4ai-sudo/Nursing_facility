@@ -111,5 +111,32 @@ class TestSchedules(unittest.TestCase):
             self.client.delete(f"/api/schedules/{past_id}")
             self.client.delete(f"/api/schedules/{up_id}")
 
+    def test_terminal_specified_date_schedules(self):
+        target_date = "2026-12-25"
+        # Add future schedule
+        res = self.client.post(f"/api/users/{self.user_id}/schedules", json={
+            "date": target_date,
+            "time": "14:00",
+            "title": "クリスマス会",
+            "category": "event",
+            "location": "大ホール",
+            "notes": "クリスマスイベント"
+        })
+        self.assertEqual(res.status_code, 200)
+        sched_id = res.json()["id"]
+
+        try:
+            res_get = self.client.get(f"/api/users/terminal/{self.terminal_id}/today_schedules?date={target_date}")
+            self.assertEqual(res_get.status_code, 200)
+            data = res_get.json()
+            self.assertEqual(data["date"], target_date)
+            self.assertFalse(data["is_today"])
+            self.assertIn("12月25日の予定は", data["announcement_text"])
+            self.assertIn("クリスマス会", data["announcement_text"])
+            self.assertEqual(len(data["schedules"]), 1)
+            self.assertFalse(data["schedules"][0]["is_past"])
+        finally:
+            self.client.delete(f"/api/schedules/{sched_id}")
+
 if __name__ == "__main__":
     unittest.main()

@@ -182,6 +182,7 @@ class GeminiLiveSession:
         on_ui_mode_changed: Optional[Callable[[str], None]] = None,
         on_etegami_updated: Optional[Callable[[str, str], None]] = None,
         on_etegami_completed: Optional[Callable[[], None]] = None,
+        on_schedule_visibility_changed: Optional[Callable[[bool], None]] = None,
         history: Optional[list] = None,
         api_key: Optional[str] = None,
         schedules: Optional[list] = None
@@ -193,6 +194,7 @@ class GeminiLiveSession:
         self.on_thought_received = on_thought_received
         self.on_recording_status_changed = on_recording_status_changed
         self.on_ui_mode_changed = on_ui_mode_changed
+        self.on_schedule_visibility_changed = on_schedule_visibility_changed
         self.on_etegami_updated = on_etegami_updated
         self.on_etegami_completed = on_etegami_completed
         self.recording_active = True
@@ -326,6 +328,13 @@ class GeminiLiveSession:
                                         f"また、利用者様が「詳細画面にして」「元の画面にして」「画面を戻して」「詳しい画面にして」などと言われた場合は、必ず第一声で正確に：\n"
                                         f"「みまもりさん業務連絡、詳細画面に切り替えてください。」\n"
                                         f"続けて「はい、詳細な画面に戻しましたよ」と伝えてください。\n\n"
+                                        f"【重要指示2-3：予定カードの表示・終了（非表示）について】\n"
+                                        f"利用者様が「予定を教えて」「スケジュールを教えて」「予定を出して」「スケジュールを出して」またはそれに類似した発言（予定の確認やカード表示を求める発言）をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"「みまもりさん予定カードの表示をお願いします。」\n"
+                                        f"続けて「はい、予定カードを表示しましたよ」とお伝えし、本日のこれからの予定を優しく分かりやすく教えてあげてください。\n"
+                                        f"また、利用者様が「予定ありがとう」「スケジュールありがとう」「予定を消して」「スケジュールを消して」またはそれに類似した発言（予定確認の終了やカードを閉じることを求める発言）をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"「みまもりさん予定カードの表示を終了してください。」\n"
+                                        f"続けて「どういたしまして。予定カードを閉じましたよ」などと優しく温かく伝えてください。\n\n"
                                         f"【重要指示3：回想法（昔の思い出話の傾聴と質問の制限ルール）】\n"
                                         f"利用者様が「昔の話をしたい」「昔のこと」「子供の頃」「若い頃」「運動会」「お祭り」など、過去の思い出について話された時は、大歓迎の共感で受け止めてください。\n"
                                         f"★【同じ質問の繰り返し・質問攻めの厳格な禁止】：\n"
@@ -513,6 +522,32 @@ class GeminiLiveSession:
                     self.on_recording_status_changed(True, "会話記録再開")
             else:
                 print(f"[Gemini Live Session]: Already in active recording state - ignoring duplicate command: '{text_val}'")
+
+        # Detect Schedule Card visibility commands from Gemini speech or thought
+        is_to_show_schedule = (
+            "予定カードの表示をお願い" in text_val or
+            "予定カードを表示" in text_val or
+            "スケジュールカードを表示" in text_val or
+            "show schedule card" in text_lower or
+            "display schedule card" in text_lower
+        )
+        is_to_hide_schedule = (
+            "予定カードの表示を終了" in text_val or
+            "予定カードの終了" in text_val or
+            "予定カードを終了" in text_val or
+            "予定カードを消して" in text_val or
+            "予定カードを閉じて" in text_val or
+            "hide schedule card" in text_lower or
+            "close schedule card" in text_lower
+        )
+        if is_to_show_schedule:
+            print(f"[Gemini Live Session]: Detected show schedule card command: '{text_val}'")
+            if self.on_schedule_visibility_changed:
+                self.on_schedule_visibility_changed(True)
+        elif is_to_hide_schedule:
+            print(f"[Gemini Live Session]: Detected hide schedule card command: '{text_val}'")
+            if self.on_schedule_visibility_changed:
+                self.on_schedule_visibility_changed(False)
 
         # Detect Etegami Completion command from Gemini speech or thought
         is_gemini_etegami_complete = (

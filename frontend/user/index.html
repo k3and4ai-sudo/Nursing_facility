@@ -104,23 +104,35 @@
                 
                 <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
 
-                <!-- 📅 本日のご予定カード (居室端末・今日の予定連絡) -->
+                <!-- 📅 予定カード再表示ボタン (詳細画面のみ、予定カード非表示時に表示) -->
+                <button id="btn-show-schedule-card" class="btn-show-schedule-card hidden" title="予定カードを表示する">
+                    <span class="schedule-btn-icon">📅</span>
+                    <span>予定</span>
+                </button>
+
+                <!-- 📅 予定カード (居室端末・予定連絡) -->
                 <div id="today-schedules-card" class="today-schedules-card">
                     <div class="schedules-card-header">
                         <div class="schedules-header-title">
                             <span class="schedules-icon">📅</span>
-                            <span class="schedules-title-text">今日のご予定</span>
-                            <span id="today-date-badge" class="schedules-date-badge">確認中...</span>
+                            <span class="schedules-title-text">予定カード</span>
+                            <div class="schedules-date-select-wrap">
+                                <input type="date" id="schedule-date-picker" class="schedules-date-picker" title="日付を指定して予定を表示" />
+                                <span id="today-date-badge" class="schedules-date-badge">確認中...</span>
+                            </div>
                         </div>
-                        <button id="btn-re-announce-schedules" class="schedules-sound-btn" title="今日の予定を音声で案内します">
-                            <span class="sound-icon">🔊</span>
-                            <span>予定を聞く</span>
-                        </button>
+                        <div class="schedules-header-actions">
+                            <button id="btn-re-announce-schedules" class="schedules-sound-btn" title="予定を音声で案内します">
+                                <span class="sound-icon">🔊</span>
+                                <span>予定を聞く</span>
+                            </button>
+                            <button id="btn-close-schedule-card" class="schedules-close-btn" title="予定カードを終了する">✕</button>
+                        </div>
                     </div>
                     <div id="today-schedules-list" class="schedules-list">
-                        <div class="schedules-loading-msg">本日の予定を確認しています...</div>
+                        <div class="schedules-loading-msg">ご予定を確認しています...</div>
                     </div>
-                    <!-- 🤖 みまもりさん 予定報告エリア（今日のご予定の下に表示） -->
+                    <!-- 🤖 みまもりさん 予定報告エリア（予定カードの下に表示） -->
                     <div id="mimamori-schedule-report-card" class="mimamori-schedule-report-card">
                         <div class="mimamori-report-header">
                             <span class="mimamori-avatar-mini">🤖</span>
@@ -128,7 +140,7 @@
                             <span id="mimamori-report-badge" class="mimamori-report-badge">📢 音声案内</span>
                         </div>
                         <div id="mimamori-schedule-report-text" class="mimamori-report-text">
-                            本日のご予定を確認しています...
+                            ご予定を確認しています...
                         </div>
                     </div>
                 </div>
@@ -490,6 +502,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260924_mimamori_report"></script>
+    <script src="app.js?v=20260924_schedule_card"></script>
 </body>
 </html>

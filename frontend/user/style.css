@@ -2031,6 +2031,102 @@ body.simple-mode .etegami-shikishi {
     margin-left: 4px;
 }
 
+.schedules-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.schedules-date-select-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+}
+
+.schedules-date-picker {
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #065f46;
+    background: #ffffff;
+    border: 1.5px solid #a7f3d0;
+    border-radius: 10px;
+    padding: 3px 8px;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.schedules-date-picker:focus {
+    border-color: #059669;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.schedules-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 1.15rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.schedules-close-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fca5a5;
+    transform: scale(1.08);
+}
+
+.schedules-close-btn:active {
+    transform: scale(0.95);
+}
+
+/* 📅 予定カード再表示ボタン（詳細画面のみ・カード非表示時に表示） */
+.btn-show-schedule-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px auto;
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 20px;
+    font-size: 1.2rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+    transition: all 0.2s ease;
+}
+
+.btn-show-schedule-card:hover {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(5, 150, 105, 0.45);
+}
+
+.btn-show-schedule-card:active {
+    transform: translateY(0);
+}
+
+.btn-show-schedule-card.hidden {
+    display: none !important;
+}
+
+body.simple-mode .btn-show-schedule-card {
+    display: none !important;
+}
+
 .schedules-sound-btn {
     display: inline-flex;
     align-items: center;

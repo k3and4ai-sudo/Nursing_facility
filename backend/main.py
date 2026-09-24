@@ -1565,6 +1565,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"Error sending ui mode change ({terminal_id}): {e}")
 
+    async def on_live_schedule_visibility(visible: bool):
+        try:
+            print(f"[Gemini Live Session ({terminal_id})]: Sending schedule_visibility -> {visible}")
+            await websocket.send_json({
+                "type": "schedule_visibility",
+                "visible": visible
+            })
+        except Exception as e:
+            print(f"Error sending schedule visibility ({terminal_id}): {e}")
+
     async def on_user_transcription(text: str):
         try:
             await websocket.send_json({
@@ -1725,6 +1735,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         on_thought_received=on_gemini_thought,
         on_recording_status_changed=lambda active, msg: asyncio.create_task(on_live_recording_status(active, msg)),
         on_ui_mode_changed=lambda mode: asyncio.create_task(on_live_ui_mode_change(mode)),
+        on_schedule_visibility_changed=lambda vis: asyncio.create_task(on_live_schedule_visibility(vis)),
         on_etegami_updated=lambda motif, msg: asyncio.create_task(on_live_etegami_update(motif, msg)),
         on_etegami_completed=lambda: asyncio.create_task(on_live_etegami_complete()),
         history=recent_history,
@@ -1777,6 +1788,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         elif to_detail:
             print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Detailed Mode: '{text_to_check}'")
             asyncio.create_task(on_live_ui_mode_change("detailed"))
+
+        # 1-2. Immediate voice command detection for Schedule Card visibility
+        to_show_sched = any(k in text_to_check for k in ["予定を教えて", "スケジュールを教えて", "予定を出して", "スケジュールを出して", "予定教えて", "スケジュール教えて", "予定出して", "スケジュール出して", "予定見せて", "スケジュール見せて", "予定表示", "スケジュール表示"])
+        to_hide_sched = any(k in text_to_check for k in ["予定ありがとう", "スケジュールありがとう", "予定を消して", "スケジュールを消して", "予定消して", "スケジュール消して", "予定閉じて", "スケジュール閉じて", "予定を閉じて", "スケジュールを閉じて"])
+        if to_show_sched:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Schedule Card: '{text_to_check}'")
+            asyncio.create_task(on_live_schedule_visibility(True))
+        elif to_hide_sched:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Schedule Card: '{text_to_check}'")
+            asyncio.create_task(on_live_schedule_visibility(False))
 
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
@@ -1834,7 +1855,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             "text": transcribed_text
         }))
 
-        # 2. Check for confidential recording stop / resume triggers directly from Whisper STT
+        # 2. Check for schedule card triggers directly from Whisper STT
+        to_show_sched = any(k in transcribed_text for k in ["予定を教えて", "スケジュールを教えて", "予定を出して", "スケジュールを出して", "予定教えて", "スケジュール教えて", "予定出して", "スケジュール出して", "予定見せて", "スケジュール見せて", "予定表示", "スケジュール表示"])
+        to_hide_sched = any(k in transcribed_text for k in ["予定ありがとう", "スケジュールありがとう", "予定を消して", "スケジュールを消して", "予定消して", "スケジュール消して", "予定閉じて", "スケジュール閉じて", "予定を閉じて", "スケジュールを閉じて"])
+        if to_show_sched:
+            asyncio.create_task(on_live_schedule_visibility(True))
+        elif to_hide_sched:
+            asyncio.create_task(on_live_schedule_visibility(False))
+
+        # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [
             "ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて",
             "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止",
@@ -2478,16 +2507,18 @@ async def api_delete_schedule(schedule_id: int):
     return {"status": "success", "message": "予定を削除しました。"}
 
 @app.get("/api/users/terminal/{terminal_id}/today_schedules")
-async def api_get_terminal_today_schedules(terminal_id: str):
-    """Fetches today's schedules, differentiates past and upcoming by current time, and generates spoken announcement audio for user terminal."""
+async def api_get_terminal_today_schedules(terminal_id: str, date: Optional[str] = None):
+    """Fetches schedules for target date (defaults to today), differentiates past and upcoming, and generates spoken announcement audio for user terminal."""
     user = db.get_user_by_terminal(terminal_id)
     if not user:
         raise HTTPException(status_code=404, detail="Terminal not bound to user")
     
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
+    target_date_str = date if (date and date.strip()) else today_str
     current_hhmm = now.strftime("%H:%M")
     current_hour = now.hour
+    is_today = (target_date_str == today_str)
 
     # Time-appropriate greeting
     if 4 <= current_hour < 11:
@@ -2497,20 +2528,24 @@ async def api_get_terminal_today_schedules(terminal_id: str):
     else:
         greeting = "こんばんは"
 
-    raw_schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
+    raw_schedules = db.get_schedules_by_user_and_date(user["id"], target_date_str)
     
     raw_name = user.get("name", "山田")
     nickname = raw_name.split()[0] if raw_name else "利用者"
     
-    # Classify into upcoming and past based on current time
+    # Classify into upcoming and past based on date and current time
     upcoming_schedules = []
     past_schedules = []
     
     for s in raw_schedules:
         s_copy = dict(s)
         t = s_copy.get("time", "")
-        # Compare time string HH:MM
-        is_past = bool(t and t < current_hhmm)
+        if is_today:
+            is_past = bool(t and t < current_hhmm)
+        elif target_date_str > today_str:
+            is_past = False
+        else:
+            is_past = True
         s_copy["is_past"] = is_past
         if is_past:
             past_schedules.append(s_copy)
@@ -2561,35 +2596,61 @@ async def api_get_terminal_today_schedules(terminal_id: str):
         return f"{t_str}に{title}が予定されています"
 
     # Generate announcement text according to user specification
-    if upcoming_schedules and past_schedules:
-        upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
-        past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
-        announcement_text = f"本日、これからの予定は{upcoming_summary}です。{past_summary}については予定時刻を過ぎました。"
-    elif upcoming_schedules:
-        upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
-        announcement_text = f"本日、これからの予定は{upcoming_summary}です。"
-    elif past_schedules:
-        past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
-        announcement_text = f"本日、これからの予定はございません。{past_summary}については予定時刻を過ぎました。"
+    if is_today:
+        if upcoming_schedules and past_schedules:
+            upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
+            past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
+            announcement_text = f"本日、これからの予定は{upcoming_summary}です。{past_summary}については予定時刻を過ぎました。"
+        elif upcoming_schedules:
+            upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
+            announcement_text = f"本日、これからの予定は{upcoming_summary}です。"
+        elif past_schedules:
+            past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
+            announcement_text = f"本日、これからの予定はございません。{past_summary}については予定時刻を過ぎました。"
+        else:
+            announcement_text = "本日、これからの予定はございません。"
     else:
-        announcement_text = "本日、これからの予定はございません。"
-
-    # Prepare 2-minute before reminder for upcoming schedules
-    for s in upcoming_schedules:
-        s["reminder_time"] = get_2min_before(s.get("time", ""))
-        s["reminder_text"] = format_reminder_2min(s)
         try:
-            rem_clean = clean_text_for_tts(s["reminder_text"])
-            rem_bytes = await asyncio.to_thread(speech.synthesize_speech, rem_clean)
-            s["reminder_audio"] = base64.b64encode(rem_bytes).decode("utf-8") if rem_bytes else ""
-        except Exception as e:
-            print(f"Error synthesizing 2min reminder: {e}")
-            s["reminder_audio"] = ""
+            target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
+            date_label = f"{target_dt.month}月{target_dt.day}日"
+        except Exception:
+            date_label = target_date_str
 
-    for s in past_schedules:
-        s["reminder_time"] = get_2min_before(s.get("time", ""))
-        s["reminder_text"] = format_reminder_2min(s)
-        s["reminder_audio"] = ""
+        if target_date_str > today_str:
+            if ordered_schedules:
+                summary = "、".join([format_upcoming_phrase(s) for s in ordered_schedules])
+                announcement_text = f"{date_label}の予定は、{summary}です。"
+            else:
+                announcement_text = f"{date_label}のご予定はございません。"
+        else:
+            if ordered_schedules:
+                summary = "、".join([format_past_phrase(s) for s in ordered_schedules])
+                announcement_text = f"{date_label}の予定は、{summary}でした。"
+            else:
+                announcement_text = f"{date_label}のご予定はございませんでした。"
+
+    # Prepare 2-minute before reminder for upcoming schedules (today only)
+    if is_today:
+        for s in upcoming_schedules:
+            s["reminder_time"] = get_2min_before(s.get("time", ""))
+            s["reminder_text"] = format_reminder_2min(s)
+            try:
+                rem_clean = clean_text_for_tts(s["reminder_text"])
+                rem_bytes = await asyncio.to_thread(speech.synthesize_speech, rem_clean)
+                s["reminder_audio"] = base64.b64encode(rem_bytes).decode("utf-8") if rem_bytes else ""
+            except Exception as e:
+                print(f"Error synthesizing 2min reminder: {e}")
+                s["reminder_audio"] = ""
+
+        for s in past_schedules:
+            s["reminder_time"] = get_2min_before(s.get("time", ""))
+            s["reminder_text"] = format_reminder_2min(s)
+            s["reminder_audio"] = ""
+    else:
+        for s in ordered_schedules:
+            s["reminder_time"] = ""
+            s["reminder_text"] = ""
+            s["reminder_audio"] = ""
     
     # Generate main speech synthesis audio
     audio_b64 = ""
@@ -2605,7 +2666,8 @@ async def api_get_terminal_today_schedules(terminal_id: str):
         "user_id": user["id"],
         "user_name": raw_name,
         "room_number": user.get("room_number", ""),
-        "date": today_str,
+        "date": target_date_str,
+        "is_today": is_today,
         "current_time": current_hhmm,
         "schedules": ordered_schedules,
         "upcoming_count": len(upcoming_schedules),
