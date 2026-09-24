@@ -54,6 +54,10 @@ class TestSchedules(unittest.TestCase):
 
     def test_terminal_today_schedules_and_audio(self):
         today_str = datetime.now().strftime("%Y-%m-%d")
+        # Clean existing test schedules for today
+        with db.get_db_connection() as conn:
+            conn.execute("DELETE FROM schedules WHERE user_id = ? AND date = ?", (self.user_id, today_str))
+            conn.commit()
         # Add one past schedule (01:00) and one upcoming schedule (23:50)
         res_past = self.client.post(f"/api/users/{self.user_id}/schedules", json={
             "date": today_str,
@@ -84,7 +88,9 @@ class TestSchedules(unittest.TestCase):
             self.assertIn("schedules", data)
             self.assertEqual(data["upcoming_count"], 1)
             self.assertEqual(data["past_count"], 1)
-            self.assertIn("終了いたしました", data["announcement_text"])
+            # Verify phrasing
+            self.assertIn("本日、これからの予定は", data["announcement_text"])
+            self.assertIn("については予定時刻を過ぎました", data["announcement_text"])
             self.assertIn("深夜見守り", data["announcement_text"])
             self.assertIn("夜間リラックス", data["announcement_text"])
             print("\nSpoken Announcement with Past & Upcoming:\n", data["announcement_text"])
@@ -93,8 +99,14 @@ class TestSchedules(unittest.TestCase):
             schedules = data["schedules"]
             self.assertFalse(schedules[0]["is_past"])
             self.assertEqual(schedules[0]["title"], "夜間リラックス")
+            self.assertEqual(schedules[0]["reminder_time"], "23:48")
+            self.assertIn("23時50分に", schedules[0]["reminder_text"])
+            self.assertIn("予定されています", schedules[0]["reminder_text"])
+            self.assertTrue(len(schedules[0]["reminder_audio"]) > 0)
+
             self.assertTrue(schedules[1]["is_past"])
             self.assertEqual(schedules[1]["title"], "深夜見守り")
+            self.assertEqual(schedules[1]["reminder_time"], "00:58")
         finally:
             self.client.delete(f"/api/schedules/{past_id}")
             self.client.delete(f"/api/schedules/{up_id}")

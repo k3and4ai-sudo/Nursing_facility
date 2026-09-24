@@ -2229,5 +2229,84 @@ body.simple-mode .schedule-time-badge {
     font-size: 1.35rem;
 }
 
+/* 🤖 みまもりさん 予定報告エリア（今日のご予定の下部） */
+.mimamori-schedule-report-card {
+    background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);
+    border-top: 2px solid #e2e8f0;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.mimamori-schedule-report-card.highlight-2min {
+    background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+    border-top-color: #f59e0b;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+    animation: pulseYellow 1.5s infinite;
+}
+
+@keyframes pulseYellow {
+    0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.2); }
+    50% { box-shadow: 0 0 18px rgba(245, 158, 11, 0.55); }
+}
+
+.mimamori-report-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mimamori-avatar-mini {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.mimamori-report-title {
+    font-family: 'Zen Maru Gothic', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #1e3a8a;
+    letter-spacing: 0.02em;
+}
+
+.mimamori-report-badge {
+    font-size: 0.78rem;
+    font-weight: 800;
+    background: #2563eb;
+    color: #ffffff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    margin-left: auto;
+    letter-spacing: 0.02em;
+}
+
+.mimamori-schedule-report-card.highlight-2min .mimamori-report-badge {
+    background: #d97706;
+}
+
+.mimamori-report-text {
+    font-family: 'Zen Maru Gothic', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.5;
+    background: #ffffff;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.08);
+    transition: all 0.25s ease;
+}
+
+.mimamori-schedule-report-card.highlight-2min .mimamori-report-text {
+    border-color: #f59e0b;
+    background: #fffdf5;
+    color: #92400e;
+    font-weight: 800;
+}
+
+
 
 

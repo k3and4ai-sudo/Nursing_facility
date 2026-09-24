@@ -2522,51 +2522,76 @@ async def api_get_terminal_today_schedules(terminal_id: str):
     past_schedules.sort(key=lambda x: x.get("time", ""))
     ordered_schedules = upcoming_schedules + past_schedules
 
-    def format_schedule_spoken(s):
-        t = s.get("time", "")
-        title = s.get("title", "")
+    def parse_time_text(t: str) -> str:
         try:
             hh, mm = t.split(":")
-            hh_int = int(hh)
-            period = "午前" if hh_int < 12 else "午後"
-            display_hh = hh_int if hh_int <= 12 else (hh_int - 12 if hh_int > 12 else 12)
-            mm_int = int(mm)
-            mm_str = f"{mm_int}分" if mm_int > 0 else ""
-            return f"{period}{display_hh}時{mm_str}からの{title}"
+            return f"{int(hh)}時{mm}分"
         except Exception:
-            return f"{t}からの{title}"
+            return t
 
-    # Generate warm spoken announcement text separating finished and upcoming
+    def get_2min_before(time_str: str) -> str:
+        try:
+            hh, mm = time_str.split(":")
+            total = int(hh) * 60 + int(mm) - 2
+            if total < 0:
+                total += 24 * 60
+            return f"{total // 60:02d}:{total % 60:02d}"
+        except Exception:
+            return ""
+
+    def format_upcoming_phrase(s):
+        t_str = parse_time_text(s.get("time", ""))
+        title = s.get("title", "")
+        loc = s.get("location", "")
+        if loc:
+            return f"{t_str} {loc}にて{title}"
+        return f"{t_str}に{title}"
+
+    def format_past_phrase(s):
+        t_str = parse_time_text(s.get("time", ""))
+        title = s.get("title", "")
+        return f"{t_str} {title}"
+
+    def format_reminder_2min(s):
+        t_str = parse_time_text(s.get("time", ""))
+        title = s.get("title", "")
+        loc = s.get("location", "")
+        if loc:
+            return f"{t_str}に、{loc}にて{title}が予定されています"
+        return f"{t_str}に{title}が予定されています"
+
+    # Generate announcement text according to user specification
     if upcoming_schedules and past_schedules:
-        past_summary = "、".join([format_schedule_spoken(s) for s in past_schedules])
-        upcoming_summary = "、".join([format_schedule_spoken(s) for s in upcoming_schedules])
-        announcement_text = (
-            f"{nickname}様、{greeting}！本日のご予定をお知らせしますね。"
-            f"{past_summary}は終了いたしました。"
-            f"これからは、{upcoming_summary}がございますよ。"
-            f"どうぞ穏やかにお過ごしくださいね。"
-        )
+        upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
+        past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
+        announcement_text = f"本日、これからの予定は{upcoming_summary}です。{past_summary}については予定時刻を過ぎました。"
     elif upcoming_schedules:
-        upcoming_summary = "、".join([format_schedule_spoken(s) for s in upcoming_schedules])
-        announcement_text = (
-            f"{nickname}様、{greeting}！本日のご予定をお知らせしますね。"
-            f"本日は、{upcoming_summary}がございますよ。"
-            f"どうぞ穏やかにお過ごしくださいね。"
-        )
+        upcoming_summary = "、".join([format_upcoming_phrase(s) for s in upcoming_schedules])
+        announcement_text = f"本日、これからの予定は{upcoming_summary}です。"
     elif past_schedules:
-        past_summary = "、".join([format_schedule_spoken(s) for s in past_schedules])
-        announcement_text = (
-            f"{nickname}様、{greeting}！本日のご予定、"
-            f"{past_summary}は終了いたしました。"
-            f"この後はどうぞごゆっくりおくつろぎくださいね。"
-        )
+        past_summary = "、".join([format_past_phrase(s) for s in past_schedules])
+        announcement_text = f"本日、これからの予定はございません。{past_summary}については予定時刻を過ぎました。"
     else:
-        announcement_text = (
-            f"{nickname}様、{greeting}！本日は特別なご予定は入っておりませんので、"
-            f"どうぞご自身のお部屋やデイルームでごゆっくりおくつろぎくださいね。"
-        )
+        announcement_text = "本日、これからの予定はございません。"
+
+    # Prepare 2-minute before reminder for upcoming schedules
+    for s in upcoming_schedules:
+        s["reminder_time"] = get_2min_before(s.get("time", ""))
+        s["reminder_text"] = format_reminder_2min(s)
+        try:
+            rem_clean = clean_text_for_tts(s["reminder_text"])
+            rem_bytes = await asyncio.to_thread(speech.synthesize_speech, rem_clean)
+            s["reminder_audio"] = base64.b64encode(rem_bytes).decode("utf-8") if rem_bytes else ""
+        except Exception as e:
+            print(f"Error synthesizing 2min reminder: {e}")
+            s["reminder_audio"] = ""
+
+    for s in past_schedules:
+        s["reminder_time"] = get_2min_before(s.get("time", ""))
+        s["reminder_text"] = format_reminder_2min(s)
+        s["reminder_audio"] = ""
     
-    # Generate speech synthesis audio
+    # Generate main speech synthesis audio
     audio_b64 = ""
     try:
         clean_text = clean_text_for_tts(announcement_text)

@@ -1885,10 +1885,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const todayDateBadge = document.getElementById("today-date-badge");
     const btnReAnnounceSchedules = document.getElementById("btn-re-announce-schedules");
     const todaySchedulesList = document.getElementById("today-schedules-list");
+    const mimamoriScheduleReportCard = document.getElementById("mimamori-schedule-report-card");
+    const mimamoriScheduleReportText = document.getElementById("mimamori-schedule-report-text");
+
     let currentScheduleAnnouncementAudio = null;
     let currentScheduleAnnouncementText = "";
+    let cachedTodaySchedules = [];
     let isAnnouncementPlaying = false;
     let bootAnnouncementTimeout = null;
+    const notified2MinScheduleIds = new Set();
 
     function escapeScheduleHtml(str) {
         if (!str) return "";
@@ -1942,6 +1947,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
             currentScheduleAnnouncementText = data.announcement_text || "";
             currentScheduleAnnouncementAudio = data.audio_base64 || "";
+            cachedTodaySchedules = data.schedules || [];
+
+            // 🤖 「今日のご予定」下の「みまもりさんの予定報告」テキストを更新
+            if (mimamoriScheduleReportText && currentScheduleAnnouncementText) {
+                mimamoriScheduleReportText.textContent = currentScheduleAnnouncementText;
+            }
 
             if (todaySchedulesList) {
                 todaySchedulesList.innerHTML = "";
@@ -1967,6 +1978,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const renderScheduleRow = (s, isPast) => {
                         const row = document.createElement("div");
                         row.className = isPast ? "schedule-item-row past" : "schedule-item-row";
+                        row.dataset.scheduleId = s.id || "";
                         const icon = getScheduleCategoryIcon(s.category);
                         const locHtml = s.location ? `<span class="schedule-item-loc">📍 ${escapeScheduleHtml(s.location)}</span>` : "";
                         const notesHtml = s.notes ? `<span class="schedule-item-notes">${escapeScheduleHtml(s.notes)}</span>` : "";
@@ -2056,8 +2068,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (aiResponseBox && currentScheduleAnnouncementText) {
             aiResponseBox.textContent = currentScheduleAnnouncementText;
         }
+        if (mimamoriScheduleReportText && currentScheduleAnnouncementText) {
+            mimamoriScheduleReportText.textContent = currentScheduleAnnouncementText;
+        }
 
-        statusText.textContent = "今日の予定をご案内中...";
+        statusText.textContent = "みまもりさんが予定をご案内中...";
         setLiveLampState("speaking");
         setAvatarState("speaking");
 
@@ -2103,6 +2118,114 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         );
     }
+
+    // ⏰ 予定時刻の2分前リマインダー監視 (毎10秒チェック)
+    function checkUpcomingScheduleReminders() {
+        if (!cachedTodaySchedules || cachedTodaySchedules.length === 0) return;
+        // 通話中や緊急ポップアップ表示中、発話中は割り込まない
+        if (isAnnouncementPlaying || isAISpeaking || isIntercomCallActive) return;
+
+        const now = new Date();
+        const currentHHMM = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+
+        for (const s of cachedTodaySchedules) {
+            const schedKey = s.id ? String(s.id) : (s.time + "_" + s.title);
+            if (notified2MinScheduleIds.has(schedKey)) continue;
+
+            // 2分前時刻を取得 (バックエンド計算値またはフォールバック)
+            let remTime = s.reminder_time;
+            if (!remTime && s.time) {
+                try {
+                    const [h, m] = s.time.split(":").map(Number);
+                    let total = h * 60 + m - 2;
+                    if (total < 0) total += 24 * 60;
+                    remTime = String(Math.floor(total / 60)).padStart(2, '0') + ":" + String(total % 60).padStart(2, '0');
+                } catch(e) {}
+            }
+
+            if (remTime && remTime === currentHHMM) {
+                notified2MinScheduleIds.add(schedKey);
+                console.log(`[みまもりさん 2分前通知]: 予定「${s.title}」の2分前です。自動案内を開始します。`);
+
+                const reminderText = s.reminder_text || `${s.time}に${s.title}が予定されています`;
+
+                // 1. 「今日のご予定」下の表示を更新 & 枠を強調アニメーション
+                if (mimamoriScheduleReportText) {
+                    mimamoriScheduleReportText.textContent = `📢 【予定のお知らせ】${reminderText}`;
+                }
+                if (mimamoriScheduleReportCard) {
+                    mimamoriScheduleReportCard.classList.add("highlight-2min");
+                    setTimeout(() => {
+                        mimamoriScheduleReportCard.classList.remove("highlight-2min");
+                    }, 40000);
+                }
+
+                // 該当予定の行を一時的にハイライト
+                if (todaySchedulesList && s.id) {
+                    const targetRow = todaySchedulesList.querySelector(`[data-schedule-id="${s.id}"]`);
+                    if (targetRow) {
+                        targetRow.classList.add("highlighted");
+                        setTimeout(() => targetRow.classList.remove("highlighted"), 30000);
+                    }
+                }
+
+                // 2. 音声アナウンス再生
+                if (s.reminder_audio) {
+                    playScheduleReminderAudio(s.reminder_audio, reminderText);
+                }
+                break; // 1回のチェックで1件のみ発話
+            }
+        }
+    }
+
+    function playScheduleReminderAudio(audioBase64, reminderText) {
+        if (isAnnouncementPlaying || isAISpeaking) return;
+        isAnnouncementPlaying = true;
+        isAISpeaking = true;
+        isTTSAnnouncing = true;
+        window.isSpeechRecActive = false;
+
+        statusText.textContent = "まもなく予定の時間です";
+        setLiveLampState("speaking");
+        setAvatarState("speaking");
+
+        if (aiResponseBox) {
+            aiResponseBox.textContent = reminderText;
+        }
+
+        playBase64Audio(
+            audioBase64,
+            () => {
+                console.log("[みまもりさん 2分前通知]: 音声案内が完了しました。");
+                setTimeout(() => {
+                    isAnnouncementPlaying = false;
+                    isAISpeaking = false;
+                    isTTSAnnouncing = false;
+                    window.isSpeechRecActive = false;
+                    if (!isModalOpen) {
+                        statusText.textContent = "お話しする準備ができました";
+                        setLiveLampState("idle");
+                        setAvatarState("idle");
+                    }
+                }, 800);
+            },
+            (err) => {
+                console.warn("[みまもりさん 2分前通知] 音声再生終了:", err);
+                isAnnouncementPlaying = false;
+                isAISpeaking = false;
+                isTTSAnnouncing = false;
+                window.isSpeechRecActive = false;
+                if (!isModalOpen) {
+                    statusText.textContent = "お話しする準備ができました";
+                    setLiveLampState("idle");
+                    setAvatarState("idle");
+                }
+            }
+        );
+    }
+
+    // 10秒おきに2分前予定リマインダーをチェック
+    setInterval(checkUpcomingScheduleReminders, 10000);
 
     if (btnReAnnounceSchedules) {
         btnReAnnounceSchedules.addEventListener("click", () => {

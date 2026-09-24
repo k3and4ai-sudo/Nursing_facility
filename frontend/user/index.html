@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260924_past_sched">
+    <link rel="stylesheet" href="style.css?v=20260924_mimamori_report">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -119,6 +119,17 @@
                     </div>
                     <div id="today-schedules-list" class="schedules-list">
                         <div class="schedules-loading-msg">本日の予定を確認しています...</div>
+                    </div>
+                    <!-- 🤖 みまもりさん 予定報告エリア（今日のご予定の下に表示） -->
+                    <div id="mimamori-schedule-report-card" class="mimamori-schedule-report-card">
+                        <div class="mimamori-report-header">
+                            <span class="mimamori-avatar-mini">🤖</span>
+                            <span class="mimamori-report-title">みまもりさんの予定報告</span>
+                            <span id="mimamori-report-badge" class="mimamori-report-badge">📢 音声案内</span>
+                        </div>
+                        <div id="mimamori-schedule-report-text" class="mimamori-report-text">
+                            本日のご予定を確認しています...
+                        </div>
                     </div>
                 </div>
             </main>
@@ -479,6 +490,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260924_past_sched"></script>
+    <script src="app.js?v=20260924_mimamori_report"></script>
 </body>
 </html>
