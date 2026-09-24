@@ -211,6 +211,7 @@ class GeminiLiveSession:
         self._interrupted = False
         self.pending_chunks = []
         self.audio_chunks_in_turn = 0
+        self.last_audio_output_time = 0.0
         self._connect_lock = asyncio.Lock()
         
         # Resolve API Key: passed api_key > user profile gemini_api_key > system default
@@ -332,9 +333,14 @@ class GeminiLiveSession:
                                         f"利用者様が「予定を教えて」「スケジュールを教えて」「予定を出して」「スケジュールを出して」またはそれに類似した発言（予定の確認やカード表示を求める発言）をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
                                         f"「みまもりさん予定カードの表示をお願いします。」\n"
                                         f"続けて「はい、予定カードを表示しましたよ」とお伝えし、本日のこれからの予定を優しく分かりやすく教えてあげてください。\n"
-                                        f"また、利用者様が「予定ありがとう」「スケジュールありがとう」「予定を消して」「スケジュールを消して」またはそれに類似した発言（予定確認の終了やカードを閉じることを求める発言）をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"また、利用者様が明確に「予定ありがとう」「スケジュールありがとう」「予定を消して」「スケジュールを消して」など、予定カードを閉じることを希望された場合のみ、第一声で正確に：\n"
                                         f"「みまもりさん予定カードの表示を終了してください。」\n"
-                                        f"続けて「どういたしまして。予定カードを閉じましたよ」などと優しく温かく伝えてください。\n\n"
+                                        f"続けて「はい、予定カードを閉じましたよ」とお伝えください。\n\n"
+                                        f"★【厳重注意：文脈の合わないトンチンカンな返答・「どういたしまして」の禁止】：\n"
+                                        f"・利用者様から「ありがとう」や「お礼」を言われていないのに、勝手に「どういたしまして」と返答することは絶対に禁止です。\n"
+                                        f"・利用者様が「こんにちは」「おはよう」などの挨拶をされた時は、必ず「こんにちは、{nickname}様！お元気ですか？」と自然に挨拶を返してください。\n"
+                                        f"・相手の発言内容に正確に答えてください。話の内容と無関係なことを口走ったり、直前の自分の言葉を何度も繰り返してはいけません。\n"
+                                        f"・雑音や聞き取れない音に対しては、勝手に会話を作らず「はい、何でしょうか？」「もう一度お話しいただけますか？」と優しく尋ねてください。\n\n"
                                         f"【重要指示3：回想法（昔の思い出話の傾聴と質問の制限ルール）】\n"
                                         f"利用者様が「昔の話をしたい」「昔のこと」「子供の頃」「若い頃」「運動会」「お祭り」など、過去の思い出について話された時は、大歓迎の共感で受け止めてください。\n"
                                         f"★【同じ質問の繰り返し・質問攻めの厳格な禁止】：\n"
@@ -427,6 +433,12 @@ class GeminiLiveSession:
     async def send_audio_chunk(self, pcm_16k_bytes: bytes):
         """Sends raw 16kHz PCM audio chunk to Gemini Live API as realtime_input."""
         self._interrupted = False
+
+        # Acoustic Echo Protection: drop mic audio while Gemini is speaking or within cooldown window
+        now = time.time()
+        if now - self.last_audio_output_time < 1.5:
+            return
+
         self.audio_chunks_in_turn += 1
         b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
         if not self.is_connected or not self.ws:
@@ -618,6 +630,12 @@ class GeminiLiveSession:
             print(f"[Gemini Live Session]: Skipping empty turnComplete (no text, chunks={chunks_count}). Gemini will not re-speak.")
             return
 
+        # Acoustic Echo Protection: drop empty turnComplete if triggered within cooldown of AI speaking
+        now = time.time()
+        if not parts and (now - self.last_audio_output_time < 1.5):
+            print(f"[Gemini Live Session]: Dropping echo-triggered turnComplete (within 1.5s of Gemini speech). No turnComplete sent.")
+            return
+
         try:
             content_body = {"turnComplete": True}
             if parts:
@@ -670,6 +688,7 @@ class GeminiLiveSession:
                             continue
                         audio_b64 = inline_data["data"]
                         raw_pcm24 = base64.b64decode(audio_b64)
+                        self.last_audio_output_time = time.time()
                         print(f"[Gemini Live Session]: Received audio chunk ({len(raw_pcm24)} bytes PCM24). Forwarding to client...")
                         if self.on_audio_received:
                             self.on_audio_received(raw_pcm24)

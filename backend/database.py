@@ -605,15 +605,33 @@ def get_all_recent_vitals(limit: int = 100):
 
 # Chat History Functions
 def add_chat_message(user_id: int, sender: str, message: str):
+    clean_msg = (message or "").strip()
+    if not clean_msg:
+        return None
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        # Check last message for same user and sender to prevent duplicate spamming
+        cursor.execute(
+            "SELECT message FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
+            (user_id,)
+        )
+        last_row = cursor.fetchone()
+        if last_row:
+            try:
+                last_msg = decrypt_data(last_row[0]).strip()
+                if last_msg == clean_msg:
+                    return None
+            except Exception:
+                pass
+
         timestamp = datetime.now().isoformat()
         cursor.execute(
             "INSERT INTO chat_history (user_id, timestamp, sender, message) VALUES (?, ?, ?, ?)",
-            (user_id, timestamp, sender, encrypt_data(message))
+            (user_id, timestamp, sender, encrypt_data(clean_msg))
         )
         conn.commit()
         return cursor.lastrowid
+
 
 def get_chat_history(user_id: int, limit: int = 50):
     history = []

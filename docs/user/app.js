@@ -34,6 +34,74 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnResumeRecording = document.getElementById("btn-resume-recording");
     const btnCloseMimamoriPopup = document.getElementById("btn-close-mimamori-popup");
 
+    // 📅 予定カード (Schedule Card UI Elements & State)
+    const todaySchedulesCard = document.getElementById("today-schedules-card");
+    const todayDateBadge = document.getElementById("today-date-badge");
+    const scheduleDatePicker = document.getElementById("schedule-date-picker");
+    const btnCloseScheduleCard = document.getElementById("btn-close-schedule-card");
+    const btnShowScheduleCard = document.getElementById("btn-show-schedule-card");
+    const btnReAnnounceSchedules = document.getElementById("btn-re-announce-schedules");
+    const todaySchedulesList = document.getElementById("today-schedules-list");
+    const mimamoriScheduleReportCard = document.getElementById("mimamori-schedule-report-card");
+    const mimamoriScheduleReportText = document.getElementById("mimamori-schedule-report-text");
+
+    let isScheduleCardVisible = true;
+    let scheduleCardHideTimer = null;
+    let isBootScheduleAnnouncement = false;
+    let currentScheduleAnnouncementAudio = null;
+    let currentScheduleAnnouncementText = "";
+    let cachedTodaySchedules = [];
+    let isAnnouncementPlaying = false;
+    let bootAnnouncementTimeout = null;
+    const notified2MinScheduleIds = new Set();
+
+    function updateShowScheduleBtnVisibility() {
+        if (!btnShowScheduleCard) return;
+        // シンプル画面では予定ボタンを表示しない
+        if (currentUIMode === "simple") {
+            btnShowScheduleCard.classList.add("hidden");
+        } else {
+            // 詳細画面では予定カードを消すと予定ボタンを表示
+            if (!isScheduleCardVisible) {
+                btnShowScheduleCard.classList.remove("hidden");
+            } else {
+                btnShowScheduleCard.classList.add("hidden");
+            }
+        }
+    }
+
+    function hideScheduleCard() {
+        if (scheduleCardHideTimer) {
+            clearTimeout(scheduleCardHideTimer);
+            scheduleCardHideTimer = null;
+        }
+        if (todaySchedulesCard) {
+            todaySchedulesCard.classList.add("hidden");
+        }
+        isScheduleCardVisible = false;
+        console.log("[Schedule Card]: Card hidden.");
+        updateShowScheduleBtnVisibility();
+    }
+
+    function showScheduleCard(speakAnnouncement = false) {
+        if (scheduleCardHideTimer) {
+            clearTimeout(scheduleCardHideTimer);
+            scheduleCardHideTimer = null;
+        }
+        if (todaySchedulesCard) {
+            todaySchedulesCard.classList.remove("hidden");
+        }
+        isScheduleCardVisible = true;
+        console.log("[Schedule Card]: Card shown.");
+        updateShowScheduleBtnVisibility();
+
+        if (speakAnnouncement && currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
+            if (typeof playScheduleAnnouncement === "function") {
+                playScheduleAnnouncement();
+            }
+        }
+    }
+
     // 🎨 Etegami UI Elements & Handlers
     let isEtegamiUpdating = false;
     const etegamiCard = document.getElementById("etegami-card");
@@ -252,6 +320,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 showUIToast("📋 詳細画面に切り替えました", "detailed");
             }
         }
+        if (typeof updateShowScheduleBtnVisibility === "function") {
+            updateShowScheduleBtnVisibility();
+        }
         return true;
     }
 
@@ -376,6 +447,35 @@ document.addEventListener("DOMContentLoaded", () => {
                 const changed = setUIMode("detailed", true);
                 if (changed && liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "client_ui_mode", mode: "detailed" }));
+                }
+            }
+
+            // Schedule Card voice commands (予定カードの表示・終了)
+            const SHOW_SCHEDULE_COMMANDS = [
+                "予定を教えて", "スケジュールを教えて", "予定を出して", "スケジュールを出して",
+                "予定見せて", "スケジュール見せて", "予定表示して", "スケジュール表示して",
+                "予定を表示して", "スケジュールを表示して", "予定を見せて", "スケジュールを見せて",
+                "今日の予定教えて", "今日のスケジュール教えて", "予定教えて", "スケジュール教えて",
+                "予定出して", "スケジュール出して", "予定カード出して", "予定カードを出して",
+                "よていをおしえて", "すけじゅーるをおしえて", "よていをだして", "すけじゅーるをだして"
+            ];
+            const HIDE_SCHEDULE_COMMANDS = [
+                "予定ありがとう", "スケジュールありがとう", "予定を消して", "スケジュールを消して",
+                "予定消して", "スケジュール消して", "予定閉じて", "スケジュール閉じて",
+                "予定を閉じて", "スケジュールを閉じて", "予定カード消して", "予定カードを消して",
+                "予定終了", "スケジュール終了", "よていありがとう", "すけじゅーるありがとう",
+                "よていをけして", "すけじゅーるをけして", "よていけして", "すけじゅーるけして"
+            ];
+
+            if (SHOW_SCHEDULE_COMMANDS.some(cmd => clean.includes(cmd))) {
+                console.log("[SpeechRec Schedule]: Voice triggered SHOW schedule card:", clean);
+                if (typeof showScheduleCard === "function") {
+                    showScheduleCard(true);
+                }
+            } else if (HIDE_SCHEDULE_COMMANDS.some(cmd => clean.includes(cmd))) {
+                console.log("[SpeechRec Schedule]: Voice triggered HIDE schedule card:", clean);
+                if (typeof hideScheduleCard === "function") {
+                    hideScheduleCard();
                 }
             }
         };
@@ -660,9 +760,11 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("WebSocket connected");
             connectionStatus.className = "status-dot online";
             reportTerminalStatus("idle");
-            const registered = await checkRegistration(false);
-            if (!registered) {
-                statusText.textContent = "端末の登録をお待ちしています...";
+            if (!userDetails) {
+                const registered = await checkRegistration(false);
+                if (!registered) {
+                    statusText.textContent = "端末の登録をお待ちしています...";
+                }
             }
         };
 
@@ -779,6 +881,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let liveAudioCtx = null;
 
     function connectLiveWS() {
+        if (!terminalId) return;
+        if (liveWs && (liveWs.readyState === WebSocket.OPEN || liveWs.readyState === WebSocket.CONNECTING)) {
+            console.log("[connectLiveWS]: Already open or connecting, skipping duplicate.");
+            return;
+        }
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         const wsUrl = `${protocol}//${window.location.host}/ws/user/${terminalId}/live`;
         liveWs = new WebSocket(wsUrl);
@@ -800,6 +907,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log("[LiveWS]: Already switched recently to", data.mode, "- skipping duplicate");
                 } else {
                     setUIMode(data.mode, true);
+                }
+            } else if (data.type === "schedule_visibility") {
+                console.log("[LiveWS]: Received schedule_visibility ->", data.visible);
+                if (data.visible) {
+                    if (typeof showScheduleCard === "function") {
+                        showScheduleCard(false);
+                    }
+                } else {
+                    if (typeof hideScheduleCard === "function") {
+                        hideScheduleCard();
+                    }
                 }
             } else if (data.type === "live_response" || data.type === "live_text_output") {
                 const rawText = data.text || "";
@@ -829,6 +947,31 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log("[Gemini Live Voice]: Screen already switched recently (within 4s) - ignoring Gemini Live command:", rawText);
                 }
 
+                // Detect Gemini Live schedule card commands
+                const isToGeminiShowSched = (
+                    rawText.includes("みまもりさん予定カードの表示をお願いします") ||
+                    rawText.includes("予定カードの表示をお願い") ||
+                    rawText.includes("予定カードを表示")
+                );
+                const isToGeminiHideSched = (
+                    rawText.includes("みまもりさん予定カードの表示を終了してください") ||
+                    rawText.includes("予定カードの表示を終了") ||
+                    rawText.includes("予定カードを終了") ||
+                    rawText.includes("予定カードを消して")
+                );
+
+                if (isToGeminiShowSched) {
+                    console.log("[Gemini Live Voice]: Detected show schedule card command:", rawText);
+                    if (typeof showScheduleCard === "function") {
+                        showScheduleCard(false);
+                    }
+                } else if (isToGeminiHideSched) {
+                    console.log("[Gemini Live Voice]: Detected hide schedule card command:", rawText);
+                    if (typeof hideScheduleCard === "function") {
+                        hideScheduleCard();
+                    }
+                }
+
                 // Detect Gemini Live recording commands
                 const isToStopRec = (
                     rawText.includes("会話記録を停止") ||
@@ -856,6 +999,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Filter out the internal command preamble for cleaner speech box display
                 const cleanText = rawText
                     .replace(/みまもりさん[へ]?業務連絡[、,][^。.\n]+[。.・\n]?/g, "")
+                    .replace(/みまもりさん[、へ]?予定カードの表示[^。.\n]*[。.・\n]?/g, "")
                     .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙更新[^。.\n]*[。.・\n]?/g, "")
                     .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙更新[^。.\n]*[。.・\n]?/g, "")
                     .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙完成[^。.\n]*[。.・\n]?/g, "")
@@ -894,6 +1038,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 const isThoughtDetailed = data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"));
                 const isThoughtStopRec = data.thought && (data.thought.includes("会話記録を停止") || data.thought.includes("記録停止") || thought.includes("conversation halt") || thought.includes("cease recording") || thought.includes("stop recording"));
                 const isThoughtResumeRec = data.thought && (data.thought.includes("会話記録を再開") || data.thought.includes("記録再開") || thought.includes("resume recording"));
+                const isThoughtShowSched = data.thought && (data.thought.includes("予定カードの表示") || data.thought.includes("予定カードを表示") || thought.includes("show schedule card") || thought.includes("display schedule card"));
+                const isThoughtHideSched = data.thought && (data.thought.includes("予定カードの表示を終了") || data.thought.includes("予定カードを終了") || thought.includes("hide schedule card") || thought.includes("close schedule card"));
+
+                if (isThoughtShowSched) {
+                    if (typeof showScheduleCard === "function") showScheduleCard(false);
+                } else if (isThoughtHideSched) {
+                    if (typeof hideScheduleCard === "function") hideScheduleCard();
+                }
 
                 if (Date.now() - lastUIModeChangeTime > 4000) {
                     if (isThoughtSimple) {
@@ -1630,7 +1782,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 let chunksSentInUtterance = 0;
                 let preSpeechRingBuffer = []; // ring buffer of last 3 chunks (~150ms) to preserve initial consonants
                 const NOISE_GATE_THRESHOLD = 0.0075; // Cut off mic hiss, room fan, air conditioner, rustling
-                const AI_ECHO_GUARD_MS = 1200; // 1.2s post-playback acoustic echo cooldown guard
+                const AI_ECHO_GUARD_MS = 1800; // 1.8s post-playback acoustic echo cooldown guard
 
                 recorder.onChunkCallback = (resampledChunk) => {
                     // Mute microphone completely when AI is speaking, modal is open, system is announcing,
@@ -1642,6 +1794,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         isSpeakingUtterance = false;
                         chunksSentInUtterance = 0;
                         vadSilenceFrames = 0;
+                        currentUtteranceText = "";
+                        window.isSpeechRecActive = false;
                         return;
                     }
 
@@ -1879,21 +2033,47 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 📅 今日のご予定 (Schedules Management & Boot Announcement)
+    // 📅 予定カード (Schedules Management & Boot Announcement Listeners)
     // =========================================================================
-    const todaySchedulesCard = document.getElementById("today-schedules-card");
-    const todayDateBadge = document.getElementById("today-date-badge");
-    const btnReAnnounceSchedules = document.getElementById("btn-re-announce-schedules");
-    const todaySchedulesList = document.getElementById("today-schedules-list");
-    const mimamoriScheduleReportCard = document.getElementById("mimamori-schedule-report-card");
-    const mimamoriScheduleReportText = document.getElementById("mimamori-schedule-report-text");
 
-    let currentScheduleAnnouncementAudio = null;
-    let currentScheduleAnnouncementText = "";
-    let cachedTodaySchedules = [];
-    let isAnnouncementPlaying = false;
-    let bootAnnouncementTimeout = null;
-    const notified2MinScheduleIds = new Set();
+    if (btnReAnnounceSchedules) {
+        btnReAnnounceSchedules.addEventListener("click", () => {
+            console.log("[Schedule Card]: '🔊 予定を聞く' button clicked.");
+            playScheduleAnnouncement();
+        });
+    }
+
+    if (btnCloseScheduleCard) {
+        btnCloseScheduleCard.addEventListener("click", () => {
+            console.log("[Schedule Card]: Close button (✕) clicked.");
+            hideScheduleCard();
+        });
+    }
+
+    if (btnShowScheduleCard) {
+        btnShowScheduleCard.addEventListener("click", () => {
+            console.log("[Schedule Card]: Re-show schedule button clicked.");
+            showScheduleCard(true);
+        });
+    }
+
+    if (scheduleDatePicker) {
+        const todayDate = new Date();
+        const yyyy = todayDate.getFullYear();
+        const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(todayDate.getDate()).padStart(2, '0');
+        scheduleDatePicker.value = `${yyyy}-${mm}-${dd}`;
+
+        scheduleDatePicker.addEventListener("change", (e) => {
+            const pickedDate = e.target.value;
+            console.log("[Schedule Card]: Date picked:", pickedDate);
+            if (scheduleCardHideTimer) {
+                clearTimeout(scheduleCardHideTimer);
+                scheduleCardHideTimer = null;
+            }
+            loadTodaySchedules(false, pickedDate);
+        });
+    }
 
     function escapeScheduleHtml(str) {
         if (!str) return "";
@@ -1929,18 +2109,31 @@ document.addEventListener("DOMContentLoaded", () => {
         return dateStr;
     }
 
-    async function loadTodaySchedules(autoAnnounce = false) {
+    async function loadTodaySchedules(autoAnnounce = false, targetDate = null) {
         if (!terminalId) return;
         if (isLoadingSchedules) {
             console.log("[loadTodaySchedules]: Already loading schedules, skipping duplicate request.");
             return;
         }
         isLoadingSchedules = true;
+
+        let queryDate = targetDate;
+        if (!queryDate && scheduleDatePicker && scheduleDatePicker.value) {
+            queryDate = scheduleDatePicker.value;
+        }
+
         try {
-            const res = await fetch(`/api/users/terminal/${terminalId}/today_schedules`);
+            const url = queryDate 
+                ? `/api/users/terminal/${terminalId}/today_schedules?date=${encodeURIComponent(queryDate)}`
+                : `/api/users/terminal/${terminalId}/today_schedules`;
+            const res = await fetch(url);
             if (!res.ok) return;
             const data = await res.json();
             
+            if (scheduleDatePicker && data.date) {
+                scheduleDatePicker.value = data.date;
+            }
+
             if (todayDateBadge && data.date) {
                 todayDateBadge.textContent = formatDateJapanese(data.date);
             }
@@ -1949,7 +2142,7 @@ document.addEventListener("DOMContentLoaded", () => {
             currentScheduleAnnouncementAudio = data.audio_base64 || "";
             cachedTodaySchedules = data.schedules || [];
 
-            // 🤖 「今日のご予定」下の「みまもりさんの予定報告」テキストを更新
+            // 🤖 「予定カード」下の「みまもりさんの予定報告」テキストを更新
             if (mimamoriScheduleReportText && currentScheduleAnnouncementText) {
                 mimamoriScheduleReportText.textContent = currentScheduleAnnouncementText;
             }
@@ -1958,7 +2151,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 todaySchedulesList.innerHTML = "";
                 const schedules = data.schedules || [];
                 if (schedules.length === 0) {
-                    todaySchedulesList.innerHTML = '<div class="schedules-empty-msg">本日のご予定はありません。ごゆっくりお過ごしください。</div>';
+                    const emptyMsg = data.is_today 
+                        ? "本日のご予定はありません。ごゆっくりお過ごしください。"
+                        : `${formatDateJapanese(data.date)}のご予定はありません。`;
+                    todaySchedulesList.innerHTML = `<div class="schedules-empty-msg">${emptyMsg}</div>`;
                 } else {
                     const now = new Date();
                     const currentHHMM = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
@@ -1966,7 +2162,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     const upcoming = [];
                     const past = [];
                     schedules.forEach(s => {
-                        const isPast = (typeof s.is_past === "boolean") ? s.is_past : Boolean(s.time && s.time < currentHHMM);
+                        let isPast = s.is_past;
+                        if (typeof isPast !== "boolean") {
+                            isPast = data.is_today ? Boolean(s.time && s.time < currentHHMM) : false;
+                        }
                         if (isPast) {
                             past.push({ ...s, is_past: true });
                         } else {
@@ -2028,6 +2227,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[Care-Link Boot]: Announcing today's schedules with synthesized voice (one-time on boot)...");
                 if (bootAnnouncementTimeout) clearTimeout(bootAnnouncementTimeout);
                 bootAnnouncementTimeout = setTimeout(() => {
+                    isBootScheduleAnnouncement = true;
                     playScheduleAnnouncement();
                 }, 1000);
             }
@@ -2087,22 +2287,36 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[Schedule Announcement]: Finished speaking full schedule.");
                 if (btnReAnnounceSchedules) {
                     btnReAnnounceSchedules.classList.remove("playing");
+                    btnReAnnounceSchedules.classList.remove("attention-pulse");
                 }
-                // Keep microphone muted for 800ms after announcement to eliminate room reverberation
+                lastAIAudioEndTime = Date.now();
+                // Keep microphone muted for 1200ms after announcement to eliminate room reverberation
                 setTimeout(() => {
                     isAnnouncementPlaying = false;
                     isAISpeaking = false;
                     isTTSAnnouncing = false;
+                    lastAIAudioEndTime = Date.now();
                     window.isSpeechRecActive = false;
                     if (!isModalOpen) {
                         statusText.textContent = "お話しする準備ができました";
                         setLiveLampState("idle");
                         setAvatarState("idle");
                     }
-                }, 800);
+                }, 1200);
+
+                // 起動後みまもりさんが今日の予定を話し終わると60秒後に予定カードは消す
+                if (isBootScheduleAnnouncement) {
+                    isBootScheduleAnnouncement = false;
+                    console.log("[Schedule Announcement]: Boot announcement finished. Schedule card will auto-hide in 60s.");
+                    if (scheduleCardHideTimer) clearTimeout(scheduleCardHideTimer);
+                    scheduleCardHideTimer = setTimeout(() => {
+                        console.log("[Schedule Card]: 60s elapsed after boot announcement, hiding schedule card now.");
+                        hideScheduleCard();
+                    }, 60000);
+                }
             },
             (err) => {
-                console.warn("[Schedule Announcement] Audio playback finished or stopped:", err);
+                console.warn("[Schedule Announcement] Audio playback blocked by browser policy or stopped:", err);
                 if (btnReAnnounceSchedules) {
                     btnReAnnounceSchedules.classList.remove("playing");
                 }
@@ -2110,7 +2324,34 @@ document.addEventListener("DOMContentLoaded", () => {
                 isAISpeaking = false;
                 isTTSAnnouncing = false;
                 window.isSpeechRecActive = false;
-                if (!isModalOpen) {
+
+                // If blocked on boot by browser autoplay policy, arm one-time user gesture trigger
+                if (isBootScheduleAnnouncement || !hasAnnouncedTodaySchedulesOnBoot) {
+                    console.log("[Schedule Announcement]: Autoplay blocked by browser. Arming one-time gesture unlock on any tap...");
+                    if (btnReAnnounceSchedules) {
+                        btnReAnnounceSchedules.classList.add("attention-pulse");
+                    }
+                    if (statusText && !isModalOpen) {
+                        statusText.textContent = "👆 画面をタップすると本日の予定をご案内します";
+                    }
+
+                    const onFirstUserTap = () => {
+                        window.removeEventListener("pointerdown", onFirstUserTap, true);
+                        window.removeEventListener("click", onFirstUserTap, true);
+                        window.removeEventListener("touchstart", onFirstUserTap, true);
+                        if (btnReAnnounceSchedules) {
+                            btnReAnnounceSchedules.classList.remove("attention-pulse");
+                        }
+                        if (!isAnnouncementPlaying && currentScheduleAnnouncementAudio) {
+                            console.log("[Schedule Announcement]: Unlocking boot schedule announcement on first user interaction!");
+                            isBootScheduleAnnouncement = true;
+                            playScheduleAnnouncement();
+                        }
+                    };
+                    window.addEventListener("pointerdown", onFirstUserTap, { once: true, capture: true });
+                    window.addEventListener("click", onFirstUserTap, { once: true, capture: true });
+                    window.addEventListener("touchstart", onFirstUserTap, { once: true, capture: true });
+                } else if (!isModalOpen) {
                     statusText.textContent = "お話しする準備ができました";
                     setLiveLampState("idle");
                     setAvatarState("idle");
