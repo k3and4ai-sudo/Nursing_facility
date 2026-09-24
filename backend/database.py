@@ -610,17 +610,37 @@ def add_chat_message(user_id: int, sender: str, message: str):
         return None
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Check last message for same user and sender to prevent duplicate spamming
+        # Check last message for same user to prevent duplicate greeting / spamming
         cursor.execute(
-            "SELECT message FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
+            "SELECT id, sender, message FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
             (user_id,)
         )
         last_row = cursor.fetchone()
         if last_row:
             try:
-                last_msg = decrypt_data(last_row[0]).strip()
+                last_id = last_row["id"]
+                last_sender = last_row["sender"]
+                last_msg = decrypt_data(last_row["message"]).strip()
+                # 1. Exact duplicate skip
                 if last_msg == clean_msg:
                     return None
+                # 2. Duplicate AI greeting spam guard
+                if sender == "ai" and last_sender == "ai":
+                    if clean_msg.startswith("こんにちは") and last_msg.startswith("こんにちは"):
+                        return None
+                    if "元気ですか" in clean_msg and "元気ですか" in last_msg:
+                        return None
+                # 3. Partial chunk prefix guard (e.g. 'こんにちは、太郎さん様！お' vs full text)
+                if sender == last_sender and (clean_msg.startswith(last_msg) or last_msg.startswith(clean_msg)):
+                    if len(clean_msg) > len(last_msg):
+                        cursor.execute(
+                            "UPDATE chat_history SET message = ? WHERE id = ?",
+                            (encrypt_data(clean_msg), last_id)
+                        )
+                        conn.commit()
+                        return last_id
+                    else:
+                        return None
             except Exception:
                 pass
 

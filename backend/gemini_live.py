@@ -257,11 +257,18 @@ class GeminiLiveSession:
                 self.is_connected = True
                 
                 # Send BidiGenerateContentSetup frame
-                nickname = self.user.get("name", "利用者")
-                if " " in nickname:
-                    nickname = nickname.split()[1] + "さん"
-                elif len(nickname) > 2:
-                    nickname = nickname[1:] + "さん"
+                raw_name = self.user.get("name", "利用者")
+                if " " in raw_name:
+                    base_name = raw_name.split()[1]
+                elif len(raw_name) > 2:
+                    base_name = raw_name[1:]
+                else:
+                    base_name = raw_name
+                # Avoid duplicate honorifics like '太郎さん様'
+                if base_name.endswith("さん") or base_name.endswith("様") or base_name.endswith("ちゃん"):
+                    nickname = base_name
+                else:
+                    nickname = f"{base_name}さん"
                     
                 model_name = getattr(config, "GEMINI_MODEL", "gemini-3.8-live")
                 if not model_name.startswith("models/"):
@@ -270,11 +277,14 @@ class GeminiLiveSession:
                 history_text = ""
                 if self.history:
                     recent_turns = []
-                    for h in self.history[-6:]:
+                    last_msg_text = ""
+                    for h in self.history[-8:]:
                         sender_label = "利用者" if h.get("sender") == "user" else "Gemini"
                         msg = h.get("message", "").strip()
-                        if msg:
+                        # Deduplicate repeated greeting turns
+                        if msg and msg != last_msg_text and not (msg.startswith("こんにちは") and last_msg_text.startswith("こんにちは")):
                             recent_turns.append(f"{sender_label}: {msg}")
+                            last_msg_text = msg
                     if recent_turns:
                         history_text = "\n【直近の会話履歴】\n" + "\n".join(recent_turns)
 
@@ -314,7 +324,7 @@ class GeminiLiveSession:
                                     "text": (
                                         f"あなたの名前は「ジェムナイ」です。介護施設の高齢者ケアに特化したGemini Live会話AIアシスタントです。"
                                         f"施設内の記録・見守り・安全管理を担当するローカルAIの名前は「みまもりさん」です。\n"
-                                        f"利用者のニックネームは「{nickname}」様です。温かく優しく短い日本語で相槌を打ちながら会話してください。\n"
+                                        f"利用者のニックネーム（呼び名）は「{nickname}」です。温かく優しく短い日本語で相槌を打ちながら会話してください。\n"
                                         f"否定せず受容・共感の姿勢を徹底し、思考解説や英語テキストは一切出力せず、即座に利用者様への短い1〜2文の日本語返答のみを音声出力してください。\n\n"
                                         f"【重要指示1：スタッフ呼び出しについて】\n"
                                         f"あなた自身にはスタッフを呼び出す機能はありません。「スタッフに連絡します」「スタッフをお呼びします」といった発言は絶対にしないでください。利用者様が体調不良・痛み・苦しさを訴えたりスタッフへの連絡を求めた場合は、ご無理をなさらないよう気遣い、「スタッフに連絡する場合はボタンを押してください」と案内してください。\n\n"
@@ -339,15 +349,16 @@ class GeminiLiveSession:
                                         f"「みまもりさん予定カードの表示を終了してください。」\n"
                                         f"続けて「はい、予定カードを閉じましたよ」とお伝えください。\n\n"
                                         f"【重要指示2-4：デジタル絵手紙カードの表示・終了（非表示）について】\n"
-                                        f"利用者様が「絵を描きたい」「絵を出して」「デジタル絵手紙を出して」「デジタル絵手紙を表示して」「デジタル絵手紙起動」またはそれを意図する発言をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"利用者様が「絵を描きたい」「絵をかきたい」「絵を出して」「デジタル絵手紙を出して」「デジタル絵手紙を表示して」「デジタル絵手紙起動」「デジタル絵手紙をかきたい」「デジタル絵手紙を描きたい」またはそれを意図する発言をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
                                         f"「みまもりさん、デジタル絵手紙を表示してください。」\n"
                                         f"続けて「はい、デジタル絵手紙を表示しましたよ。どんな絵を描きましょうか？」と優しく温かく案内してください。\n"
                                         f"また、利用者様が「お絵描きを終わる」「絵をとじて」「デジタル絵手紙をとじて」「デジタル絵手紙を非表示にして」「デジタル絵手紙終了」またはそれを意図する発言をされた場合は、必ず第一声で正確に：\n"
                                         f"「みまもりさん、デジタル絵手紙をとじてください。」\n"
                                         f"続けて「はい、絵手紙を閉じましたよ。またいつでも描いてみてくださいね」とお伝えください。\n\n"
-                                        f"★【厳重注意：文脈の合わないトンチンカンな返答・「どういたしまして」の禁止】：\n"
+                                        f"★【厳重注意：挨拶と受け答えのルール・「どういたしまして」「こんにちは」の連呼禁止】：\n"
                                         f"・利用者様から「ありがとう」や「お礼」を言われていないのに、勝手に「どういたしまして」と返答することは絶対に禁止です。\n"
-                                        f"・利用者様が「こんにちは」「おはよう」などの挨拶をされた時は、必ず「こんにちは、{nickname}様！お元気ですか？」と自然に挨拶を返してください。\n"
+                                        f"・利用者様が「こんにちは」「おはよう」などの挨拶をされた時は、「こんにちは、{nickname}！お元気ですか？」と自然に1回だけ挨拶を返してください。\n"
+                                        f"・ただし、一度挨拶を交わした後は、同じ会話の中で何度も「こんにちは」を繰り返してはいけません！相手が別のこと（絵手紙、予定、質問、相槌など）を話した時は、挨拶を蒸し返さず、必ずその発言内容に直接答えてください。\n"
                                         f"・相手の発言内容に正確に答えてください。話の内容と無関係なことを口走ったり、直前の自分の言葉を何度も繰り返してはいけません。\n"
                                         f"・雑音や聞き取れない音に対しては、勝手に会話を作らず「はい、何でしょうか？」「もう一度お話しいただけますか？」と優しく尋ねてください。\n\n"
                                         f"【重要指示3：回想法（昔の思い出話の傾聴と質問の制限ルール）】\n"
@@ -576,6 +587,10 @@ class GeminiLiveSession:
             "デジタル絵手紙表示" in text_val or
             "デジタル絵手紙を出して" in text_val or
             "デジタル絵手紙起動" in text_val or
+            "デジタル絵手紙をかきたい" in text_val or
+            "デジタル絵手紙を描きたい" in text_val or
+            "絵をかきたい" in text_val or
+            "絵を描きたい" in text_val or
             "show etegami" in text_lower or
             "display etegami" in text_lower
         )

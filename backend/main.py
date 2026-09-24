@@ -1812,10 +1812,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # 1-3. Immediate voice command detection for Etegami Card visibility
         to_show_etegami = any(k in text_to_check for k in [
-            "絵を描きたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-            "絵をかきたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+            "絵を描きたい", "絵をかきたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
+            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
             "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう"
+            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
         ])
         to_hide_etegami = any(k in text_to_check for k in [
             "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
@@ -1897,10 +1898,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # Check for etegami card triggers directly from Whisper STT
         to_show_etegami = any(k in transcribed_text for k in [
-            "絵を描きたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-            "絵をかきたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+            "絵を描きたい", "絵をかきたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
+            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
             "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう"
+            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
         ])
         to_hide_etegami = any(k in transcribed_text for k in [
             "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
@@ -1933,6 +1935,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Whisper Confidential Mode]: Recording resume triggered by Whisper: '{transcribed_text}'")
             session.recording_active = True
             asyncio.create_task(on_live_recording_status(True, "会話記録再開"))
+
+        # Save user transcription to chat history if recording is active
+        if session.recording_active and len(transcribed_text.strip()) > 1:
+            db.add_chat_message(user["id"], "user", transcribed_text.strip())
 
         # 2-2. Check for resident etegami update triggers from Whisper STT
         check_resident_etegami_trigger(transcribed_text)
