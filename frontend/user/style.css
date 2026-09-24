@@ -1638,6 +1638,35 @@ body.simple-mode .speech-box.user-box {
     width: 100%;
 }
 
+.etegami-close-btn {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.etegami-close-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fca5a5;
+    transform: scale(1.1);
+}
+
+.etegami-close-btn:active {
+    transform: scale(0.95);
+}
+
 .etegami-badge-group {
     display: flex;
     align-items: center;
@@ -2047,12 +2076,12 @@ body.simple-mode .speech-box.user-box {
     flex: 1;
 }
 
-/* シンプル画面でも絵手紙カードを美しく表示 */
+/* シンプル画面では絵手紙カードは非表示 (要件: シンプル表示モードでは何も表示しません) */
 body.simple-mode .etegami-card {
-    border-width: 3px;
+    display: none !important;
 }
-body.simple-mode .etegami-shikishi {
-    max-height: 250px;
+.etegami-card.hidden {
+    display: none !important;
 }
 
 /* ==============================================================================
@@ -2197,13 +2226,27 @@ body.simple-mode .etegami-shikishi {
     transform: scale(0.95);
 }
 
+/* 🔘 カード再表示ボタングループ（詳細画面のみ・カード非表示時に表示） */
+.card-trigger-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 10px auto;
+    flex-wrap: wrap;
+}
+
+body.simple-mode .card-trigger-actions {
+    display: none !important;
+}
+
 /* 📅 予定カード再表示ボタン（詳細画面のみ・カード非表示時に表示） */
 .btn-show-schedule-card {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin: 10px auto;
+    margin: 0;
     padding: 10px 24px;
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
     color: #ffffff;
@@ -2231,6 +2274,43 @@ body.simple-mode .etegami-shikishi {
 }
 
 body.simple-mode .btn-show-schedule-card {
+    display: none !important;
+}
+
+/* 🎨 デジタル絵手紙カード再表示ボタン（詳細画面のみ・カード非表示時に表示） */
+.btn-show-etegami-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 20px;
+    font-size: 1.2rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(234, 88, 12, 0.35);
+    transition: all 0.2s ease;
+}
+
+.btn-show-etegami-card:hover {
+    background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(234, 88, 12, 0.45);
+}
+
+.btn-show-etegami-card:active {
+    transform: translateY(0);
+}
+
+.btn-show-etegami-card.hidden {
+    display: none !important;
+}
+
+body.simple-mode .btn-show-etegami-card {
     display: none !important;
 }
 

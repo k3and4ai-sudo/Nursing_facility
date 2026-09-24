@@ -1575,6 +1575,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"Error sending schedule visibility ({terminal_id}): {e}")
 
+    async def on_live_etegami_visibility(visible: bool):
+        try:
+            print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible}")
+            await websocket.send_json({
+                "type": "etegami_visibility",
+                "visible": visible
+            })
+        except Exception as e:
+            print(f"Error sending etegami visibility ({terminal_id}): {e}")
+
     async def on_user_transcription(text: str):
         try:
             await websocket.send_json({
@@ -1736,6 +1746,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         on_recording_status_changed=lambda active, msg: asyncio.create_task(on_live_recording_status(active, msg)),
         on_ui_mode_changed=lambda mode: asyncio.create_task(on_live_ui_mode_change(mode)),
         on_schedule_visibility_changed=lambda vis: asyncio.create_task(on_live_schedule_visibility(vis)),
+        on_etegami_visibility_changed=lambda vis: asyncio.create_task(on_live_etegami_visibility(vis)),
         on_etegami_updated=lambda motif, msg: asyncio.create_task(on_live_etegami_update(motif, msg)),
         on_etegami_completed=lambda: asyncio.create_task(on_live_etegami_complete()),
         history=recent_history,
@@ -1798,6 +1809,27 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         elif to_hide_sched:
             print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Schedule Card: '{text_to_check}'")
             asyncio.create_task(on_live_schedule_visibility(False))
+
+        # 1-3. Immediate voice command detection for Etegami Card visibility
+        to_show_etegami = any(k in text_to_check for k in [
+            "絵を描きたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+            "絵をかきたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
+            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう"
+        ])
+        to_hide_etegami = any(k in text_to_check for k in [
+            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
+            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
+            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
+            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
+            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
+        ])
+        if to_show_etegami:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Etegami Card: '{text_to_check}'")
+            asyncio.create_task(on_live_etegami_visibility(True))
+        elif to_hide_etegami:
+            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
+            asyncio.create_task(on_live_etegami_visibility(False))
 
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
@@ -1862,6 +1894,25 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_schedule_visibility(True))
         elif to_hide_sched:
             asyncio.create_task(on_live_schedule_visibility(False))
+
+        # Check for etegami card triggers directly from Whisper STT
+        to_show_etegami = any(k in transcribed_text for k in [
+            "絵を描きたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+            "絵をかきたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
+            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう"
+        ])
+        to_hide_etegami = any(k in transcribed_text for k in [
+            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
+            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
+            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
+            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
+            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
+        ])
+        if to_show_etegami:
+            asyncio.create_task(on_live_etegami_visibility(True))
+        elif to_hide_etegami:
+            asyncio.create_task(on_live_etegami_visibility(False))
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [

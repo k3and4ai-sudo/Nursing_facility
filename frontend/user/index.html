@@ -104,11 +104,17 @@
                 
                 <p id="guide-text" class="guide-subtext">ボタンを１回押して、お話ししてください</p>
 
-                <!-- 📅 予定カード再表示ボタン (詳細画面のみ、予定カード非表示時に表示) -->
-                <button id="btn-show-schedule-card" class="btn-show-schedule-card hidden" title="予定カードを表示する">
-                    <span class="schedule-btn-icon">📅</span>
-                    <span>予定</span>
-                </button>
+                <!-- 🔘 カード再表示ボタングループ (詳細画面のみ、各カード非表示時に表示) -->
+                <div class="card-trigger-actions">
+                    <button id="btn-show-schedule-card" class="btn-show-schedule-card hidden" title="予定カードを表示する">
+                        <span class="schedule-btn-icon">📅</span>
+                        <span>予定</span>
+                    </button>
+                    <button id="btn-show-etegami-card" class="btn-show-etegami-card" title="デジタル絵手紙を表示する">
+                        <span class="etegami-btn-icon">🎨</span>
+                        <span>デジタル絵手紙</span>
+                    </button>
+                </div>
 
                 <!-- 📅 予定カード (居室端末・予定連絡) -->
                 <div id="today-schedules-card" class="today-schedules-card">
@@ -206,8 +212,9 @@
                 </div>
 
                 <!-- 🎨 今日のデジタル絵手紙 (一番下に配置) -->
-                <div id="etegami-card" class="etegami-card">
+                <div id="etegami-card" class="etegami-card hidden">
                     <div class="etegami-card-header">
+                        <button id="btn-close-etegami-card" class="etegami-close-btn" title="デジタル絵手紙をとじる">✕</button>
                         <div class="etegami-badge-group">
                             <span class="etegami-main-badge">🎨 今日のデジタル絵手紙</span>
                             <span id="etegami-season-tag" class="etegami-season-tag">🍁 秋</span>

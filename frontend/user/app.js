@@ -103,6 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 🎨 Etegami UI Elements & Handlers
+    let isEtegamiCardVisible = false; // ① 初期画面では非表示
     let isEtegamiUpdating = false;
     const etegamiCard = document.getElementById("etegami-card");
     const etegamiShikishiFrame = document.getElementById("etegami-shikishi-frame");
@@ -110,6 +111,55 @@ document.addEventListener("DOMContentLoaded", () => {
     const etegamiModal = document.getElementById("etegami-modal");
     const btnCloseEtegamiModal = document.getElementById("btn-close-etegami-modal");
     const btnCloseEtegamiModalBottom = document.getElementById("btn-close-etegami-modal-bottom");
+    const btnShowEtegamiCard = document.getElementById("btn-show-etegami-card");
+    const btnCloseEtegamiCard = document.getElementById("btn-close-etegami-card");
+
+    function updateShowEtegamiBtnVisibility() {
+        if (!btnShowEtegamiCard) return;
+        // ③ シンプル表示モードでは何も表示しません
+        if (currentUIMode === "simple") {
+            btnShowEtegamiCard.classList.add("hidden");
+        } else {
+            // ② 詳細表示モードにおいて 表示状態では「デジタル絵手紙」のボタンを表示（カード非表示時にボタン表示、カード表示時は非表示）
+            if (!isEtegamiCardVisible) {
+                btnShowEtegamiCard.classList.remove("hidden");
+            } else {
+                btnShowEtegamiCard.classList.add("hidden");
+            }
+        }
+    }
+
+    function showEtegamiCard() {
+        if (etegamiCard) {
+            etegamiCard.classList.remove("hidden");
+        }
+        isEtegamiCardVisible = true;
+        console.log("[Etegami Card]: Card shown.");
+        updateShowEtegamiBtnVisibility();
+    }
+
+    function hideEtegamiCard() {
+        if (etegamiCard) {
+            etegamiCard.classList.add("hidden");
+        }
+        isEtegamiCardVisible = false;
+        console.log("[Etegami Card]: Card hidden.");
+        updateShowEtegamiBtnVisibility();
+    }
+
+    if (btnShowEtegamiCard) {
+        btnShowEtegamiCard.addEventListener("click", () => {
+            console.log("[User UI]: Show Etegami button clicked");
+            showEtegamiCard();
+        });
+    }
+
+    if (btnCloseEtegamiCard) {
+        btnCloseEtegamiCard.addEventListener("click", () => {
+            console.log("[User UI]: Close Etegami card button (✕) clicked");
+            hideEtegamiCard();
+        });
+    }
 
     function openEtegamiModal() {
         if (etegamiModal) etegamiModal.classList.remove("hidden");
@@ -323,6 +373,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (typeof updateShowScheduleBtnVisibility === "function") {
             updateShowScheduleBtnVisibility();
         }
+        if (typeof updateShowEtegamiBtnVisibility === "function") {
+            updateShowEtegamiBtnVisibility();
+        }
         return true;
     }
 
@@ -476,6 +529,33 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[SpeechRec Schedule]: Voice triggered HIDE schedule card:", clean);
                 if (typeof hideScheduleCard === "function") {
                     hideScheduleCard();
+                }
+            }
+
+            // 🎨 Etegami Card voice commands (デジタル絵手紙カードの表示・終了)
+            const SHOW_ETEGAMI_COMMANDS = [
+                "絵を描きたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+                "絵をかきたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+                "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
+                "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう"
+            ];
+            const HIDE_ETEGAMI_COMMANDS = [
+                "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
+                "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
+                "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
+                "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
+                "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
+            ];
+
+            if (SHOW_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd))) {
+                console.log("[SpeechRec Etegami]: Voice triggered SHOW etegami card:", clean);
+                if (typeof showEtegamiCard === "function") {
+                    showEtegamiCard();
+                }
+            } else if (HIDE_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd))) {
+                console.log("[SpeechRec Etegami]: Voice triggered HIDE etegami card:", clean);
+                if (typeof hideEtegamiCard === "function") {
+                    hideEtegamiCard();
                 }
             }
         };
@@ -919,6 +999,17 @@ document.addEventListener("DOMContentLoaded", () => {
                         hideScheduleCard();
                     }
                 }
+            } else if (data.type === "etegami_visibility") {
+                console.log("[LiveWS]: Received etegami_visibility ->", data.visible);
+                if (data.visible) {
+                    if (typeof showEtegamiCard === "function") {
+                        showEtegamiCard();
+                    }
+                } else {
+                    if (typeof hideEtegamiCard === "function") {
+                        hideEtegamiCard();
+                    }
+                }
             } else if (data.type === "live_response" || data.type === "live_text_output") {
                 const rawText = data.text || "";
 
@@ -969,6 +1060,35 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log("[Gemini Live Voice]: Detected hide schedule card command:", rawText);
                     if (typeof hideScheduleCard === "function") {
                         hideScheduleCard();
+                    }
+                }
+
+                // Detect Gemini Live etegami card commands
+                const isToGeminiShowEtegami = (
+                    rawText.includes("みまもりさん、デジタル絵手紙を表示してください") ||
+                    rawText.includes("デジタル絵手紙を表示してください") ||
+                    rawText.includes("デジタル絵手紙を表示") ||
+                    rawText.includes("デジタル絵手紙を出して")
+                );
+                const isToGeminiHideEtegami = (
+                    rawText.includes("みまもりさん、デジタル絵手紙をとじてください") ||
+                    rawText.includes("みまもりさん、デジタル絵手紙を閉じてください") ||
+                    rawText.includes("デジタル絵手紙をとじてください") ||
+                    rawText.includes("デジタル絵手紙を閉じてください") ||
+                    rawText.includes("デジタル絵手紙をとじて") ||
+                    rawText.includes("デジタル絵手紙を閉じて") ||
+                    rawText.includes("デジタル絵手紙を非表示")
+                );
+
+                if (isToGeminiShowEtegami) {
+                    console.log("[Gemini Live Voice]: Detected show etegami card command:", rawText);
+                    if (typeof showEtegamiCard === "function") {
+                        showEtegamiCard();
+                    }
+                } else if (isToGeminiHideEtegami) {
+                    console.log("[Gemini Live Voice]: Detected hide etegami card command:", rawText);
+                    if (typeof hideEtegamiCard === "function") {
+                        hideEtegamiCard();
                     }
                 }
 
@@ -1045,6 +1165,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (typeof showScheduleCard === "function") showScheduleCard(false);
                 } else if (isThoughtHideSched) {
                     if (typeof hideScheduleCard === "function") hideScheduleCard();
+                }
+
+                const isThoughtShowEtegami = data.thought && (data.thought.includes("絵手紙を表示") || data.thought.includes("絵手紙出して") || thought.includes("show etegami") || thought.includes("display etegami"));
+                const isThoughtHideEtegami = data.thought && (data.thought.includes("絵手紙をとじて") || data.thought.includes("絵手紙を閉じて") || data.thought.includes("絵手紙終了") || thought.includes("hide etegami") || thought.includes("close etegami"));
+
+                if (isThoughtShowEtegami) {
+                    if (typeof showEtegamiCard === "function") showEtegamiCard();
+                } else if (isThoughtHideEtegami) {
+                    if (typeof hideEtegamiCard === "function") hideEtegamiCard();
                 }
 
                 if (Date.now() - lastUIModeChangeTime > 4000) {

@@ -183,6 +183,7 @@ class GeminiLiveSession:
         on_etegami_updated: Optional[Callable[[str, str], None]] = None,
         on_etegami_completed: Optional[Callable[[], None]] = None,
         on_schedule_visibility_changed: Optional[Callable[[bool], None]] = None,
+        on_etegami_visibility_changed: Optional[Callable[[bool], None]] = None,
         history: Optional[list] = None,
         api_key: Optional[str] = None,
         schedules: Optional[list] = None
@@ -195,6 +196,7 @@ class GeminiLiveSession:
         self.on_recording_status_changed = on_recording_status_changed
         self.on_ui_mode_changed = on_ui_mode_changed
         self.on_schedule_visibility_changed = on_schedule_visibility_changed
+        self.on_etegami_visibility_changed = on_etegami_visibility_changed
         self.on_etegami_updated = on_etegami_updated
         self.on_etegami_completed = on_etegami_completed
         self.recording_active = True
@@ -336,6 +338,13 @@ class GeminiLiveSession:
                                         f"また、利用者様が明確に「予定ありがとう」「スケジュールありがとう」「予定を消して」「スケジュールを消して」など、予定カードを閉じることを希望された場合のみ、第一声で正確に：\n"
                                         f"「みまもりさん予定カードの表示を終了してください。」\n"
                                         f"続けて「はい、予定カードを閉じましたよ」とお伝えください。\n\n"
+                                        f"【重要指示2-4：デジタル絵手紙カードの表示・終了（非表示）について】\n"
+                                        f"利用者様が「絵を描きたい」「絵を出して」「デジタル絵手紙を出して」「デジタル絵手紙を表示して」「デジタル絵手紙起動」またはそれを意図する発言をされた場合は、必ず第一声で正確に以下のように発言してください：\n"
+                                        f"「みまもりさん、デジタル絵手紙を表示してください。」\n"
+                                        f"続けて「はい、デジタル絵手紙を表示しましたよ。どんな絵を描きましょうか？」と優しく温かく案内してください。\n"
+                                        f"また、利用者様が「お絵描きを終わる」「絵をとじて」「デジタル絵手紙をとじて」「デジタル絵手紙を非表示にして」「デジタル絵手紙終了」またはそれを意図する発言をされた場合は、必ず第一声で正確に：\n"
+                                        f"「みまもりさん、デジタル絵手紙をとじてください。」\n"
+                                        f"続けて「はい、絵手紙を閉じましたよ。またいつでも描いてみてくださいね」とお伝えください。\n\n"
                                         f"★【厳重注意：文脈の合わないトンチンカンな返答・「どういたしまして」の禁止】：\n"
                                         f"・利用者様から「ありがとう」や「お礼」を言われていないのに、勝手に「どういたしまして」と返答することは絶対に禁止です。\n"
                                         f"・利用者様が「こんにちは」「おはよう」などの挨拶をされた時は、必ず「こんにちは、{nickname}様！お元気ですか？」と自然に挨拶を返してください。\n"
@@ -560,6 +569,35 @@ class GeminiLiveSession:
             print(f"[Gemini Live Session]: Detected hide schedule card command: '{text_val}'")
             if self.on_schedule_visibility_changed:
                 self.on_schedule_visibility_changed(False)
+
+        # Detect Etegami Card visibility command from Gemini speech or thought
+        is_to_show_etegami = (
+            "デジタル絵手紙を表示" in text_val or
+            "デジタル絵手紙表示" in text_val or
+            "デジタル絵手紙を出して" in text_val or
+            "デジタル絵手紙起動" in text_val or
+            "show etegami" in text_lower or
+            "display etegami" in text_lower
+        )
+        is_to_hide_etegami = (
+            "デジタル絵手紙をとじて" in text_val or
+            "デジタル絵手紙を閉じて" in text_val or
+            "デジタル絵手紙とじて" in text_val or
+            "デジタル絵手紙閉じて" in text_val or
+            "デジタル絵手紙を非表示" in text_val or
+            "デジタル絵手紙非表示" in text_val or
+            "デジタル絵手紙終了" in text_val or
+            "hide etegami" in text_lower or
+            "close etegami" in text_lower
+        )
+        if is_to_show_etegami:
+            print(f"[Gemini Live Session]: Detected show etegami card command: '{text_val}'")
+            if self.on_etegami_visibility_changed:
+                self.on_etegami_visibility_changed(True)
+        elif is_to_hide_etegami:
+            print(f"[Gemini Live Session]: Detected hide etegami card command: '{text_val}'")
+            if self.on_etegami_visibility_changed:
+                self.on_etegami_visibility_changed(False)
 
         # Detect Etegami Completion command from Gemini speech or thought
         is_gemini_etegami_complete = (
