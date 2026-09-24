@@ -53,14 +53,51 @@ class TestSchedules(unittest.TestCase):
         self.assertEqual(res_delete.status_code, 200)
 
     def test_terminal_today_schedules_and_audio(self):
-        # Test terminal today schedules endpoint
-        res = self.client.get(f"/api/users/terminal/{self.terminal_id}/today_schedules")
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertIn("announcement_text", data)
-        self.assertIn("schedules", data)
-        self.assertTrue(len(data["announcement_text"]) > 0)
-        print("Spoken Announcement:", data["announcement_text"])
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        # Add one past schedule (01:00) and one upcoming schedule (23:50)
+        res_past = self.client.post(f"/api/users/{self.user_id}/schedules", json={
+            "date": today_str,
+            "time": "01:00",
+            "title": "深夜見守り",
+            "category": "meal",
+            "location": "居室",
+            "notes": "過去予定テスト"
+        })
+        past_id = res_past.json()["id"]
+
+        res_up = self.client.post(f"/api/users/{self.user_id}/schedules", json={
+            "date": today_str,
+            "time": "23:50",
+            "title": "夜間リラックス",
+            "category": "event",
+            "location": "居室",
+            "notes": "未来予定テスト"
+        })
+        up_id = res_up.json()["id"]
+
+        try:
+            # Test terminal today schedules endpoint
+            res = self.client.get(f"/api/users/terminal/{self.terminal_id}/today_schedules")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertIn("announcement_text", data)
+            self.assertIn("schedules", data)
+            self.assertEqual(data["upcoming_count"], 1)
+            self.assertEqual(data["past_count"], 1)
+            self.assertIn("終了いたしました", data["announcement_text"])
+            self.assertIn("深夜見守り", data["announcement_text"])
+            self.assertIn("夜間リラックス", data["announcement_text"])
+            print("\nSpoken Announcement with Past & Upcoming:\n", data["announcement_text"])
+
+            # Verify schedules order: upcoming first, then past
+            schedules = data["schedules"]
+            self.assertFalse(schedules[0]["is_past"])
+            self.assertEqual(schedules[0]["title"], "夜間リラックス")
+            self.assertTrue(schedules[1]["is_past"])
+            self.assertEqual(schedules[1]["title"], "深夜見守り")
+        finally:
+            self.client.delete(f"/api/schedules/{past_id}")
+            self.client.delete(f"/api/schedules/{up_id}")
 
 if __name__ == "__main__":
     unittest.main()

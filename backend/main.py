@@ -2479,37 +2479,92 @@ async def api_delete_schedule(schedule_id: int):
 
 @app.get("/api/users/terminal/{terminal_id}/today_schedules")
 async def api_get_terminal_today_schedules(terminal_id: str):
-    """Fetches today's schedules and generates spoken announcement audio for user terminal on boot."""
+    """Fetches today's schedules, differentiates past and upcoming by current time, and generates spoken announcement audio for user terminal."""
     user = db.get_user_by_terminal(terminal_id)
     if not user:
         raise HTTPException(status_code=404, detail="Terminal not bound to user")
     
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    current_hhmm = now.strftime("%H:%M")
+    current_hour = now.hour
+
+    # Time-appropriate greeting
+    if 4 <= current_hour < 11:
+        greeting = "おはようございます"
+    elif 11 <= current_hour < 18:
+        greeting = "こんにちは"
+    else:
+        greeting = "こんばんは"
+
+    raw_schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
     
     raw_name = user.get("name", "山田")
     nickname = raw_name.split()[0] if raw_name else "利用者"
     
-    # Generate warm spoken announcement text
-    if schedules:
-        parts = []
-        for s in schedules:
-            t = s.get("time", "")
-            title = s.get("title", "")
-            try:
-                hh, mm = t.split(":")
-                hh_int = int(hh)
-                period = "午前" if hh_int < 12 else "午後"
-                display_hh = hh_int if hh_int <= 12 else hh_int - 12
-                mm_str = f"{int(mm)}分" if int(mm) > 0 else ""
-                parts.append(f"{period}{display_hh}時{mm_str}から、{title}")
-            except Exception:
-                parts.append(f"{t}から、{title}")
-        
-        sched_summary = "、".join(parts)
-        announcement_text = f"{nickname}様、おはようございます！本日のご予定をお知らせしますね。本日は、{sched_summary}がございますよ。今日もどうぞ穏やかにお過ごしくださいね。"
+    # Classify into upcoming and past based on current time
+    upcoming_schedules = []
+    past_schedules = []
+    
+    for s in raw_schedules:
+        s_copy = dict(s)
+        t = s_copy.get("time", "")
+        # Compare time string HH:MM
+        is_past = bool(t and t < current_hhmm)
+        s_copy["is_past"] = is_past
+        if is_past:
+            past_schedules.append(s_copy)
+        else:
+            upcoming_schedules.append(s_copy)
+            
+    # Sort upcoming ascending, past ascending
+    upcoming_schedules.sort(key=lambda x: x.get("time", ""))
+    past_schedules.sort(key=lambda x: x.get("time", ""))
+    ordered_schedules = upcoming_schedules + past_schedules
+
+    def format_schedule_spoken(s):
+        t = s.get("time", "")
+        title = s.get("title", "")
+        try:
+            hh, mm = t.split(":")
+            hh_int = int(hh)
+            period = "午前" if hh_int < 12 else "午後"
+            display_hh = hh_int if hh_int <= 12 else (hh_int - 12 if hh_int > 12 else 12)
+            mm_int = int(mm)
+            mm_str = f"{mm_int}分" if mm_int > 0 else ""
+            return f"{period}{display_hh}時{mm_str}からの{title}"
+        except Exception:
+            return f"{t}からの{title}"
+
+    # Generate warm spoken announcement text separating finished and upcoming
+    if upcoming_schedules and past_schedules:
+        past_summary = "、".join([format_schedule_spoken(s) for s in past_schedules])
+        upcoming_summary = "、".join([format_schedule_spoken(s) for s in upcoming_schedules])
+        announcement_text = (
+            f"{nickname}様、{greeting}！本日のご予定をお知らせしますね。"
+            f"{past_summary}は終了いたしました。"
+            f"これからは、{upcoming_summary}がございますよ。"
+            f"どうぞ穏やかにお過ごしくださいね。"
+        )
+    elif upcoming_schedules:
+        upcoming_summary = "、".join([format_schedule_spoken(s) for s in upcoming_schedules])
+        announcement_text = (
+            f"{nickname}様、{greeting}！本日のご予定をお知らせしますね。"
+            f"本日は、{upcoming_summary}がございますよ。"
+            f"どうぞ穏やかにお過ごしくださいね。"
+        )
+    elif past_schedules:
+        past_summary = "、".join([format_schedule_spoken(s) for s in past_schedules])
+        announcement_text = (
+            f"{nickname}様、{greeting}！本日のご予定、"
+            f"{past_summary}は終了いたしました。"
+            f"この後はどうぞごゆっくりおくつろぎくださいね。"
+        )
     else:
-        announcement_text = f"{nickname}様、おはようございます！本日は特別なご予定は入っておりませんので、どうぞご自身のお部屋やデイルームでごゆっくりおくつろぎくださいね。"
+        announcement_text = (
+            f"{nickname}様、{greeting}！本日は特別なご予定は入っておりませんので、"
+            f"どうぞご自身のお部屋やデイルームでごゆっくりおくつろぎくださいね。"
+        )
     
     # Generate speech synthesis audio
     audio_b64 = ""
@@ -2526,7 +2581,10 @@ async def api_get_terminal_today_schedules(terminal_id: str):
         "user_name": raw_name,
         "room_number": user.get("room_number", ""),
         "date": today_str,
-        "schedules": schedules,
+        "current_time": current_hhmm,
+        "schedules": ordered_schedules,
+        "upcoming_count": len(upcoming_schedules),
+        "past_count": len(past_schedules),
         "announcement_text": announcement_text,
         "audio_base64": audio_b64
     }

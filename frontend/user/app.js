@@ -1949,26 +1949,65 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (schedules.length === 0) {
                     todaySchedulesList.innerHTML = '<div class="schedules-empty-msg">本日のご予定はありません。ごゆっくりお過ごしください。</div>';
                 } else {
+                    const now = new Date();
+                    const currentHHMM = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+                    
+                    const upcoming = [];
+                    const past = [];
                     schedules.forEach(s => {
+                        const isPast = (typeof s.is_past === "boolean") ? s.is_past : Boolean(s.time && s.time < currentHHMM);
+                        if (isPast) {
+                            past.push({ ...s, is_past: true });
+                        } else {
+                            upcoming.push({ ...s, is_past: false });
+                        }
+                    });
+
+                    // 予定カードのHTML生成
+                    const renderScheduleRow = (s, isPast) => {
                         const row = document.createElement("div");
-                        row.className = "schedule-item-row";
+                        row.className = isPast ? "schedule-item-row past" : "schedule-item-row";
                         const icon = getScheduleCategoryIcon(s.category);
                         const locHtml = s.location ? `<span class="schedule-item-loc">📍 ${escapeScheduleHtml(s.location)}</span>` : "";
                         const notesHtml = s.notes ? `<span class="schedule-item-notes">${escapeScheduleHtml(s.notes)}</span>` : "";
-                        
+                        const statusBadge = isPast 
+                            ? `<span class="schedule-status-badge past">終了</span>` 
+                            : `<span class="schedule-status-badge upcoming">予定</span>`;
+
                         row.innerHTML = `
                             <div class="schedule-time-badge">${escapeScheduleHtml(s.time)}</div>
                             <div class="schedule-item-icon">${icon}</div>
                             <div class="schedule-item-content">
-                                <div class="schedule-item-title">${escapeScheduleHtml(s.title)}</div>
+                                <div class="schedule-item-title">
+                                    ${escapeScheduleHtml(s.title)}
+                                    ${statusBadge}
+                                </div>
                                 <div class="schedule-item-sub">
                                     ${locHtml}
                                     ${notesHtml}
                                 </div>
                             </div>
                         `;
-                        todaySchedulesList.appendChild(row);
+                        return row;
+                    };
+
+                    // 1. これからの予定を上部に表示
+                    upcoming.forEach(s => {
+                        todaySchedulesList.appendChild(renderScheduleRow(s, false));
                     });
+
+                    // 2. 終了した予定がある場合、区切りを入れて下部に表示
+                    if (past.length > 0) {
+                        if (upcoming.length > 0) {
+                            const divider = document.createElement("div");
+                            divider.className = "schedule-divider-label";
+                            divider.innerHTML = "<span>終了したご予定</span>";
+                            todaySchedulesList.appendChild(divider);
+                        }
+                        past.forEach(s => {
+                            todaySchedulesList.appendChild(renderScheduleRow(s, true));
+                        });
+                    }
                 }
             }
 

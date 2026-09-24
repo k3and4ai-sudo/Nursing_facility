@@ -2155,6 +2155,65 @@ body.simple-mode .etegami-shikishi {
     padding: 16px 0;
 }
 
+/* 過去の予定 (終了分) のスタイル & バッジ */
+.schedule-item-row.past {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    opacity: 0.65;
+}
+
+.schedule-item-row.past:hover {
+    opacity: 0.9;
+}
+
+.schedule-item-row.past .schedule-time-badge {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.schedule-item-row.past .schedule-item-title {
+    color: #64748b;
+}
+
+.schedule-status-badge {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.schedule-status-badge.past {
+    background: #e2e8f0;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+
+.schedule-status-badge.upcoming {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+.schedule-divider-label {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #64748b;
+    margin: 8px 4px 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.schedule-divider-label::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+}
+
 /* シンプル画面用の強調表示 */
 body.simple-mode .today-schedules-card {
     border-width: 3px;
@@ -2169,5 +2228,6 @@ body.simple-mode .schedule-item-title {
 body.simple-mode .schedule-time-badge {
     font-size: 1.35rem;
 }
+
 
 

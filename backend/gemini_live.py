@@ -273,14 +273,21 @@ class GeminiLiveSession:
                     if recent_turns:
                         history_text = "\n【直近の会話履歴】\n" + "\n".join(recent_turns)
 
-                # Resident schedules context for today
+                # Resident schedules context for today (with current time and past/upcoming status)
                 today_schedules_text = ""
                 if self.schedules:
-                    sched_lines = [f"・{s.get('time', '')} {s.get('title', '')} (場所: {s.get('location', '居室')})" for s in self.schedules]
+                    now_dt = datetime.now()
+                    current_hhmm = now_dt.strftime("%H:%M")
+                    sched_lines = []
+                    for s in self.schedules:
+                        t = s.get('time', '')
+                        is_past = bool(t and t < current_hhmm)
+                        status_tag = "【終了済み】" if is_past else "【これからの予定】"
+                        sched_lines.append(f"・{t} {s.get('title', '')} (場所: {s.get('location', '居室')}) {status_tag}")
                     today_schedules_text = (
-                        f"\n【{nickname}様の今日のご予定（{datetime.now().strftime('%Y年%m月%d日')}）】\n" +
+                        f"\n【{nickname}様の今日のご予定（{now_dt.strftime('%Y年%m月%d日')} 現在時刻: {current_hhmm}）】\n" +
                         "\n".join(sched_lines) +
-                        "\n※利用者様から「今日の予定は何だっけ？」「午後は何がある？」「お風呂は何時？」などと聞かれたら、上記のご予定をもとに優しく分かりやすく教えてあげてください。\n"
+                        "\n※利用者様から「今日の予定は何だっけ？」「午後は何がある？」「お風呂は何時？」などと聞かれたら、現在時刻を考慮し、終了した予定には「〜はもう終了しましたよ」とお伝えし、これからの予定を優しく分かりやすく教えてあげてください。\n"
                     )
 
                 setup_frame = {
