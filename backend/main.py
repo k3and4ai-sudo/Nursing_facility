@@ -1476,6 +1476,64 @@ async def websocket_user_endpoint(websocket: WebSocket, terminal_id: str):
         print(f"Error in user websocket: {e}")
         manager.disconnect_user(terminal_id)
 
+def check_etegami_visibility_intent(text: str):
+    if not text:
+        return None
+    norm = (
+        re.sub(r"[。、.!?！？\s]", "", text)
+        .replace("絵お", "絵を")
+        .replace("えお", "えを")
+        .replace("手紙お", "手紙を")
+        .replace("ベジタル", "デジタル")
+        .replace("デジダル", "デジタル")
+        .replace("ペテ紙", "絵手紙")
+        .replace("ぺてがみ", "絵手紙")
+        .replace("ペテガミ", "絵手紙")
+        .replace("ベテガミ", "絵手紙")
+        .replace("手紙を書きたい", "絵手紙を書きたい")
+        .replace("手紙書きたい", "絵手紙書きたい")
+    )
+
+    # 1. 終了パターン（絵手紙を閉じる・終了する・会話終了・一旦終了・やめる・閉じて・消して）
+    general_hide = [
+        "一旦終了", "会話終了", "会話は終了", "会話を終了", "終了します", "終了して", "終了",
+        "おしまい", "もういいよ", "もうやめる", "やめる", "やめて",
+        "閉じてください", "とじてください", "閉じて", "とじて", "閉じる", "とじる", "閉じました", "とじました",
+        "消して", "けして", "消す", "けす", "消しました", "けしました", "非表示"
+    ]
+    etegami_hide = [
+        "絵を閉", "絵をとじ", "絵閉", "絵とじ", "絵手紙を閉", "絵手紙をとじ", "絵手紙閉", "絵手紙とじ",
+        "絵を消", "絵消", "絵手紙を消", "絵手紙消", "絵手紙終了", "絵を終了", "絵終了",
+        "デジタル絵手紙を閉", "デジタル絵手紙閉", "デジタル絵手紙終了", "デジタル絵手紙を終了", "デジタル絵手紙非表示",
+        "絵手紙非表示", "絵非表示", "お絵描きをやめる", "お絵描き終了", "お絵描きをおしま", "お絵描きおしま"
+    ]
+    if any(p in norm for p in general_hide) or any(p in norm for p in etegami_hide):
+        # もし「描きたい」「かきたい」などが同時に含まれていない場合は確実に終了
+        if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "見せて", "開いて", "更新して"]):
+            return False
+
+    # 2. デジタル絵手紙を含む場合は表示 (終了キーワードがない場合)
+    if "デジタル絵手紙" in norm or "デジタルえてがみ" in norm or "ベジタル絵手紙" in norm:
+        return True
+
+    # 3. 絵手紙・お絵描き・絵を描く等の直接パターン
+    if any(p in norm for p in ["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"]):
+        return True
+
+    # 4. 絵/え + 起動・表示アクション
+    if any(k in norm for k in ["絵", "え"]) and any(k in norm for k in [
+        "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
+        "起動して", "きどうして", "起動", "きどう",
+        "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
+        "出して", "だして", "出す", "だす", "出したい", "だしたい",
+        "表示して", "ひょうじして", "表示", "ひょうじ", "表",
+        "見せて", "みせて", "見たい", "みたい",
+        "したい", "しよう", "する", "やる", "やって", "お願い", "おねがい"
+    ]):
+        return True
+
+    return None
+
 # WebSocket Endpoint for User Gemini Live Native Streaming & Parallel PII Guardrail
 @app.websocket("/ws/user/{terminal_id}/live")
 async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
@@ -1652,6 +1710,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 # 2. Send real-time update to user terminal
                 await websocket.send_json({
                     "type": "etegami_update",
+                    "force_open": True,
                     **card_info
                 })
                 await websocket.send_json({
@@ -1701,6 +1760,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 )
                 await websocket.send_json({
                     "type": "etegami_update",
+                    "force_open": True,
                     **card_info
                 })
                 await websocket.send_json({
@@ -1730,6 +1790,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     ]
 
     etegami_resident_keywords = [
+        "絵を描きたい", "絵をかきたい", "絵を書きたい", "絵描きたい", "絵かきたい", "絵書きたい",
+        "絵を描く", "絵をかく", "絵をだして", "絵を出して", "絵出したい", "絵を出したい",
+        "絵手紙を描きたい", "絵手紙をかきたい", "絵手紙を書きたい", "絵手紙かきたい", "絵手紙描きたい",
+        "絵手紙を出して", "絵手紙出して", "絵手紙見せて", "絵手紙を見せて",
+        "デジタル絵手紙を出して", "デジタル絵手紙表示", "デジタル絵手紙起動",
         "絵を更新", "絵の更新", "絵更新",
         "描きかえ", "描き替え", "描きなお", "描き直",
         "デジタル絵手紙を更新", "デジタル絵手紙更新", "絵手紙を更新", "絵手紙更新",
@@ -1752,69 +1817,35 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_etegami_complete())
             return
 
-        if any(kw in clean for kw in etegami_resident_keywords):
+        is_create_or_update = (
+            any(kw in clean for kw in etegami_resident_keywords) or
+            ("絵" in clean and any(act in clean for act in ["描きたい", "かきたい", "書きたい", "描く", "かく", "更新", "直して", "変えて", "出して", "作って"])) or
+            (any(m in clean for m in ["文化祭", "学園祭", "映画", "夕焼け", "夕暮れ", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉"]) and
+             any(act in clean for act in ["にして", "を描", "をか", "描きたい", "かきたい", "出して", "見せて", "更新", "出てきてない", "変えて"]))
+        )
+
+        if is_create_or_update:
             detected_motif = ""
-            for motif_cand in ["夕焼け", "夕暮れ", "縁側", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "つばき", "コスモス"]:
+            for motif_cand in [
+                "文化祭", "学園祭", "映画", "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
+                "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
+                "桜", "さくら", "花見", "お花見", "朝顔", "あさがお", "風鈴", "向日葵", "ひまわり",
+                "雪", "ゆき", "椿", "つばき", "コスモス", "秋桜", "紅葉", "もみじ", "海", "山"
+            ]:
                 if motif_cand in clean:
                     detected_motif = motif_cand
                     break
+            
+            # Dynamic extraction regex: e.g. "〇〇の絵を描きたい" -> "〇〇"
+            if not detected_motif:
+                m = re.search(r'([^\s、。]+?)の絵', clean)
+                if m:
+                    extracted = m.group(1).replace("高校時代の", "").replace("昔の", "").replace("今日の", "")
+                    if extracted and len(extracted) <= 10:
+                        detected_motif = extracted
+
             print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident request in '{speech_text}' (motif='{detected_motif}')")
             asyncio.create_task(on_live_etegami_update(detected_motif, ""))
-
-    def check_etegami_visibility_intent(text: str):
-        if not text:
-            return None
-        norm = (
-            re.sub(r"[。、.!?！？\s]", "", text)
-            .replace("絵お", "絵を")
-            .replace("えお", "えを")
-            .replace("手紙お", "手紙を")
-            .replace("ベジタル", "デジタル")
-            .replace("デジダル", "デジタル")
-            .replace("ペテ紙", "絵手紙")
-            .replace("ぺてがみ", "絵手紙")
-            .replace("ペテガミ", "絵手紙")
-            .replace("ベテガミ", "絵手紙")
-            .replace("手紙を書きたい", "絵手紙を書きたい")
-            .replace("手紙書きたい", "絵手紙書きたい")
-        )
-
-        # 1. 明確な終了パターン (絵/絵手紙を閉じる、消す、やめる、終了)
-        hide_patterns = [
-            "絵を閉じて", "絵をとじて", "絵手紙を閉じて", "絵手紙をとじて", "絵を消して", "絵手紙を消して",
-            "絵を非表示", "絵手紙非表示", "絵手紙終了", "絵を終了", "絵をやめる", "絵手紙をやめる",
-            "デジタル絵手紙を閉じて", "デジタル絵手紙をとじて", "デジタル絵手紙終了", "デジタル絵手紙非表示",
-            "お絵描きをやめる", "お絵描き終了", "お絵描きを終わる"
-        ]
-        if any(p in norm for p in hide_patterns):
-            return False
-
-        # 「閉じて」「消して」+「絵」「絵手紙」の場合（ただし後ろに「描きたい」などがある場合は表示優先）
-        if ("絵" in norm or "手紙" in norm) and any(k in norm for k in ["閉じて", "とじて", "閉じる", "とじる", "消して", "けして"]):
-            if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "表示"]):
-                return False
-
-        # 2. デジタル絵手紙を含む場合は無条件で表示 (終了キーワードがない場合)
-        if "デジタル絵手紙" in norm or "デジタルえてがみ" in norm or "ベジタル絵手紙" in norm:
-            return True
-
-        # 3. 絵手紙・お絵描き・絵を描く等の直接パターン
-        if any(p in norm for p in ["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"]):
-            return True
-
-        # 4. 絵/え + 起動・表示アクション
-        if any(k in norm for k in ["絵", "え"]) and any(k in norm for k in [
-            "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
-            "起動して", "きどうして", "起動", "きどう",
-            "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
-            "出して", "だして", "出す", "だす", "出したい", "だしたい",
-            "表示して", "ひょうじして", "表示", "ひょうじ", "表",
-            "見せて", "みせて", "見たい", "みたい",
-            "したい", "しよう", "する", "やる", "やって", "お願い", "おねがい"
-        ]):
-            return True
-
-        return None
 
     # Initialize Gemini Live Session
     def on_gemini_thought(thought: str):

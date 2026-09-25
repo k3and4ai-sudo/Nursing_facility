@@ -537,8 +537,9 @@ def modify_or_create_etegami(
         is_completed = True
 
     # 1. Check if resident specified an explicit motif or alteration
-    explicit_motif = False
+    explicit_motif = bool(motif_hint and motif_hint.strip())
     motif_candidates = [
+        "文化祭", "学園祭", "学校", "高校", "青春", "映画", "映画館", "シネマ",
         "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶", "のんびり",
         "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和", "昔の思い出",
         "春", "桜", "さくら", "花見", "お花見", "夏", "朝顔", "風鈴", "向日葵", "ひまわり",
@@ -625,7 +626,21 @@ def modify_or_create_etegami(
 
     # 3. Explicit motif mappings (resident requested specific adjustments)
     if explicit_motif or not selected_image:
-        if any(k in combined for k in ["夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶", "のんびり", "porch", "sunset"]):
+        if any(k in combined for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
+            selected_image = "/family/assets/generated_undoukai_bento.jpg"
+            theme_title = "【手作り絵手紙】青春の文化祭と思い出"
+            calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
+            stamp_icon = "🍁"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["映画", "映画館", "シネマ", "名画"]):
+            selected_image = "/family/assets/sample_postcard.jpg"
+            theme_title = "【手作り絵手紙】懐かしの名画と銀幕のひととき"
+            calligraphy_text = message_hint or "心躍った あの銀幕の思い出"
+            stamp_icon = "🎬"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶", "のんびり", "porch", "sunset"]):
             selected_image = "/family/assets/generated_relaxation_porch.jpg"
             theme_title = "【手作り絵手紙】夕暮れの縁側とお茶"
             calligraphy_text = message_hint or "肩の力を抜いて のんびり お茶にしましょ"
@@ -673,6 +688,15 @@ def modify_or_create_etegami(
             calligraphy_text = message_hint or "おだやかな 秋の日に… お元気で"
             stamp_icon = "🍁"
             season_key = "autumn"
+            base_source = "reminiscence"
+        elif motif_hint:
+            # Fallback for arbitrary custom motif
+            template = SEASONAL_TEMPLATES.get(season_key, SEASONAL_TEMPLATES["autumn"])
+            selected_image = template["image_url"]
+            clean_motif = motif_hint.replace("高校時代の", "").replace("昔の", "")
+            theme_title = f"【手作り絵手紙】{clean_motif}の温もり"
+            calligraphy_text = message_hint or f"懐かしい {clean_motif}に 思いを馳せて"
+            stamp_icon = "🍂"
             base_source = "reminiscence"
         elif not selected_image:
             template = SEASONAL_TEMPLATES.get(season_key, SEASONAL_TEMPLATES["autumn"])
@@ -743,6 +767,7 @@ def modify_or_create_etegami(
 
     return {
         "title": theme_title,
+        "theme": theme_title,
         "image_url": selected_image,
         "calligraphy": calligraphy_text,
         "stamp_icon": stamp_icon,

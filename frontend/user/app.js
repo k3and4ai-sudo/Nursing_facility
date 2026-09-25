@@ -167,22 +167,28 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/手紙を書きたい/g, "絵手紙を書きたい")
             .replace(/手紙書きたい/g, "絵手紙書きたい");
 
-        // 1. 明確な終了パターン (絵/絵手紙を閉じる、消す、やめる、終了)
-        const HIDE_PATTERNS = [
-            "絵を閉じて", "絵をとじて", "絵手紙を閉じて", "絵手紙をとじて", "絵を消して", "絵手紙を消して",
-            "絵を非表示", "絵手紙非表示", "絵手紙終了", "絵を終了", "絵をやめる", "絵手紙をやめる",
-            "デジタル絵手紙を閉じて", "デジタル絵手紙をとじて", "デジタル絵手紙終了", "デジタル絵手紙非表示",
-            "お絵描きをやめる", "お絵描き終了", "お絵描きを終わる"
+        // 1. 明確な終了・非表示パターン（絵手紙終了、会話終了、一旦終了、閉じて、消して、やめる等）
+        const GENERAL_HIDE_PATTERNS = [
+            "一旦終了", "会話終了", "会話は終了", "会話を終了", "終了します", "終了して", "終了",
+            "おしまい", "もういいよ", "もうやめる", "やめる", "やめて",
+            "閉じてください", "とじてください", "閉じて", "とじて", "閉じる", "とじる", "閉じました", "とじました",
+            "消して", "けして", "消す", "けす", "消しました", "けしました",
+            "非表示"
         ];
-        if (HIDE_PATTERNS.some(p => norm.includes(p))) {
-            return false;
-        }
+        const ETEGAMI_SPECIFIC_HIDE_PATTERNS = [
+            "絵を閉", "絵をとじ", "絵閉", "絵とじ", "絵手紙を閉", "絵手紙をとじ", "絵手紙閉", "絵手紙とじ",
+            "絵を消", "絵消", "絵手紙を消", "絵手紙消", "絵手紙終了", "絵を終了", "絵終了",
+            "デジタル絵手紙を閉", "デジタル絵手紙閉", "デジタル絵手紙終了", "デジタル絵手紙を終了", "デジタル絵手紙非表示",
+            "絵手紙非表示", "絵非表示", "お絵描きをやめる", "お絵描き終了", "お絵描きをおしま", "お絵描きおしま"
+        ];
 
-        // 「閉じて」「消して」+「絵」「絵手紙」の場合（ただし後ろに「描きたい」などがある場合は表示優先）
-        if ((norm.includes("絵") || norm.includes("手紙")) && ["閉じて", "とじて", "閉じる", "とじる", "消して", "けして"].some(k => norm.includes(k))) {
-            if (!["描きたい", "かきたい", "書きたい", "出して", "表示"].some(k => norm.includes(k))) {
-                return false;
-            }
+        // 終了アクションが含まれている場合（作成希望キーワード「描きたい」「開いて」等がない限り確実に閉じる）
+        const hasGeneralHide = GENERAL_HIDE_PATTERNS.some(p => norm.includes(p));
+        const hasEtegamiHide = ETEGAMI_SPECIFIC_HIDE_PATTERNS.some(p => norm.includes(p));
+        const hasDrawAction = ["描きたい", "かきたい", "書きたい", "新しく描いて", "出して", "見せて", "開いて", "更新して"].some(k => norm.includes(k));
+
+        if ((hasGeneralHide || hasEtegamiHide) && !hasDrawAction) {
+            return false;
         }
 
         // 2. 「デジタル絵手紙」を含む場合は無条件で表示 (終了キーワードがない場合)
@@ -370,6 +376,9 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 showUIToast(`🎨 絵手紙を更新しました`, "simple");
             }
+        }
+        if (data && data.force_open === true) {
+            showEtegamiCard();
         }
     }
 
