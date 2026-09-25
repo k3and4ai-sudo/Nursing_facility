@@ -2049,8 +2049,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"[Startup Error ({terminal_id})]: {e}")
 
-        # Send initial Etegami card on connect so the terminal immediately shows the artwork
+        # Send initial Etegami card on connect so the terminal has data cached, but ensure it starts closed
         try:
+            await websocket.send_json({
+                "type": "etegami_visibility",
+                "visible": False
+            })
             latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id)
             if latest_row and latest_row.get("payload"):
                 existing = latest_row["payload"]
@@ -2066,7 +2070,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "is_completed": existing.get("is_completed", False),
                     "status": existing.get("status", "drafting"),
                     "badge_text": existing.get("badge_text", "🎨 会話をもとに下絵を制作中"),
-                    "base_source": existing.get("base_source", "reminiscence")
+                    "base_source": existing.get("base_source", "reminiscence"),
+                    "force_open": False
                 })
             else:
                 initial_card = multimedia.modify_or_create_etegami(
@@ -2077,7 +2082,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 )
                 await websocket.send_json({
                     "type": "etegami_update",
-                    **initial_card
+                    **initial_card,
+                    "force_open": False
                 })
         except Exception as e:
             print(f"Error sending initial etegami card ({terminal_id}): {e}")

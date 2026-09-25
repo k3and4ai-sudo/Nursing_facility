@@ -270,12 +270,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateEtegamiDisplay(data) {
         if (!data) return;
-        const etegamiCard = document.getElementById("etegami-card");
-        if (etegamiCard && etegamiCard.classList.contains("hidden")) {
-            etegamiCard.classList.remove("hidden");
-            try {
-                etegamiCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            } catch(e) {}
+        if (data.force_open === true) {
+            showEtegamiCard();
         }
         const cardImg = document.getElementById("etegami-card-img");
         const cardImgNext = document.getElementById("etegami-card-img-next");
