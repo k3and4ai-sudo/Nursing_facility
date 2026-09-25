@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260924_schedule_responsive">
+    <link rel="stylesheet" href="style.css?v=20260925_etegami_pos_fix">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -153,6 +153,57 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 🎨 今日のデジタル絵手紙 (予定カード直下のメインエリアに配置) -->
+                <div id="etegami-card" class="etegami-card hidden">
+                    <div class="etegami-card-header">
+                        <button id="btn-close-etegami-card" class="etegami-close-btn" title="デジタル絵手紙をとじる">✕</button>
+                        <div class="etegami-badge-group">
+                            <span class="etegami-main-badge">🎨 今日のデジタル絵手紙</span>
+                            <span id="etegami-season-tag" class="etegami-season-tag">🍁 秋</span>
+                            <span id="etegami-status-badge" class="etegami-status-badge badge-drafting">🎨 下絵制作中</span>
+                        </div>
+                        <div class="etegami-header-actions">
+                            <button id="btn-complete-etegami" class="etegami-complete-btn" title="下絵の手直しを終了して完成にする">
+                                <span>💮</span>
+                                <span>これで完成！</span>
+                            </button>
+                            <button id="btn-open-etegami-modal" class="etegami-zoom-btn" title="大画面で鑑賞する">
+                                <span>🔍</span>
+                                <span>大きく見る</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 和風色紙フレーム (クリックで拡大鑑賞) -->
+                    <div id="etegami-shikishi-frame" class="etegami-shikishi" title="クリックして大画面で鑑賞">
+                        <div class="etegami-img-viewport">
+                            <img id="etegami-card-img" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer current">
+                            <img id="etegami-card-img-next" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer next">
+                        </div>
+                        <!-- 筆文字メッセージ & 落款印オーバーレイ -->
+                        <div class="etegami-shikishi-overlay">
+                            <div id="etegami-calligraphy" class="etegami-calligraphy-text">おだやかな 秋の日に… お元気で</div>
+                            <div id="etegami-stamp" class="etegami-stamp-seal">🌸</div>
+                        </div>
+                        <!-- リアルタイム更新インジケータ -->
+                        <div id="etegami-updating-badge" class="etegami-updating-badge hidden">
+                            <span class="spin-icon">✨</span>
+                            <span>絵手紙を新しく描いています...</span>
+                        </div>
+                    </div>
+
+                    <!-- カードフッター (題名と日付・音声変更のヒント) -->
+                    <div class="etegami-card-footer">
+                        <div class="etegami-meta-row">
+                            <div id="etegami-title" class="etegami-title-text">【手作り絵手紙】秋の訪れとコスモス庭園</div>
+                            <div id="etegami-date" class="etegami-date-text">2026年9月</div>
+                        </div>
+                        <div class="etegami-voice-hint">
+                            💡 「小鳥にして」「夕焼けの縁側に変えて」「文字を変えて」とお話しして手直しできます。気に入ったら「これで完成！」とお話しいただくか右上のボタンを押してください
+                        </div>
+                    </div>
+                </div>
             </main>
 
             <!-- Two Separate Text Displays: User Speech vs Gemini Live Response -->
@@ -208,57 +259,6 @@
                             <span>Gemini Live からの返答</span>
                         </div>
                         <div id="ai-response-box" class="box-content">ここにGeminiのお返事・音声内容が表示されます...</div>
-                    </div>
-                </div>
-
-                <!-- 🎨 今日のデジタル絵手紙 (一番下に配置) -->
-                <div id="etegami-card" class="etegami-card hidden">
-                    <div class="etegami-card-header">
-                        <button id="btn-close-etegami-card" class="etegami-close-btn" title="デジタル絵手紙をとじる">✕</button>
-                        <div class="etegami-badge-group">
-                            <span class="etegami-main-badge">🎨 今日のデジタル絵手紙</span>
-                            <span id="etegami-season-tag" class="etegami-season-tag">🍁 秋</span>
-                            <span id="etegami-status-badge" class="etegami-status-badge badge-drafting">🎨 下絵制作中</span>
-                        </div>
-                        <div class="etegami-header-actions">
-                            <button id="btn-complete-etegami" class="etegami-complete-btn" title="下絵の手直しを終了して完成にする">
-                                <span>💮</span>
-                                <span>これで完成！</span>
-                            </button>
-                            <button id="btn-open-etegami-modal" class="etegami-zoom-btn" title="大画面で鑑賞する">
-                                <span>🔍</span>
-                                <span>大きく見る</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 和風色紙フレーム (クリックで拡大鑑賞) -->
-                    <div id="etegami-shikishi-frame" class="etegami-shikishi" title="クリックして大画面で鑑賞">
-                        <div class="etegami-img-viewport">
-                            <img id="etegami-card-img" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer current">
-                            <img id="etegami-card-img-next" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer next">
-                        </div>
-                        <!-- 筆文字メッセージ & 落款印オーバーレイ -->
-                        <div class="etegami-shikishi-overlay">
-                            <div id="etegami-calligraphy" class="etegami-calligraphy-text">おだやかな 秋の日に… お元気で</div>
-                            <div id="etegami-stamp" class="etegami-stamp-seal">🌸</div>
-                        </div>
-                        <!-- リアルタイム更新インジケータ -->
-                        <div id="etegami-updating-badge" class="etegami-updating-badge hidden">
-                            <span class="spin-icon">✨</span>
-                            <span>絵手紙を新しく描いています...</span>
-                        </div>
-                    </div>
-
-                    <!-- カードフッター (題名と日付・音声変更のヒント) -->
-                    <div class="etegami-card-footer">
-                        <div class="etegami-meta-row">
-                            <div id="etegami-title" class="etegami-title-text">【手作り絵手紙】秋の訪れとコスモス庭園</div>
-                            <div id="etegami-date" class="etegami-date-text">2026年9月</div>
-                        </div>
-                        <div class="etegami-voice-hint">
-                            💡 「小鳥にして」「夕焼けの縁側に変えて」「文字を変えて」とお話しして手直しできます。気に入ったら「これで完成！」とお話しいただくか右上のボタンを押してください
-                        </div>
                     </div>
                 </div>
             </footer>
@@ -512,6 +512,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260924_schedule_speech_echo_v2"></script>
+    <script src="app.js?v=20260925_etegami_pos_fix"></script>
 </body>
 </html>

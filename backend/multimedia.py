@@ -556,91 +556,72 @@ def modify_or_create_etegami(
     stamp_icon = "和"
     season_key = season_hint or get_current_season()
 
-    # 2. If no explicit motif provided, extract base from past reminiscence & healing conversation history
+    ROTATING_PRESETS = [
+        {
+            "image_url": "/family/assets/generated_relaxation_porch.jpg",
+            "theme": "【手作り絵手紙】夕暮れの縁側とお茶",
+            "calligraphy": "肩の力を抜いて のんびり お茶にしましょ",
+            "stamp_icon": "🍵",
+            "season": "autumn",
+            "source": "healing"
+        },
+        {
+            "image_url": "/family/assets/generated_healing_sparrows.jpg",
+            "theme": "【手作り絵手紙】寄り添う小鳥の温もり",
+            "calligraphy": "心穏やかに 寄り添う日々",
+            "stamp_icon": "🕊️",
+            "season": "autumn",
+            "source": "healing"
+        },
+        {
+            "image_url": "/family/assets/generated_undoukai_bento.jpg",
+            "theme": "【手作り絵手紙】懐かしの運動会とお弁当",
+            "calligraphy": "家族で囲んだ 懐かしい味",
+            "stamp_icon": "🍱",
+            "season": "autumn",
+            "source": "reminiscence"
+        },
+        {
+            "image_url": "/family/assets/sample_postcard_spring.jpg",
+            "theme": "【手作り絵手紙】満開の桜と春爛漫",
+            "calligraphy": "春の和みを お届けします",
+            "stamp_icon": "🌸",
+            "season": "spring",
+            "source": "reminiscence"
+        },
+        {
+            "image_url": "/family/assets/sample_postcard.jpg",
+            "theme": "【手作り絵手紙】秋の訪れとコスモス庭園",
+            "calligraphy": "おだやかな 秋の日に… お元気で",
+            "stamp_icon": "🍁",
+            "season": "autumn",
+            "source": "reminiscence"
+        }
+    ]
+
+    # 2. If no explicit motif provided, cycle to next distinct preset based on currently displayed artwork
     if not explicit_motif:
-        # Check recent chat history turns from newest to oldest first
-        recent_user_msgs = []
+        current_img = ""
         try:
-            recent_chats = db.get_chat_history(user_id, limit=25)
-            # Chat history is typically in chronological order; scan newest turns first
-            for c in reversed(recent_chats):
-                if c.get("sender") == "user":
-                    recent_user_msgs.append(c.get("message", "").lower())
+            latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
+            if latest_row and latest_row.get("payload"):
+                current_img = latest_row["payload"].get("generated_image_url") or ""
         except Exception:
             pass
 
-        # Check latest chat messages first for fresh reminiscence / healing topics
-        for msg in recent_user_msgs:
-            if any(k in msg for k in ["桜", "さくら", "花見", "お花見", "春", "入学式"]):
-                selected_image = "/family/assets/sample_postcard_spring.jpg"
-                theme_title = "【手作り絵手紙】満開の桜と春爛漫"
-                calligraphy_text = message_hint or "春の和みを お届けします"
-                stamp_icon = "🌸"
-                season_key = "spring"
-                base_source = "reminiscence"
+        curr_idx = -1
+        for idx, p in enumerate(ROTATING_PRESETS):
+            if p["image_url"] == current_img:
+                curr_idx = idx
                 break
-            elif any(k in msg for k in ["運動会", "お弁当", "煮物", "昭和", "子供の頃", "若い頃", "小学校", "おにぎり"]):
-                selected_image = "/family/assets/generated_undoukai_bento.jpg"
-                theme_title = "【手作り絵手紙】懐かしの運動会とお弁当"
-                calligraphy_text = message_hint or "家族で囲んだ 懐かしい味"
-                stamp_icon = "🍱"
-                season_key = "autumn"
-                base_source = "reminiscence"
-                break
-            elif any(k in msg for k in ["夕暮れ", "夕焼け", "夕日", "縁側", "お茶", "のんびり", "一息", "休憩", "相談", "悩み", "安心"]):
-                selected_image = "/family/assets/generated_relaxation_porch.jpg"
-                theme_title = "【手作り絵手紙】夕暮れの縁側とお茶"
-                calligraphy_text = message_hint or "肩の力を抜いて のんびり お茶にしましょ"
-                stamp_icon = "🍵"
-                season_key = "autumn"
-                base_source = "healing"
-                break
-            elif any(k in msg for k in ["小鳥", "すずめ", "雀", "寄り添う", "ことり", "さえずり", "寂しい", "不安", "一人"]):
-                selected_image = "/family/assets/generated_healing_sparrows.jpg"
-                theme_title = "【手作り絵手紙】寄り添う小鳥の温もり"
-                calligraphy_text = message_hint or "心穏やかに 寄り添う日々"
-                stamp_icon = "🕊️"
-                season_key = "autumn"
-                base_source = "healing"
-                break
-
-        # Fallback to existing prompt payload if no fresh topic in chat messages
-        if not selected_image:
-            existing_payload = None
-            try:
-                latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
-                if latest_row:
-                    existing_payload = latest_row.get("payload", {})
-            except Exception:
-                existing_payload = None
-
-            if existing_payload:
-                category = existing_payload.get("topic_category", "")
-                theme = str(existing_payload.get("theme", ""))
-                elements = str(existing_payload.get("reminiscence_elements", {}))
-                consultation = str(existing_payload.get("consultation_details", {}))
-                p_text = f"{theme} {elements} {consultation}".lower()
-                if category == "reminiscence" or any(k in p_text for k in ["運動会", "お弁当", "煮物"]):
-                    selected_image = "/family/assets/generated_undoukai_bento.jpg"
-                    theme_title = "【手作り絵手紙】懐かしの運動会とお弁当"
-                    calligraphy_text = message_hint or "家族で囲んだ 懐かしい味"
-                    stamp_icon = "🍱"
-                    season_key = "autumn"
-                    base_source = "reminiscence"
-                elif any(k in p_text for k in ["小鳥", "すずめ", "雀"]):
-                    selected_image = "/family/assets/generated_healing_sparrows.jpg"
-                    theme_title = "【手作り絵手紙】寄り添う小鳥の温もり"
-                    calligraphy_text = message_hint or "心穏やかに 寄り添う日々"
-                    stamp_icon = "🕊️"
-                    season_key = "autumn"
-                    base_source = "healing"
-                elif category == "consultation" or any(k in p_text for k in ["縁側", "お茶", "夕暮れ"]):
-                    selected_image = "/family/assets/generated_relaxation_porch.jpg"
-                    theme_title = "【手作り絵手紙】夕暮れの縁側とお茶"
-                    calligraphy_text = message_hint or "肩の力を抜いて のんびり お茶にしましょ"
-                    stamp_icon = "🍵"
-                    season_key = "autumn"
-                    base_source = "healing"
+        
+        next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
+        selected_image = next_preset["image_url"]
+        theme_title = next_preset["theme"]
+        calligraphy_text = message_hint or next_preset["calligraphy"]
+        stamp_icon = next_preset["stamp_icon"]
+        season_key = next_preset["season"]
+        base_source = next_preset["source"]
 
     # 3. Explicit motif mappings (resident requested specific adjustments)
     if explicit_motif or not selected_image:

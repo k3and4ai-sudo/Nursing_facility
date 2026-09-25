@@ -132,6 +132,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function showEtegamiCard() {
         if (etegamiCard) {
             etegamiCard.classList.remove("hidden");
+            try {
+                etegamiCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            } catch (e) {}
         }
         isEtegamiCardVisible = true;
         console.log("[Etegami Card]: Card shown.");
@@ -154,43 +157,57 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/[。、.!?！？\s]/g, "")
             .replace(/絵お/g, "絵を")
             .replace(/えお/g, "えを")
-            .replace(/手紙お/g, "手紙を");
+            .replace(/手紙お/g, "手紙を")
+            .replace(/ベジタル/g, "デジタル")
+            .replace(/デジダル/g, "デジタル")
+            .replace(/ペテ紙/g, "絵手紙")
+            .replace(/ぺてがみ/g, "絵手紙")
+            .replace(/ペテガミ/g, "絵手紙")
+            .replace(/ベテガミ/g, "絵手紙")
+            .replace(/手紙を書きたい/g, "絵手紙を書きたい")
+            .replace(/手紙書きたい/g, "絵手紙書きたい");
 
-        // 第一のキーワード (対象)
-        const PRIMARY_KEYWORDS = [
-            "絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ",
-            "お絵描き", "お絵かき", "おえかき", "手紙", "てがみ"
+        // 1. 明確な終了パターン (絵/絵手紙を閉じる、消す、やめる、終了)
+        const HIDE_PATTERNS = [
+            "絵を閉じて", "絵をとじて", "絵手紙を閉じて", "絵手紙をとじて", "絵を消して", "絵手紙を消して",
+            "絵を非表示", "絵手紙非表示", "絵手紙終了", "絵を終了", "絵をやめる", "絵手紙をやめる",
+            "デジタル絵手紙を閉じて", "デジタル絵手紙をとじて", "デジタル絵手紙終了", "デジタル絵手紙非表示",
+            "お絵描きをやめる", "お絵描き終了", "お絵描きを終わる"
         ];
+        if (HIDE_PATTERNS.some(p => norm.includes(p))) {
+            return false;
+        }
 
-        // 第二のキーワード: 開く・起動・描く (アクション: 起動・表示)
-        const SECONDARY_SHOW_KEYWORDS = [
+        // 「閉じて」「消して」+「絵」「絵手紙」の場合（ただし後ろに「描きたい」などがある場合は表示優先）
+        if ((norm.includes("絵") || norm.includes("手紙")) && ["閉じて", "とじて", "閉じる", "とじる", "消して", "けして"].some(k => norm.includes(k))) {
+            if (!["描きたい", "かきたい", "書きたい", "出して", "表示"].some(k => norm.includes(k))) {
+                return false;
+            }
+        }
+
+        // 2. 「デジタル絵手紙」を含む場合は無条件で表示 (終了キーワードがない場合)
+        if (norm.includes("デジタル絵手紙") || norm.includes("デジタルえてがみ") || norm.includes("ベジタル絵手紙")) {
+            return true;
+        }
+
+        // 3. 絵手紙・お絵描き・絵を描く等の直接パターン
+        if (["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"].some(p => norm.includes(p))) {
+            return true;
+        }
+
+        // 4. 絵/え + 起動・表示アクション
+        if ((norm.includes("絵") || norm.includes("え")) && [
             "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
             "起動して", "きどうして", "起動", "きどう",
             "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
             "出して", "だして", "出す", "だす", "出したい", "だしたい",
-            "表示して", "ひょうじして", "表示", "ひょうじ",
-            "見せて", "みせて", "見たい", "みたい"
-        ];
-
-        // 第二のキーワード: 閉じる・終了 (アクション: 終了・非表示)
-        const SECONDARY_HIDE_KEYWORDS = [
-            "閉じて", "とじて", "閉じる", "とじる",
-            "消して", "けして", "消す", "けす",
-            "非表示", "ひひょうじ", "隠して", "かくして",
-            "終わる", "おわる", "終わり", "おわり", "おわって",
-            "終了", "しゅうりょう"
-        ];
-
-        const hasPrimary = PRIMARY_KEYWORDS.some(k => norm.includes(k));
-        const hasSecondaryShow = SECONDARY_SHOW_KEYWORDS.some(k => norm.includes(k));
-        const hasSecondaryHide = SECONDARY_HIDE_KEYWORDS.some(k => norm.includes(k));
-
-        if (hasPrimary && hasSecondaryHide) {
-            return false; // 非表示
+            "表示して", "ひょうじして", "表示", "ひょうじ", "表",
+            "見せて", "みせて", "見たい", "みたい",
+            "したい", "しよう", "する", "やる", "やって", "お願い", "おねがい"
+        ].some(k => norm.includes(k))) {
+            return true;
         }
-        if (hasPrimary && hasSecondaryShow) {
-            return true;  // 表示
-        }
+
         return null;
     }
 
@@ -253,6 +270,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateEtegamiDisplay(data) {
         if (!data) return;
+        const etegamiCard = document.getElementById("etegami-card");
+        if (etegamiCard && etegamiCard.classList.contains("hidden")) {
+            etegamiCard.classList.remove("hidden");
+            try {
+                etegamiCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            } catch(e) {}
+        }
         const cardImg = document.getElementById("etegami-card-img");
         const cardImgNext = document.getElementById("etegami-card-img-next");
         const calligraphyEl = document.getElementById("etegami-calligraphy");
@@ -1131,14 +1155,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 // Filter out the internal command preamble for cleaner speech box display
-                const cleanText = rawText
-                    .replace(/みまもりさん[へ]?業務連絡[、,][^。.\n]+[。.・\n]?/g, "")
-                    .replace(/みまもりさん[、へ]?予定カードの表示[^。.\n]*[。.・\n]?/g, "")
-                    .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙更新[^。.\n]*[。.・\n]?/g, "")
-                    .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙更新[^。.\n]*[。.・\n]?/g, "")
-                    .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙完成[^。.\n]*[。.・\n]?/g, "")
-                    .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙完成[^。.\n]*[。.・\n]?/g, "")
-                    .trim();
+                const sanitizeAiPreamble = (text) => {
+                    return (text || "")
+                        .replace(/みまもりさん[へ]?業務連絡[、,][^。.\n]+[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?予定カードの表示[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙を表示[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙をとじて[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙を閉じて[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙を表示[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙をとじて[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙を閉じて[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙更新[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙更新[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*デジタル絵手紙完成[^。.\n]*[。.・\n]?/g, "")
+                        .replace(/みまもりさん[、へ]?[^。.\n]*絵手紙完成[^。.\n]*[。.・\n]?/g, "")
+                        .trim();
+                };
+                const cleanText = sanitizeAiPreamble(rawText);
 
                 if (aiResponseBox && cleanText) {
                     if (data.type === "live_text_output") {
@@ -1166,7 +1199,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     userSpeechBox.textContent = data.user_text;
                     handleEtegamiVoiceTrigger(data.user_text, "LiveWS_ChatResponseUser");
                 }
-                if (aiResponseBox && data.text) aiResponseBox.textContent = data.text;
+                if (aiResponseBox && data.text) aiResponseBox.textContent = (typeof sanitizeAiPreamble === "function") ? sanitizeAiPreamble(data.text) : data.text;
             } else if (data.type === "pii_warning") {
                 handlePIIWarning(data.message);
             } else if (data.type === "gemini_thinking") {
@@ -1238,6 +1271,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     } else {
                         updatingBadge.classList.add("hidden");
                     }
+                }
+            } else if (data.type === "mimamori_acknowledgement") {
+                console.log("[LiveWS]: Received mimamori_acknowledgement ->", data.message);
+                if (data.message) {
+                    showTemporaryToast(data.message, 4000);
                 }
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);

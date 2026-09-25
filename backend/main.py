@@ -1514,10 +1514,20 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             return
         full_text = "".join(gemini_text_buffer).strip()
         gemini_text_buffer.clear()
-        is_internal_command = full_text.startswith("みまもりさんへ業務連絡") or full_text.startswith("みまもりさん業務連絡")
-        if session.recording_active and full_text and not is_internal_command:
-            db.add_chat_message(user["id"], "ai", full_text)
-            print(f"[Gemini Live Session ({terminal_id})]: Saved complete turn AI text to DB ({len(full_text)} chars): '{full_text[:35]}...'")
+        # Clean out any internal robotic preambles before saving conversation to DB
+        clean_text = re.sub(r"みまもりさん[、へ]?[^。.\n]+[。.・\n]?", "", full_text).strip()
+        clean_text = re.sub(r"^[「」\s]+|[「」\s]+$", "", clean_text).strip()
+        is_internal_command = (
+            not clean_text or
+            full_text.startswith("みまもりさんへ業務連絡") or
+            full_text.startswith("みまもりさん業務連絡") or
+            full_text.startswith("みまもりさん予定カード") or
+            clean_text == "はい、予定カードを閉じましたよ。" or
+            clean_text == "はい、予定カードを閉じましたよ"
+        )
+        if session.recording_active and clean_text and not is_internal_command:
+            db.add_chat_message(user["id"], "ai", clean_text)
+            print(f"[Gemini Live Session ({terminal_id})]: Saved complete turn AI text to DB ({len(clean_text)} chars): '{clean_text[:35]}...'")
 
     async def on_gemini_text(text: str):
         try:
@@ -1617,7 +1627,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             session.last_etegami_update_time = time.time()
             try:
                 print(f"[Gemini Live Session ({terminal_id})]: Live Etegami Update executing with motif='{motif}', msg='{msg}'")
-                # 1. Notify user terminal that update has started (show spinner/badge)
+                # 1. Notify user terminal that Mimamori-san acknowledged and started updating
+                await websocket.send_json({
+                    "type": "mimamori_acknowledgement",
+                    "action": "etegami_update",
+                    "message": "🎨 みまもりさん：承知しました。絵手紙の下絵を更新します"
+                })
+                await websocket.send_json({
+                    "type": "etegami_visibility",
+                    "visible": True
+                })
                 await websocket.send_json({
                     "type": "etegami_updating",
                     "updating": True
@@ -1634,6 +1653,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 await websocket.send_json({
                     "type": "etegami_update",
                     **card_info
+                })
+                await websocket.send_json({
+                    "type": "mimamori_acknowledgement",
+                    "action": "etegami_updated",
+                    "message": f"🎨 みまもりさん：絵手紙を更新しました（{card_info.get('title', '')}）"
                 })
                 # Broadcast to staff dashboard
                 await manager.broadcast_to_staff({
@@ -1679,6 +1703,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "type": "etegami_update",
                     **card_info
                 })
+                await websocket.send_json({
+                    "type": "mimamori_acknowledgement",
+                    "action": "etegami_complete",
+                    "message": "💮 みまもりさん：絵手紙を完成として記録・保存しました"
+                })
                 await manager.broadcast_to_staff({
                     "type": "etegami_updated",
                     "terminal_id": terminal_id,
@@ -1705,13 +1734,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         "描きかえ", "描き替え", "描きなお", "描き直",
         "デジタル絵手紙を更新", "デジタル絵手紙更新", "絵手紙を更新", "絵手紙更新",
         "新しくして", "新しく描いて", "新しく作って", "新しくしてほしい",
-        "別の絵にして", "別の絵を描いて", "違う絵にして", "絵を変えて", "絵を変え"
+        "別の絵にして", "別の絵を描いて", "違う絵にして", "絵を変えて", "絵を変え",
+        "更新されていません", "更新できますか", "修正してみましょう", "修正して", "更新して",
+        "直して", "別の絵", "違う絵"
     ]
 
     def check_resident_etegami_trigger(speech_text: str):
         if not speech_text or getattr(session, "is_etegami_updating", False):
             return
-        if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 5.0):
+        if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 3.0):
             return
         clean = speech_text.replace(" ", "").replace("　", "")
 
@@ -1733,39 +1764,56 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     def check_etegami_visibility_intent(text: str):
         if not text:
             return None
-        norm = re.sub(r"[。、.!?！？\s]", "", text).replace("絵お", "絵を").replace("えお", "えを").replace("手紙お", "手紙を")
+        norm = (
+            re.sub(r"[。、.!?！？\s]", "", text)
+            .replace("絵お", "絵を")
+            .replace("えお", "えを")
+            .replace("手紙お", "手紙を")
+            .replace("ベジタル", "デジタル")
+            .replace("デジダル", "デジタル")
+            .replace("ペテ紙", "絵手紙")
+            .replace("ぺてがみ", "絵手紙")
+            .replace("ペテガミ", "絵手紙")
+            .replace("ベテガミ", "絵手紙")
+            .replace("手紙を書きたい", "絵手紙を書きたい")
+            .replace("手紙書きたい", "絵手紙書きたい")
+        )
 
-        # 第一のキーワード (対象)
-        primary_keywords = [
-            "絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ",
-            "お絵描き", "お絵かき", "おえかき", "手紙", "てがみ"
+        # 1. 明確な終了パターン (絵/絵手紙を閉じる、消す、やめる、終了)
+        hide_patterns = [
+            "絵を閉じて", "絵をとじて", "絵手紙を閉じて", "絵手紙をとじて", "絵を消して", "絵手紙を消して",
+            "絵を非表示", "絵手紙非表示", "絵手紙終了", "絵を終了", "絵をやめる", "絵手紙をやめる",
+            "デジタル絵手紙を閉じて", "デジタル絵手紙をとじて", "デジタル絵手紙終了", "デジタル絵手紙非表示",
+            "お絵描きをやめる", "お絵描き終了", "お絵描きを終わる"
         ]
-        # 第二のキーワード: 起動・表示
-        secondary_show_keywords = [
+        if any(p in norm for p in hide_patterns):
+            return False
+
+        # 「閉じて」「消して」+「絵」「絵手紙」の場合（ただし後ろに「描きたい」などがある場合は表示優先）
+        if ("絵" in norm or "手紙" in norm) and any(k in norm for k in ["閉じて", "とじて", "閉じる", "とじる", "消して", "けして"]):
+            if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "表示"]):
+                return False
+
+        # 2. デジタル絵手紙を含む場合は無条件で表示 (終了キーワードがない場合)
+        if "デジタル絵手紙" in norm or "デジタルえてがみ" in norm or "ベジタル絵手紙" in norm:
+            return True
+
+        # 3. 絵手紙・お絵描き・絵を描く等の直接パターン
+        if any(p in norm for p in ["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"]):
+            return True
+
+        # 4. 絵/え + 起動・表示アクション
+        if any(k in norm for k in ["絵", "え"]) and any(k in norm for k in [
             "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
             "起動して", "きどうして", "起動", "きどう",
             "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
             "出して", "だして", "出す", "だす", "出したい", "だしたい",
-            "表示して", "ひょうじして", "表示", "ひょうじ",
-            "見せて", "みせて", "見たい", "みたい"
-        ]
-        # 第二のキーワード: 終了・非表示
-        secondary_hide_keywords = [
-            "閉じて", "とじて", "閉じる", "とじる",
-            "消して", "けして", "消す", "けす",
-            "非表示", "ひひょうじ", "隠して", "かくして",
-            "終わる", "おわる", "終わり", "おわり", "おわって",
-            "終了", "しゅうりょう"
-        ]
-
-        has_primary = any(k in norm for k in primary_keywords)
-        has_show = any(k in norm for k in secondary_show_keywords)
-        has_hide = any(k in norm for k in secondary_hide_keywords)
-
-        if has_primary and has_hide:
-            return False
-        if has_primary and has_show:
+            "表示して", "ひょうじして", "表示", "ひょうじ", "表",
+            "見せて", "みせて", "見たい", "みたい",
+            "したい", "しよう", "する", "やる", "やって", "お願い", "おねがい"
+        ]):
             return True
+
         return None
 
     # Initialize Gemini Live Session
@@ -1790,6 +1838,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         history=recent_history,
         schedules=today_schedules
     )
+
+    latest_whisper_transcription = {"text": "", "time": 0.0}
 
     # Triggered when Parallel Whisper/Ollama PII Inspector detects forbidden personal info
     def on_pii_detected(category: str, detail: str):
@@ -1907,6 +1957,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     def on_live_transcription(transcribed_text: str):
         if not transcribed_text:
             return
+        latest_whisper_transcription["text"] = transcribed_text.strip()
+        latest_whisper_transcription["time"] = time.time()
         # 1. Send transcribed speech to user UI
         asyncio.create_task(websocket.send_json({
             "type": "transcription_result",
@@ -1985,6 +2037,18 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"[Gemini Live Session Notice]: {e}. Operating in local Ollama fallback mode.")
 
+        # Show schedule card at startup
+        # Show schedule card at startup only if user has schedules today
+        try:
+            has_sched = bool(today_schedules)
+            await websocket.send_json({
+                "type": "schedule_visibility",
+                "visible": has_sched
+            })
+            print(f"[Startup ({terminal_id})]: Sent initial schedule_visibility -> {has_sched}")
+        except Exception as e:
+            print(f"[Startup Error ({terminal_id})]: {e}")
+
         # Send initial Etegami card on connect so the terminal immediately shows the artwork
         try:
             latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id)
@@ -2049,6 +2113,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 user_text = data.get("text", "").strip()
                 current_chunks = user_pcm_chunk_count
                 user_pcm_chunk_count = 0  # Reset for next utterance
+
+                # Fallback: if client text is empty, adopt recent Whisper STT result
+                now_t = time.time()
+                if not user_text and latest_whisper_transcription.get("text") and (now_t - latest_whisper_transcription.get("time", 0.0) < 5.0):
+                    user_text = latest_whisper_transcription["text"]
+                    latest_whisper_transcription["text"] = ""  # Consume once
+                    print(f"[Live Session EOS Fallback] ({terminal_id}): Used recent Whisper STT as user_text: '{user_text}'")
 
                 # Empty utterance guard: drop false silence triggers (room noise / acoustic echo without voice)
                 if not user_text and current_chunks < 5:

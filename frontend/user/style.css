@@ -1626,6 +1626,8 @@ body.simple-mode .speech-box.user-box {
     flex-direction: column;
     gap: 10px;
     width: 100%;
+    max-width: 620px;
+    margin: 14px auto 8px;
     box-sizing: border-box;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     background-image: radial-gradient(#fdfbf7 0%, #faf6ee 100%);
