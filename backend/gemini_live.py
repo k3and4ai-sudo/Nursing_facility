@@ -583,51 +583,28 @@ class GeminiLiveSession:
 
         # Detect Etegami Card visibility command from Gemini speech or thought
         raw_norm = re.sub(r"[。、.!?！？\s]", "", text_val).replace("絵お", "絵を").replace("えお", "えを").replace("手紙お", "手紙を")
-        is_to_show_etegami = (
-            "デジタル絵手紙を表示" in text_val or
-            "デジタル絵手紙表示" in text_val or
-            "デジタル絵手紙を出して" in text_val or
-            "デジタル絵手紙起動" in text_val or
-            "デジタル絵手紙をかきたい" in text_val or
-            "デジタル絵手紙を描きたい" in text_val or
-            "絵をかきたい" in text_val or
-            "絵を描きたい" in text_val or
-            "絵お描きたい" in text_val or
-            "絵お書きたい" in text_val or
-            "絵描きたい" in text_val or
-            "絵かきたい" in text_val or
-            "絵を出して" in text_val or
-            "絵だして" in text_val or
-            "絵をだして" in text_val or
-            "show etegami" in text_lower or
-            "display etegami" in text_lower or
-            "デジタル絵手紙を表示" in raw_norm or
-            "デジタル絵手紙出して" in raw_norm or
-            "絵を描きたい" in raw_norm or
-            "絵をかきたい" in raw_norm or
-            "絵出して" in raw_norm or
-            (("絵" in raw_norm or "え" in raw_norm or "手紙" in raw_norm or "てがみ" in raw_norm) and
-             any(k in raw_norm for k in ["描きたい", "かきたい", "書きたい", "出したい", "だしたい", "出して", "だして", "表示", "ひょうじ", "見せて", "みせて", "起動", "きどう"]) and
-             not any(k in raw_norm for k in ["終わ", "おわ", "閉じて", "とじて", "消して", "けして", "非表示", "終了", "しゅうりょう"]))
-        )
-        is_to_hide_etegami = (
-            "デジタル絵手紙をとじて" in text_val or
-            "デジタル絵手紙を閉じて" in text_val or
-            "デジタル絵手紙とじて" in text_val or
-            "デジタル絵手紙閉じて" in text_val or
-            "デジタル絵手紙を非表示" in text_val or
-            "デジタル絵手紙非表示" in text_val or
-            "デジタル絵手紙終了" in text_val or
-            "お絵描きを終わる" in text_val or
-            "絵をとじて" in text_val or
-            "絵を閉じて" in text_val or
-            "絵を消して" in text_val or
-            "絵を消す" in text_val or
-            "hide etegami" in text_lower or
-            "close etegami" in text_lower or
-            (("絵" in raw_norm or "え" in raw_norm or "手紙" in raw_norm or "てがみ" in raw_norm) and
-             any(k in raw_norm for k in ["終わ", "おわ", "閉じて", "とじて", "消して", "けして", "非表示", "終了", "しゅうりょう"]))
-        )
+        primary_kws = ["絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ", "お絵描き", "お絵かき", "おえかき", "手紙", "てがみ"]
+        show_action_kws = [
+            "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
+            "起動して", "きどうして", "起動", "きどう",
+            "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
+            "出して", "だして", "出す", "だす", "出したい", "だしたい",
+            "表示して", "ひょうじして", "表示", "ひょうじ",
+            "見せて", "みせて", "見たい", "みたい"
+        ]
+        hide_action_kws = [
+            "閉じて", "とじて", "閉じる", "とじる",
+            "消して", "けして", "消す", "けす",
+            "非表示", "ひひょうじ", "隠して", "かくして",
+            "終わる", "おわる", "終わり", "おわり", "おわって",
+            "終了", "しゅうりょう"
+        ]
+        has_primary = any(k in raw_norm for k in primary_kws)
+        has_show = any(k in raw_norm for k in show_action_kws) or "show etegami" in text_lower or "display etegami" in text_lower
+        has_hide = any(k in raw_norm for k in hide_action_kws) or "hide etegami" in text_lower or "close etegami" in text_lower
+
+        is_to_show_etegami = has_primary and has_show and not has_hide
+        is_to_hide_etegami = has_primary and has_hide
         if is_to_show_etegami:
             print(f"[Gemini Live Session]: Detected show etegami card command: '{text_val}'")
             if self.on_etegami_visibility_changed:

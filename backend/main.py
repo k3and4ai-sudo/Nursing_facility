@@ -1734,34 +1734,37 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         if not text:
             return None
         norm = re.sub(r"[。、.!?！？\s]", "", text).replace("絵お", "絵を").replace("えお", "えを").replace("手紙お", "手紙を")
-        show_keywords = [
-            "絵を描きたい", "絵をかきたい", "絵お描きたい", "絵お書きたい", "絵描きたい", "絵かきたい", "絵書きたい",
-            "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
-            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
-            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
-        ]
-        hide_keywords = [
-            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
-            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
-            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
-            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
-            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう",
-            "絵とじて", "絵閉じて", "絵消して"
-        ]
-        if any(k in text or k in norm for k in show_keywords):
-            return True
-        if any(k in text or k in norm for k in hide_keywords):
-            return False
 
-        has_target = any(k in norm for k in ["絵", "え", "手紙", "てがみ"])
-        has_show = any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出したい", "だしたい", "出して", "だして", "表示", "ひょうじ", "見せて", "みせて", "起動", "きどう"])
-        has_hide = any(k in norm for k in ["終わ", "おわ", "閉じて", "とじて", "消して", "けして", "非表示", "終了", "しゅうりょう"])
+        # 第一のキーワード (対象)
+        primary_keywords = [
+            "絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ",
+            "お絵描き", "お絵かき", "おえかき", "手紙", "てがみ"
+        ]
+        # 第二のキーワード: 起動・表示
+        secondary_show_keywords = [
+            "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
+            "起動して", "きどうして", "起動", "きどう",
+            "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
+            "出して", "だして", "出す", "だす", "出したい", "だしたい",
+            "表示して", "ひょうじして", "表示", "ひょうじ",
+            "見せて", "みせて", "見たい", "みたい"
+        ]
+        # 第二のキーワード: 終了・非表示
+        secondary_hide_keywords = [
+            "閉じて", "とじて", "閉じる", "とじる",
+            "消して", "けして", "消す", "けす",
+            "非表示", "ひひょうじ", "隠して", "かくして",
+            "終わる", "おわる", "終わり", "おわり", "おわって",
+            "終了", "しゅうりょう"
+        ]
 
-        if has_target and has_hide:
+        has_primary = any(k in norm for k in primary_keywords)
+        has_show = any(k in norm for k in secondary_show_keywords)
+        has_hide = any(k in norm for k in secondary_hide_keywords)
+
+        if has_primary and has_hide:
             return False
-        if has_target and has_show:
+        if has_primary and has_show:
             return True
         return None
 
@@ -2059,6 +2062,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
                     # Check for resident etegami update trigger from user text (Double safety net)
                     check_resident_etegami_trigger(user_text)
+
+                    # Check for resident etegami visibility trigger (開く・起動・かきたい / 閉じる) from EOS user text
+                    etegami_eos_intent = check_etegami_visibility_intent(user_text)
+                    if etegami_eos_intent is True:
+                        print(f"[Live Session EOS ({terminal_id})]: Voice triggered Show Etegami Card: '{user_text}'")
+                        asyncio.create_task(on_live_etegami_visibility(True))
+                    elif etegami_eos_intent is False:
+                        print(f"[Live Session EOS ({terminal_id})]: Voice triggered Hide Etegami Card: '{user_text}'")
+                        asyncio.create_task(on_live_etegami_visibility(False))
 
                     # Check for confidential / secret conversation recording pause triggers
                     if any(w in user_text for w in ["ここだけの話", "内緒", "言わんといて", "言わないで", "記録を止めて", "記録止めて", "秘密", "メモせんといて", "誰にも言わないで", "記録停止", "記録を停止", "録音停止", "録音を停止"]):

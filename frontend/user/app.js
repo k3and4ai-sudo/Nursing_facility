@@ -147,6 +147,69 @@ document.addEventListener("DOMContentLoaded", () => {
         updateShowEtegamiBtnVisibility();
     }
 
+    // 🎨 デジタル絵手紙：第一キーワード（対象）× 第二キーワード（アクション）による意図判定
+    function checkEtegamiVoiceIntent(text) {
+        if (!text) return null;
+        const norm = text
+            .replace(/[。、.!?！？\s]/g, "")
+            .replace(/絵お/g, "絵を")
+            .replace(/えお/g, "えを")
+            .replace(/手紙お/g, "手紙を");
+
+        // 第一のキーワード (対象)
+        const PRIMARY_KEYWORDS = [
+            "絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ",
+            "お絵描き", "お絵かき", "おえかき", "手紙", "てがみ"
+        ];
+
+        // 第二のキーワード: 開く・起動・描く (アクション: 起動・表示)
+        const SECONDARY_SHOW_KEYWORDS = [
+            "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
+            "起動して", "きどうして", "起動", "きどう",
+            "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
+            "出して", "だして", "出す", "だす", "出したい", "だしたい",
+            "表示して", "ひょうじして", "表示", "ひょうじ",
+            "見せて", "みせて", "見たい", "みたい"
+        ];
+
+        // 第二のキーワード: 閉じる・終了 (アクション: 終了・非表示)
+        const SECONDARY_HIDE_KEYWORDS = [
+            "閉じて", "とじて", "閉じる", "とじる",
+            "消して", "けして", "消す", "けす",
+            "非表示", "ひひょうじ", "隠して", "かくして",
+            "終わる", "おわる", "終わり", "おわり", "おわって",
+            "終了", "しゅうりょう"
+        ];
+
+        const hasPrimary = PRIMARY_KEYWORDS.some(k => norm.includes(k));
+        const hasSecondaryShow = SECONDARY_SHOW_KEYWORDS.some(k => norm.includes(k));
+        const hasSecondaryHide = SECONDARY_HIDE_KEYWORDS.some(k => norm.includes(k));
+
+        if (hasPrimary && hasSecondaryHide) {
+            return false; // 非表示
+        }
+        if (hasPrimary && hasSecondaryShow) {
+            return true;  // 表示
+        }
+        return null;
+    }
+
+    function handleEtegamiVoiceTrigger(text, source = "voice") {
+        const intent = checkEtegamiVoiceIntent(text);
+        if (intent === true) {
+            console.log(`[Etegami Voice Trigger] (${source}): Detected SHOW trigger in "${text}"`);
+            showEtegamiCard();
+            return true;
+        } else if (intent === false) {
+            console.log(`[Etegami Voice Trigger] (${source}): Detected HIDE trigger in "${text}"`);
+            hideEtegamiCard();
+            return true;
+        }
+        return false;
+    }
+    window.checkEtegamiVoiceIntent = checkEtegamiVoiceIntent;
+    window.handleEtegamiVoiceTrigger = handleEtegamiVoiceTrigger;
+
     if (btnShowEtegamiCard) {
         btnShowEtegamiCard.addEventListener("click", () => {
             console.log("[User UI]: Show Etegami button clicked");
@@ -532,51 +595,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            // 🎨 Etegami Card voice commands (デジタル絵手紙カードの表示・終了)
-            const cleanNorm = clean.replace(/[。、.!?！？\s]/g, "").replace(/絵お/g, "絵を").replace(/えお/g, "えを").replace(/手紙お/g, "手紙を");
-            const SHOW_ETEGAMI_COMMANDS = [
-                "絵を描きたい", "絵をかきたい", "絵お描きたい", "絵お書きたい", "絵描きたい", "絵かきたい", "絵書きたい",
-                "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-                "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
-                "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
-                "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-                "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
-            ];
-            const HIDE_ETEGAMI_COMMANDS = [
-                "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
-                "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
-                "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
-                "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
-                "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう",
-                "絵閉じて", "絵とじて", "絵消して"
-            ];
-
-            const hasEtegamiTarget = cleanNorm.includes("絵") || cleanNorm.includes("え") || cleanNorm.includes("手紙") || cleanNorm.includes("てがみ");
-            const hasEtegamiShowAction = cleanNorm.includes("描きたい") || cleanNorm.includes("かきたい") || cleanNorm.includes("書きたい") ||
-                                         cleanNorm.includes("出したい") || cleanNorm.includes("だしたい") || cleanNorm.includes("出して") || cleanNorm.includes("だして") ||
-                                         cleanNorm.includes("表示") || cleanNorm.includes("ひょうじ") || cleanNorm.includes("見せて") || cleanNorm.includes("みせて") ||
-                                         cleanNorm.includes("起動") || cleanNorm.includes("きどう");
-            const hasEtegamiHideAction = cleanNorm.includes("終わ") || cleanNorm.includes("おわ") ||
-                                         cleanNorm.includes("閉じて") || cleanNorm.includes("とじて") ||
-                                         cleanNorm.includes("消して") || cleanNorm.includes("けして") ||
-                                         cleanNorm.includes("非表示") || cleanNorm.includes("終了") || cleanNorm.includes("しゅうりょう");
-
-            const isShowEtegami = (SHOW_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd) || cleanNorm.includes(cmd)) ||
-                                   (hasEtegamiTarget && hasEtegamiShowAction)) && !hasEtegamiHideAction;
-            const isHideEtegami = HIDE_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd) || cleanNorm.includes(cmd)) ||
-                                  (hasEtegamiTarget && hasEtegamiHideAction);
-
-            if (isShowEtegami) {
-                console.log("[SpeechRec Etegami]: Voice triggered SHOW etegami card:", clean, "normalized:", cleanNorm);
-                if (typeof showEtegamiCard === "function") {
-                    showEtegamiCard();
-                }
-            } else if (isHideEtegami) {
-                console.log("[SpeechRec Etegami]: Voice triggered HIDE etegami card:", clean, "normalized:", cleanNorm);
-                if (typeof hideEtegamiCard === "function") {
-                    hideEtegamiCard();
-                }
-            }
+            // 🎨 Etegami Card voice commands (デジタル絵手紙カードの表示・終了: 第一キーワード × 第二キーワード)
+            handleEtegamiVoiceTrigger(clean, "WebSpeechRec");
         };
 
         speechRec.onend = () => {
@@ -890,6 +910,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (subtitleBox) subtitleBox.textContent = `あなた: "${data.text}"`;
                     setAvatarState("thinking");
                     statusText.textContent = "考え中...";
+                    if (data.text) handleEtegamiVoiceTrigger(data.text, "StandardWS_Transcription");
                     break;
 
                 case "ui_mode_change":
@@ -1082,45 +1103,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
 
-                // Detect Gemini Live etegami card commands
-                const rawNorm = rawText.replace(/[。、.!?！？\s]/g, "").replace(/絵お/g, "絵を").replace(/えお/g, "えを");
-                const isToGeminiShowEtegami = (
-                    rawText.includes("みまもりさん、デジタル絵手紙を表示してください") ||
-                    rawText.includes("デジタル絵手紙を表示してください") ||
-                    rawText.includes("デジタル絵手紙を表示") ||
-                    rawText.includes("デジタル絵手紙を出して") ||
-                    rawNorm.includes("デジタル絵手紙を表示") ||
-                    rawNorm.includes("デジタル絵手紙出して") ||
-                    rawNorm.includes("デジタル絵手紙起動") ||
-                    rawNorm.includes("絵手紙を表示") ||
-                    rawNorm.includes("絵手紙出して")
-                );
-                const isToGeminiHideEtegami = (
-                    rawText.includes("みまもりさん、デジタル絵手紙をとじてください") ||
-                    rawText.includes("みまもりさん、デジタル絵手紙を閉じてください") ||
-                    rawText.includes("デジタル絵手紙をとじてください") ||
-                    rawText.includes("デジタル絵手紙を閉じてください") ||
-                    rawText.includes("デジタル絵手紙をとじて") ||
-                    rawText.includes("デジタル絵手紙を閉じて") ||
-                    rawText.includes("デジタル絵手紙を非表示") ||
-                    rawNorm.includes("デジタル絵手紙をとじて") ||
-                    rawNorm.includes("デジタル絵手紙を閉じて") ||
-                    rawNorm.includes("デジタル絵手紙とじて") ||
-                    rawNorm.includes("デジタル絵手紙閉じて") ||
-                    rawNorm.includes("デジタル絵手紙非表示")
-                );
-
-                if (isToGeminiShowEtegami) {
-                    console.log("[Gemini Live Voice]: Detected show etegami card command:", rawText);
-                    if (typeof showEtegamiCard === "function") {
-                        showEtegamiCard();
-                    }
-                } else if (isToGeminiHideEtegami) {
-                    console.log("[Gemini Live Voice]: Detected hide etegami card command:", rawText);
-                    if (typeof hideEtegamiCard === "function") {
-                        hideEtegamiCard();
-                    }
-                }
+                // Detect Gemini Live etegami card commands (第一キーワード × 第二キーワード)
+                handleEtegamiVoiceTrigger(rawText, "GeminiLiveSpeech");
 
                 // Detect Gemini Live recording commands
                 const isToStopRec = (
@@ -1174,8 +1158,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (userSpeechBox && data.text && (!window.isSpeechRecActive || !userSpeechBox.textContent)) {
                     userSpeechBox.textContent = data.text;
                 }
+                if (data.text) {
+                    handleEtegamiVoiceTrigger(data.text, "LiveWS_Transcription");
+                }
             } else if (data.type === "chat_response") {
-                if (userSpeechBox && data.user_text) userSpeechBox.textContent = data.user_text;
+                if (userSpeechBox && data.user_text) {
+                    userSpeechBox.textContent = data.user_text;
+                    handleEtegamiVoiceTrigger(data.user_text, "LiveWS_ChatResponseUser");
+                }
                 if (aiResponseBox && data.text) aiResponseBox.textContent = data.text;
             } else if (data.type === "pii_warning") {
                 handlePIIWarning(data.message);
@@ -1184,6 +1174,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 setAvatarState("thinking");
                 if (statusText) statusText.textContent = "🧠 Gemini考え中...";
                 const thought = (data.thought || "").toLowerCase();
+                if (data.thought) {
+                    handleEtegamiVoiceTrigger(data.thought, "GeminiThought");
+                }
                 const isThoughtSimple = data.thought && (data.thought.includes("単純画面に切り替") || data.thought.includes("画面切り替") || data.thought.includes("シンプル画面に切り替") || thought.includes("simple screen") || thought.includes("initiating screen transition"));
                 const isThoughtDetailed = data.thought && (data.thought.includes("詳細画面に切り替") || thought.includes("detailed screen"));
                 const isThoughtStopRec = data.thought && (data.thought.includes("会話記録を停止") || data.thought.includes("記録停止") || thought.includes("conversation halt") || thought.includes("cease recording") || thought.includes("stop recording"));
@@ -1901,6 +1894,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                 const textToSend = (currentUtteranceText || "").trim();
                 console.log("[Mic Button OFF]: User concluded speech manually. Sending EOS frame to Gemini Live.");
+                if (textToSend) handleEtegamiVoiceTrigger(textToSend, "ClientMicStopEOS");
                 liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));
             }
             currentUtteranceText = "";
@@ -2031,6 +2025,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const cleanText = (currentUtteranceText || "").trim();
                                 const isEcho = SYSTEM_ECHO_KEYWORDS.some(k => cleanText.includes(k));
                                 const textToSend = (!isEcho && cleanText) ? cleanText : "";
+                                if (textToSend) handleEtegamiVoiceTrigger(textToSend, "ClientVadEOS");
 
                                 // Only send EOS if actual human speech occurred (either text recognized OR >= 6 chunks streamed)
                                 if (chunksSentInUtterance >= 6 || textToSend) {

@@ -2076,10 +2076,6 @@ body.simple-mode .speech-box.user-box {
     flex: 1;
 }
 
-/* シンプル画面では絵手紙カードは非表示 (要件: シンプル表示モードでは何も表示しません) */
-body.simple-mode .etegami-card {
-    display: none !important;
-}
 .etegami-card.hidden {
     display: none !important;
 }
