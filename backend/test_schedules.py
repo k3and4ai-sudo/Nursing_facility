@@ -110,6 +110,7 @@ class TestSchedules(unittest.TestCase):
         finally:
             self.client.delete(f"/api/schedules/{past_id}")
             self.client.delete(f"/api/schedules/{up_id}")
+            db.seed_resident_regular_schedules(today_str, today_str)
 
     def test_terminal_specified_date_schedules(self):
         target_date = "2026-12-25"
@@ -132,11 +133,33 @@ class TestSchedules(unittest.TestCase):
             self.assertEqual(data["date"], target_date)
             self.assertFalse(data["is_today"])
             self.assertIn("12月25日の予定は", data["announcement_text"])
-            self.assertIn("クリスマス会", data["announcement_text"])
-            self.assertEqual(len(data["schedules"]), 1)
+            self.assertTrue(any(s["title"] == "クリスマス会" for s in data["schedules"]))
             self.assertFalse(data["schedules"][0]["is_past"])
         finally:
             self.client.delete(f"/api/schedules/{sched_id}")
+
+    def test_regular_schedules_generation(self):
+        """Verify that regular daily meals, recreation, seminar, and family visit schedules exist."""
+        from backend.database import get_schedules_by_user_and_date
+        
+        # 1. Check Monday (e.g. 2026-09-28): breakfast, lunch, tea, dinner, recreation
+        mon_scheds = get_schedules_by_user_and_date(self.user_id, "2026-09-28")
+        mon_titles = [s["title"] for s in mon_scheds]
+        self.assertIn("朝食", mon_titles)
+        self.assertIn("昼食", mon_titles)
+        self.assertIn("お茶", mon_titles)
+        self.assertIn("夕食", mon_titles)
+        self.assertIn("リクレーション", mon_titles)
+
+        # 2. Check Tuesday (e.g. 2026-09-29): seminar
+        tue_scheds = get_schedules_by_user_and_date(self.user_id, "2026-09-29")
+        tue_titles = [s["title"] for s in tue_scheds]
+        self.assertIn("セミナー", tue_titles)
+
+        # 3. Check Sunday (e.g. 2026-09-27): family visit
+        sun_scheds = get_schedules_by_user_and_date(self.user_id, "2026-09-27")
+        sun_titles = [s["title"] for s in sun_scheds]
+        self.assertIn("ご家族面会", sun_titles)
 
 if __name__ == "__main__":
     unittest.main()

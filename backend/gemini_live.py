@@ -423,16 +423,16 @@ class GeminiLiveSession:
                                         f"★【重要：勝手な下絵作成の厳禁】：\n"
                                         f"利用者が「絵を描きたい」「絵手紙を作りたい」と希望していない通常の昔話や日常会話の最中に、勝手に絵手紙を作って案内することは【絶対に禁止】です！通常の会話は傾聴・共感のみを行ってください。\n"
                                         f"★【利用者が絵を描くことを希望された場合のみ】：\n"
-                                        f"利用者が絵を描く意思を示された後、どんな絵にしたいかを伺い、モチーフが決まったら下絵を更新してください。\n"
+                                        f"利用者が絵を描く意思を示された後、どんな絵にしたいかを伺い、モチーフが決まったら下絵・JSONデータを更新してください。\n"
                                         f"1. 下絵を描く・案内する時（利用者が絵を描くことを希望した場合のみ）：\n"
                                         f"必ず第一声で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙更新して（モチーフ: ○○、文字: ○○）」\n"
-                                        f"（例: 「みまもりさん、デジタル絵手紙更新して（モチーフ: 秋晴れの運動会、文字: 力いっぱい走った日）」）と発言してください。\n"
+                                        f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」\n"
+                                        f"（例: 「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: 秋晴れの運動会、文字: 力いっぱい走った日）」）と発言してください。\n"
                                         f"続けて利用者様に優しく：\n"
                                         f"「{nickname}、お話ししてくださった思い出をもとに下絵を描いてみましたよ。画面に表示しましたので、ご覧になれますか？直したいところや、別の絵にしてほしいところはありますか？」と案内してください。\n"
                                         f"2. 修正・描きかえの要望を受けた時：\n"
                                         f"利用者様から「絵を更新して」「描きかえて」「別の絵にして」「小鳥がいい」「夕焼けにして」「文字を変えて」などの要望があった場合は、必ず第一声で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙更新して（モチーフ: ○○、文字: ○○）」と発言してください。\n"
+                                        f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」と発言して更新内容を報告してください。\n"
                                         f"続けて「はい、ご希望に合わせて描きかえますね！いかがでしょうか？」と優しく確認してください。\n"
                                         f"3. 完成・満足の意思を確認した時：\n"
                                         f"利用者様が「これでいいよ」「気に入った」「完成」「これで送って」「素敵だね」などと満足されたら、必ず第一声で正確に：\n"
@@ -676,8 +676,20 @@ class GeminiLiveSession:
             if self.on_etegami_completed:
                 self.on_etegami_completed()
 
-        # Detect Etegami modification command from Gemini speech or thought
-        is_gemini_etegami = (
+        # Detect Etegami JSON update command from Gemini speech or thought
+        # Target keywords:
+        # "みまもりさん、デジタル絵手紙JSONファィル更新お願いします" / "みまもりさん、デジタル絵手紙JSONファイル更新お願いします"
+        norm_val = text_val.replace("ファィル", "ファイル").replace("ｊｓｏｎ", "json").replace("ＪＳＯＮ", "json").lower()
+        is_gemini_etegami_json = (
+            ("みまもりさん" in text_val or "みまもり" in text_val) and
+            ("デジタル絵手紙" in text_val or "絵手紙" in text_val) and
+            ("json" in norm_val or "ファイル" in norm_val) and
+            ("更新" in text_val or "お願い" in text_val)
+        ) or (
+            "デジタル絵手紙jsonファイル更新" in norm_val or
+            "デジタル絵手紙jsonファィル更新" in text_val.lower()
+        )
+        is_gemini_etegami = is_gemini_etegami_json or (
             "デジタル絵手紙更新" in text_val or
             "デジタル絵手紙を更新" in text_val or
             ("みまもりさん" in text_val and "絵手紙" in text_val and "更新" in text_val) or
@@ -689,16 +701,36 @@ class GeminiLiveSession:
             elif (now - self.last_etegami_update_time < 5.0):
                 print(f"[Gemini Live Session]: Etegami recently updated (<5s) - ignoring duplicate trigger: '{text_val}'")
             else:
-                motif_match = re.search(r'モチーフ[:：]\s*([^、,）\)\n]+)', text_val)
-                msg_match = re.search(r'文字[:：]\s*([^、,）\)\n]+)', text_val)
+                # Extract update content reported by Gemini
+                # Format: "みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）"
+                # or freeform: "〜〜更新お願いします。モチーフは桜で、文字は春が来たよにしてください。"
+                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', text_val)
+                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', text_val)
                 motif = motif_match.group(1).strip() if motif_match else ""
                 msg = msg_match.group(1).strip() if msg_match else ""
+
+                # Fallback: scan for known seasonal / reminiscence motifs in text
                 if not motif:
-                    for kw in ["夕焼け", "夕暮れ", "縁側", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "朝顔", "風鈴", "雪", "椿", "コスモス"]:
+                    for kw in ["夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉", "文化祭"]:
                         if kw in text_val:
                             motif = kw
                             break
-                print(f"[Gemini Live Session]: Detected Gemini Etegami Trigger: '{text_val}' -> motif='{motif}', msg='{msg}'")
+
+                # If still no motif, but there is content after the trigger phrase, extract hint
+                if not motif:
+                    trigger_patterns = [
+                        r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)',
+                        r'デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)'
+                    ]
+                    for tp in trigger_patterns:
+                        m = re.search(tp, text_val, re.IGNORECASE)
+                        if m and m.group(1).strip():
+                            content_tail = m.group(1).strip().strip("（）()")
+                            if content_tail:
+                                motif = content_tail[:25]
+                            break
+
+                print(f"[Gemini Live Session]: Detected Gemini Etegami JSON Update Trigger: '{text_val}' -> motif='{motif}', msg='{msg}'")
                 self.last_etegami_update_time = now
                 if self.on_etegami_updated:
                     self.on_etegami_updated(motif, msg)

@@ -114,7 +114,7 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
 
         # Check prompt setup frame contains persona and command
         sent_json = mock_ws.send.call_args[0][0]
-        self.assertIn("ジェムナイ", sent_json)
+        self.assertIn("ジェミナイ", sent_json)
         self.assertIn("みまもりさん", sent_json)
         self.assertIn("業務連絡、会話記録を停止", sent_json)
 
@@ -185,7 +185,7 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
 
     @patch("backend.gemini_live.websockets.connect", new_callable=AsyncMock)
     async def test_gemini_etegami_trigger_and_duplicate_prevention(self, mock_ws_connect):
-        """Test detection of 'みまもりさん、デジタル絵手紙更新して' and duplicate prevention."""
+        """Test detection of 'みまもりさん、デジタル絵手紙JSONファイル更新お願いします' and duplicate prevention."""
         mock_ws = AsyncWsMock()
         mock_ws_connect.return_value = mock_ws
 
@@ -202,13 +202,13 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
 
         # Verify prompt setup contains the instruction
         sent_json = mock_ws.send.call_args[0][0]
-        self.assertIn("みまもりさん、デジタル絵手紙更新して", sent_json)
+        self.assertIn("みまもりさん、デジタル絵手紙JSONファイル更新お願いします", sent_json)
 
-        # 1. Normal trigger from Gemini
+        # 1. Normal trigger from Gemini with user-specified keyword
         frame1 = json.dumps({
             "serverContent": {
                 "modelTurn": {
-                    "parts": [{"text": "みまもりさん、デジタル絵手紙更新して（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
+                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファィル更新お願いします（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
                 }
             }
         })
@@ -222,7 +222,7 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
         frame2 = json.dumps({
             "serverContent": {
                 "modelTurn": {
-                    "parts": [{"text": "みまもりさん、デジタル絵手紙更新して"}]
+                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファイル更新お願いします"}]
                 }
             }
         })

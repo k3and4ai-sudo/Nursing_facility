@@ -338,28 +338,8 @@ def seed_default_accounts():
                 )
                 conn.commit()
 
-        # Seed default schedules if empty for users
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        cursor.execute("SELECT id FROM users")
-        all_users = cursor.fetchall()
-        for u in all_users:
-            cursor.execute("SELECT COUNT(*) FROM schedules WHERE user_id = ?", (u["id"],))
-            if cursor.fetchone()[0] == 0:
-                sample_schedules = [
-                    (u["id"], today_str, "09:30", "朝の体操・水分補給", "general", "デイルーム", "軽めのストレッチと健康チェック"),
-                    (u["id"], today_str, "10:30", "リハビリ・機能訓練", "rehab", "機能訓練室", "歩行訓練・理学療法士担当"),
-                    (u["id"], today_str, "12:00", "ご昼食（秋の味覚御膳）", "meal", "食堂", "管理栄養士特製メニュー"),
-                    (u["id"], today_str, "14:00", "訪問理美容（ヘアカット）", "barber", "1F理美容室", "訪問理容 鈴木様担当"),
-                    (u["id"], today_str, "15:00", "おやつとお茶の時間", "meal", "デイルーム", "温かい緑茶と季節の和菓子"),
-                    (u["id"], today_str, "16:00", "ご家族面会（長女・花子様）", "visit", "居室・オンライン", "長女花子様とオンライン面会予定")
-                ]
-                for u_id, s_date, s_time, s_title, s_cat, s_loc, s_notes in sample_schedules:
-                    cursor.execute(
-                        """INSERT INTO schedules (user_id, date, time, title, category, location, notes, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (u_id, s_date, s_time, s_title, s_cat, s_loc, s_notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                    )
-                conn.commit()
+        # Seed regular schedules for all users if needed
+        seed_resident_regular_schedules(start_date="2026-09-01", end_date="2026-12-31")
 
 # Group Management
 def add_group(group_name: str, patient_id: int):
@@ -1029,6 +1009,71 @@ def update_schedule(schedule_id: int, date_str: str, time_str: str, title: str, 
         )
         conn.commit()
         return cursor.rowcount > 0
+
+def seed_resident_regular_schedules(start_date: str = "2026-09-01", end_date: str = "2026-12-31") -> int:
+    """
+    Populates regular weekly and daily schedules for all residents across a given date range.
+    Schedules:
+    - 毎日: 07:00 朝食, 12:00 昼食, 15:00 お茶, 19:00 夕食
+    - 月・水・金: 14:00 リクレーション
+    - 火・木・土: 14:00 セミナー
+    - 日: 14:00 ご家族面会
+    Returns the number of newly added schedules.
+    """
+    from datetime import datetime, timedelta
+    
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    total_added = 0
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users")
+        user_ids = [row["id"] for row in cursor.fetchall()]
+        if not user_ids:
+            return 0
+
+        curr_dt = start_dt
+        while curr_dt <= end_dt:
+            date_str = curr_dt.strftime("%Y-%m-%d")
+            weekday = curr_dt.weekday()  # 0: Mon, 1: Tue, 2: Wed, 3: Thu, 4: Fri, 5: Sat, 6: Sun
+
+            # Daily base schedules
+            day_items = [
+                ("07:00", "朝食", "meal", "食堂", "栄養バランスの取れた朝食"),
+                ("12:00", "昼食", "meal", "食堂", "季節の昼食メニュー"),
+                ("15:00", "お茶", "meal", "デイルーム", "温かいお茶と水分補給"),
+                ("19:00", "夕食", "meal", "食堂", "消化に良い夕食御膳"),
+            ]
+
+            # Weekday-specific schedules at 14:00
+            if weekday in (0, 2, 4):  # 月、水、金
+                day_items.append(("14:00", "リクレーション", "activity", "デイルーム", "皆で楽しむレクリエーション活動"))
+            elif weekday in (1, 3, 5):  # 火、木、土
+                day_items.append(("14:00", "セミナー", "activity", "多目的ホール", "健康・教養セミナー"))
+            elif weekday == 6:  # 日
+                day_items.append(("14:00", "ご家族面会", "visit", "居室・面会室", "ご家族様とのご面会時間"))
+
+            for u_id in user_ids:
+                for time_str, title, category, location, notes in day_items:
+                    cursor.execute(
+                        "SELECT id FROM schedules WHERE user_id = ? AND date = ? AND time = ? AND title = ?",
+                        (u_id, date_str, time_str, title)
+                    )
+                    if not cursor.fetchone():
+                        cursor.execute(
+                            """INSERT INTO schedules (user_id, date, time, title, category, location, notes, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (u_id, date_str, time_str, title, category, location, notes, now_str)
+                        )
+                        total_added += 1
+
+            curr_dt += timedelta(days=1)
+        conn.commit()
+
+    return total_added
 
 
 
