@@ -212,6 +212,7 @@ class GeminiLiveSession:
         self.is_closing = False
         self._interrupted = False
         self.pending_chunks = []
+        self.ai_streamed_text_buffer = ""
         self.audio_chunks_in_turn = 0
         self.last_audio_output_time = 0.0
         self._connect_lock = asyncio.Lock()
@@ -691,56 +692,90 @@ class GeminiLiveSession:
             if self.on_etegami_visibility_changed:
                 self.on_etegami_visibility_changed(False)
 
+        # Accumulate streaming chunks into session window for robust cross-chunk matching
+        self.ai_streamed_text_buffer = (self.ai_streamed_text_buffer + text_val)[-600:]
+        eval_text = self.ai_streamed_text_buffer
+
         # Detect Etegami Completion command from Gemini speech or thought
         is_gemini_etegami_complete = (
-            "デジタル絵手紙完成" in text_val or
-            ("みまもりさん" in text_val and "絵手紙" in text_val and "完成" in text_val) or
-            "絵手紙完成" in text_val
+            "デジタル絵手紙完成" in eval_text or
+            ("みまもりさん" in eval_text and "絵手紙" in eval_text and "完成" in eval_text) or
+            "絵手紙完成" in eval_text
         )
         if is_gemini_etegami_complete:
-            print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger: '{text_val}'")
+            print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger in eval_text: '{eval_text[-60:]}'")
+            self.ai_streamed_text_buffer = ""
             if self.on_etegami_completed:
                 self.on_etegami_completed()
 
         # Detect Etegami JSON update command from Gemini speech or thought
         # Target keywords:
         # "みまもりさん、デジタル絵手紙JSONファィル更新お願いします" / "みまもりさん、デジタル絵手紙JSONファイル更新お願いします"
-        norm_val = text_val.replace("ファィル", "ファイル").replace("ｊｓｏｎ", "json").replace("ＪＳＯＮ", "json").lower()
+        norm_val = eval_text.replace("ファィル", "ファイル").replace("ｊｓｏｎ", "json").replace("ＪＳＯＮ", "json").lower()
         is_gemini_etegami_json = (
-            ("みまもりさん" in text_val or "みまもり" in text_val) and
-            ("デジタル絵手紙" in text_val or "絵手紙" in text_val) and
+            ("みまもりさん" in eval_text or "みまもり" in eval_text) and
+            ("デジタル絵手紙" in eval_text or "絵手紙" in eval_text) and
             ("json" in norm_val or "ファイル" in norm_val) and
-            ("更新" in text_val or "お願い" in text_val)
+            ("更新" in eval_text or "お願い" in eval_text)
         ) or (
             "デジタル絵手紙jsonファイル更新" in norm_val or
-            "デジタル絵手紙jsonファィル更新" in text_val.lower()
+            "デジタル絵手紙jsonファィル更新" in eval_text.lower()
         )
         is_gemini_etegami = is_gemini_etegami_json or (
-            "デジタル絵手紙更新" in text_val or
-            "デジタル絵手紙を更新" in text_val or
-            ("みまもりさん" in text_val and "絵手紙" in text_val and "更新" in text_val) or
-            "絵手紙更新" in text_val
+            "デジタル絵手紙更新" in eval_text or
+            "デジタル絵手紙を更新" in eval_text or
+            ("みまもりさん" in eval_text and "絵手紙" in eval_text and "更新" in eval_text) or
+            ("絵手紙" in eval_text and "更新" in eval_text and "お願い" in eval_text) or
+            "絵手紙更新" in eval_text
         )
         if is_gemini_etegami:
             if self.is_etegami_updating:
-                print(f"[Gemini Live Session]: Already updating Etegami - ignoring duplicate trigger: '{text_val}'")
-            elif (now - self.last_etegami_update_time < 5.0):
-                print(f"[Gemini Live Session]: Etegami recently updated (<5s) - ignoring duplicate trigger: '{text_val}'")
+                print(f"[Gemini Live Session]: Already updating Etegami - ignoring duplicate trigger: '{eval_text[-60:]}'")
+            elif (now - self.last_etegami_update_time < 4.0):
+                print(f"[Gemini Live Session]: Etegami recently updated (<4s) - ignoring duplicate trigger: '{eval_text[-60:]}'")
             else:
                 # Extract update content reported by Gemini
                 # Format: "みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）"
                 # or freeform: "〜〜更新お願いします。モチーフは桜で、文字は春が来たよにしてください。"
-                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', text_val)
-                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', text_val)
+                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', eval_text)
+                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', eval_text)
                 motif = motif_match.group(1).strip() if motif_match else ""
                 msg = msg_match.group(1).strip() if msg_match else ""
+                if motif:
+                    motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
+                    motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
+                if msg:
+                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
+                    msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
+                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
 
                 # Fallback: scan for known seasonal / reminiscence motifs in text
                 if not motif:
-                    for kw in ["夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉", "文化祭"]:
-                        if kw in text_val:
+                    for kw in ["文化祭", "学園祭", "喫茶店", "カフェ", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
+                        if kw in eval_text:
                             motif = kw
                             break
+
+                # If still no motif, check if the phrase appears incomplete (Gemini still streaming parameters)
+                if not motif:
+                    cleaned_tail = eval_text.rstrip("。、 　\n")
+                    has_pending_motif = (
+                        cleaned_tail.endswith("お願い") or
+                        cleaned_tail.endswith("お願いします") or
+                        cleaned_tail.endswith("お願い致し") or
+                        cleaned_tail.endswith("いたします") or
+                        cleaned_tail.endswith("更新") or
+                        cleaned_tail.endswith("ファイル") or
+                        cleaned_tail.endswith("ファィル") or
+                        cleaned_tail.endswith("json") or
+                        cleaned_tail.endswith("JSON") or
+                        "（" in eval_text or
+                        "(" in eval_text or
+                        "モチーフ" in eval_text
+                    )
+                    if has_pending_motif:
+                        print(f"[Gemini Live Session]: Trigger phrase detected but motif pending in stream: '{eval_text[-60:]}' - waiting for next chunk...")
+                        return
 
                 # If still no motif, but there is content after the trigger phrase, extract hint
                 if not motif:
@@ -749,15 +784,16 @@ class GeminiLiveSession:
                         r'デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)'
                     ]
                     for tp in trigger_patterns:
-                        m = re.search(tp, text_val, re.IGNORECASE)
+                        m = re.search(tp, eval_text, re.IGNORECASE)
                         if m and m.group(1).strip():
                             content_tail = m.group(1).strip().strip("（）()")
                             if content_tail:
                                 motif = content_tail[:25]
                             break
 
-                print(f"[Gemini Live Session]: Detected Gemini Etegami JSON Update Trigger: '{text_val}' -> motif='{motif}', msg='{msg}'")
+                print(f"[Gemini Live Session]: Detected Gemini Etegami JSON Update Trigger in eval_text: '{eval_text[-80:]}' -> motif='{motif}', msg='{msg}'")
                 self.last_etegami_update_time = now
+                self.ai_streamed_text_buffer = ""
                 if self.on_etegami_updated:
                     self.on_etegami_updated(motif, msg)
 
@@ -826,6 +862,8 @@ class GeminiLiveSession:
                     print(f"[Gemini Live Server API Error]: {data['error']}")
                 
                 server_content = data.get("serverContent", {})
+                if server_content.get("turnComplete"):
+                    self.ai_streamed_text_buffer = ""
 
                 # Check for outputTranscription (Gemini 3.8 Live text output format)
                 if "outputTranscription" in server_content:

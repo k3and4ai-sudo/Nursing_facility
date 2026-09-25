@@ -600,33 +600,23 @@ def modify_or_create_etegami(
         }
     ]
 
-    # 2. If no explicit motif provided, cycle to next distinct preset based on currently displayed artwork
-    if not explicit_motif:
-        current_img = ""
-        try:
-            latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
-            if latest_row and latest_row.get("payload"):
-                current_img = latest_row["payload"].get("generated_image_url") or ""
-        except Exception:
-            pass
-
-        curr_idx = -1
-        for idx, p in enumerate(ROTATING_PRESETS):
-            if p["image_url"] == current_img:
-                curr_idx = idx
-                break
-        
-        next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
-        selected_image = next_preset["image_url"]
-        theme_title = next_preset["theme"]
-        calligraphy_text = message_hint or next_preset["calligraphy"]
-        stamp_icon = next_preset["stamp_icon"]
-        season_key = next_preset["season"]
-        base_source = next_preset["source"]
-
-    # 3. Explicit motif mappings (resident requested specific adjustments)
-    if explicit_motif or not selected_image:
-        if any(k in combined for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
+    # 2. Explicit motif mappings (resident or Gemini requested specific adjustments)
+    if explicit_motif:
+        if any(k in combined for k in ["喫茶店", "カフェ", "コーヒー", "お茶会"]):
+            selected_image = "/family/assets/generated_relaxation_porch.jpg"
+            theme_title = "【手作り絵手紙】懐かしの喫茶店と思い出の味"
+            calligraphy_text = message_hint or "香り広がる 懐かしいひととき"
+            stamp_icon = "☕"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["展覧会", "作品展", "一作展", "絵画展", "美術展"]):
+            selected_image = "/family/assets/sample_postcard.jpg"
+            theme_title = "【手作り絵手紙】心を込めた作品展の思い出"
+            calligraphy_text = message_hint or "彩り豊かな 創作のよろこび"
+            stamp_icon = "🎨"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
             selected_image = "/family/assets/generated_undoukai_bento.jpg"
             theme_title = "【手作り絵手紙】青春の文化祭と思い出"
             calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
@@ -698,12 +688,37 @@ def modify_or_create_etegami(
             calligraphy_text = message_hint or f"懐かしい {clean_motif}に 思いを馳せて"
             stamp_icon = "🍂"
             base_source = "reminiscence"
-        elif not selected_image:
-            template = SEASONAL_TEMPLATES.get(season_key, SEASONAL_TEMPLATES["autumn"])
-            selected_image = template["image_url"]
-            theme_title = f"【手作り絵手紙】{template['name']}"
-            calligraphy_text = message_hint or template["calligraphy"]
-            stamp_icon = template["icon"]
+    else:
+        # 3. If no explicit motif provided, cycle to next distinct preset based on currently displayed artwork
+        current_img = ""
+        try:
+            latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
+            if latest_row and latest_row.get("payload"):
+                current_img = latest_row["payload"].get("generated_image_url") or ""
+        except Exception:
+            pass
+
+        curr_idx = -1
+        for idx, p in enumerate(ROTATING_PRESETS):
+            if p["image_url"] == current_img:
+                curr_idx = idx
+                break
+        
+        next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
+        selected_image = next_preset["image_url"]
+        theme_title = next_preset["theme"]
+        calligraphy_text = message_hint or next_preset["calligraphy"]
+        stamp_icon = next_preset["stamp_icon"]
+        season_key = next_preset["season"]
+        base_source = next_preset["source"]
+
+    # Failsafe for unassigned image
+    if not selected_image:
+        template = SEASONAL_TEMPLATES.get(season_key, SEASONAL_TEMPLATES["autumn"])
+        selected_image = template["image_url"]
+        theme_title = f"【手作り絵手紙】{template['name']}"
+        calligraphy_text = message_hint or template["calligraphy"]
+        stamp_icon = template["icon"]
 
     # 4. Completion Status and Family Summaries
     status = "completed" if is_completed else "drafting"
@@ -769,6 +784,7 @@ def modify_or_create_etegami(
         "title": theme_title,
         "theme": theme_title,
         "image_url": selected_image,
+        "generated_image_url": selected_image,
         "calligraphy": calligraphy_text,
         "stamp_icon": stamp_icon,
         "season": season_key,
@@ -776,7 +792,8 @@ def modify_or_create_etegami(
         "is_completed": is_completed,
         "status": status,
         "badge_text": badge_text,
-        "base_source": base_source
+        "base_source": base_source,
+        "postcard_metadata": payload["postcard_metadata"]
     }
 
 
