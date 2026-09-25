@@ -533,8 +533,10 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // 🎨 Etegami Card voice commands (デジタル絵手紙カードの表示・終了)
+            const cleanNorm = clean.replace(/[。、.!?！？\s]/g, "").replace(/絵お/g, "絵を").replace(/えお/g, "えを").replace(/手紙お/g, "手紙を");
             const SHOW_ETEGAMI_COMMANDS = [
-                "絵を描きたい", "絵をかきたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+                "絵を描きたい", "絵をかきたい", "絵お描きたい", "絵お書きたい", "絵描きたい", "絵かきたい", "絵書きたい",
+                "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
                 "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
                 "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
                 "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
@@ -545,16 +547,32 @@ document.addEventListener("DOMContentLoaded", () => {
                 "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
                 "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
                 "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
-                "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
+                "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう",
+                "絵閉じて", "絵とじて", "絵消して"
             ];
 
-            if (SHOW_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd))) {
-                console.log("[SpeechRec Etegami]: Voice triggered SHOW etegami card:", clean);
+            const hasEtegamiTarget = cleanNorm.includes("絵") || cleanNorm.includes("え") || cleanNorm.includes("手紙") || cleanNorm.includes("てがみ");
+            const hasEtegamiShowAction = cleanNorm.includes("描きたい") || cleanNorm.includes("かきたい") || cleanNorm.includes("書きたい") ||
+                                         cleanNorm.includes("出したい") || cleanNorm.includes("だしたい") || cleanNorm.includes("出して") || cleanNorm.includes("だして") ||
+                                         cleanNorm.includes("表示") || cleanNorm.includes("ひょうじ") || cleanNorm.includes("見せて") || cleanNorm.includes("みせて") ||
+                                         cleanNorm.includes("起動") || cleanNorm.includes("きどう");
+            const hasEtegamiHideAction = cleanNorm.includes("終わ") || cleanNorm.includes("おわ") ||
+                                         cleanNorm.includes("閉じて") || cleanNorm.includes("とじて") ||
+                                         cleanNorm.includes("消して") || cleanNorm.includes("けして") ||
+                                         cleanNorm.includes("非表示") || cleanNorm.includes("終了") || cleanNorm.includes("しゅうりょう");
+
+            const isShowEtegami = (SHOW_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd) || cleanNorm.includes(cmd)) ||
+                                   (hasEtegamiTarget && hasEtegamiShowAction)) && !hasEtegamiHideAction;
+            const isHideEtegami = HIDE_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd) || cleanNorm.includes(cmd)) ||
+                                  (hasEtegamiTarget && hasEtegamiHideAction);
+
+            if (isShowEtegami) {
+                console.log("[SpeechRec Etegami]: Voice triggered SHOW etegami card:", clean, "normalized:", cleanNorm);
                 if (typeof showEtegamiCard === "function") {
                     showEtegamiCard();
                 }
-            } else if (HIDE_ETEGAMI_COMMANDS.some(cmd => clean.includes(cmd))) {
-                console.log("[SpeechRec Etegami]: Voice triggered HIDE etegami card:", clean);
+            } else if (isHideEtegami) {
+                console.log("[SpeechRec Etegami]: Voice triggered HIDE etegami card:", clean, "normalized:", cleanNorm);
                 if (typeof hideEtegamiCard === "function") {
                     hideEtegamiCard();
                 }
@@ -1065,11 +1083,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 // Detect Gemini Live etegami card commands
+                const rawNorm = rawText.replace(/[。、.!?！？\s]/g, "").replace(/絵お/g, "絵を").replace(/えお/g, "えを");
                 const isToGeminiShowEtegami = (
                     rawText.includes("みまもりさん、デジタル絵手紙を表示してください") ||
                     rawText.includes("デジタル絵手紙を表示してください") ||
                     rawText.includes("デジタル絵手紙を表示") ||
-                    rawText.includes("デジタル絵手紙を出して")
+                    rawText.includes("デジタル絵手紙を出して") ||
+                    rawNorm.includes("デジタル絵手紙を表示") ||
+                    rawNorm.includes("デジタル絵手紙出して") ||
+                    rawNorm.includes("デジタル絵手紙起動") ||
+                    rawNorm.includes("絵手紙を表示") ||
+                    rawNorm.includes("絵手紙出して")
                 );
                 const isToGeminiHideEtegami = (
                     rawText.includes("みまもりさん、デジタル絵手紙をとじてください") ||
@@ -1078,7 +1102,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     rawText.includes("デジタル絵手紙を閉じてください") ||
                     rawText.includes("デジタル絵手紙をとじて") ||
                     rawText.includes("デジタル絵手紙を閉じて") ||
-                    rawText.includes("デジタル絵手紙を非表示")
+                    rawText.includes("デジタル絵手紙を非表示") ||
+                    rawNorm.includes("デジタル絵手紙をとじて") ||
+                    rawNorm.includes("デジタル絵手紙を閉じて") ||
+                    rawNorm.includes("デジタル絵手紙とじて") ||
+                    rawNorm.includes("デジタル絵手紙閉じて") ||
+                    rawNorm.includes("デジタル絵手紙非表示")
                 );
 
                 if (isToGeminiShowEtegami) {

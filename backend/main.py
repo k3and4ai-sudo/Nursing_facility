@@ -1730,6 +1730,41 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident request in '{speech_text}' (motif='{detected_motif}')")
             asyncio.create_task(on_live_etegami_update(detected_motif, ""))
 
+    def check_etegami_visibility_intent(text: str):
+        if not text:
+            return None
+        norm = re.sub(r"[。、.!?！？\s]", "", text).replace("絵お", "絵を").replace("えお", "えを").replace("手紙お", "手紙を")
+        show_keywords = [
+            "絵を描きたい", "絵をかきたい", "絵お描きたい", "絵お書きたい", "絵描きたい", "絵かきたい", "絵書きたい",
+            "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
+            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
+            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
+            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
+            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
+        ]
+        hide_keywords = [
+            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
+            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
+            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
+            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
+            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう",
+            "絵とじて", "絵閉じて", "絵消して"
+        ]
+        if any(k in text or k in norm for k in show_keywords):
+            return True
+        if any(k in text or k in norm for k in hide_keywords):
+            return False
+
+        has_target = any(k in norm for k in ["絵", "え", "手紙", "てがみ"])
+        has_show = any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出したい", "だしたい", "出して", "だして", "表示", "ひょうじ", "見せて", "みせて", "起動", "きどう"])
+        has_hide = any(k in norm for k in ["終わ", "おわ", "閉じて", "とじて", "消して", "けして", "非表示", "終了", "しゅうりょう"])
+
+        if has_target and has_hide:
+            return False
+        if has_target and has_show:
+            return True
+        return None
+
     # Initialize Gemini Live Session
     def on_gemini_thought(thought: str):
         asyncio.create_task(websocket.send_json({
@@ -1811,24 +1846,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_schedule_visibility(False))
 
         # 1-3. Immediate voice command detection for Etegami Card visibility
-        to_show_etegami = any(k in text_to_check for k in [
-            "絵を描きたい", "絵をかきたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
-            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
-            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
-        ])
-        to_hide_etegami = any(k in text_to_check for k in [
-            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
-            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
-            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
-            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
-            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
-        ])
-        if to_show_etegami:
+        etegami_vis_intent = check_etegami_visibility_intent(text_to_check)
+        if etegami_vis_intent is True:
             print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Etegami Card: '{text_to_check}'")
             asyncio.create_task(on_live_etegami_visibility(True))
-        elif to_hide_etegami:
+        elif etegami_vis_intent is False:
             print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
             asyncio.create_task(on_live_etegami_visibility(False))
 
@@ -1897,23 +1919,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_schedule_visibility(False))
 
         # Check for etegami card triggers directly from Whisper STT
-        to_show_etegami = any(k in transcribed_text for k in [
-            "絵を描きたい", "絵をかきたい", "絵を出して", "デジタル絵手紙を出して", "デジタル絵手紙を表示して", "デジタル絵手紙起動",
-            "デジタル絵手紙をかきたい", "デジタル絵手紙を描きたい", "デジタル絵手紙かきたい", "デジタル絵手紙描きたい",
-            "絵手紙をかきたい", "絵手紙を描きたい", "えをかきたい", "絵だして", "絵をだして", "えをだして",
-            "デジタル絵手紙出して", "デジタル絵手紙表示して", "デジタル絵手紙を表示", "デジタル絵手紙見せて", "デジタル絵手紙を見せて",
-            "デジタルえてがみをだして", "デジタルえてがみをひょうじして", "デジタルえてがみきどう", "デジタルえてがみをかきたい"
-        ])
-        to_hide_etegami = any(k in transcribed_text for k in [
-            "お絵描きを終わる", "絵をとじて", "デジタル絵手紙をとじて", "デジタル絵手紙を非表示にして", "デジタル絵手紙終了",
-            "お絵かきを終わる", "おえかきをおわる", "お絵描き終了", "お絵かき終了",
-            "絵を閉じて", "えをとじて", "絵をとじる", "絵を閉じる", "絵を消して", "絵を消す",
-            "デジタル絵手紙を閉じて", "デジタル絵手紙閉じて", "デジタル絵手紙とじて", "デジタル絵手紙消して", "デジタル絵手紙を消して",
-            "デジタル絵手紙非表示", "デジタルえてがみをとじて", "デジタルえてがみしゅうりょう"
-        ])
-        if to_show_etegami:
+        etegami_stt_intent = check_etegami_visibility_intent(transcribed_text)
+        if etegami_stt_intent is True:
+            print(f"[Whisper STT ({terminal_id})]: Voice triggered Show Etegami Card: '{transcribed_text}'")
             asyncio.create_task(on_live_etegami_visibility(True))
-        elif to_hide_etegami:
+        elif etegami_stt_intent is False:
+            print(f"[Whisper STT ({terminal_id})]: Voice triggered Hide Etegami Card: '{transcribed_text}'")
             asyncio.create_task(on_live_etegami_visibility(False))
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
