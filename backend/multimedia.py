@@ -468,12 +468,17 @@ def generate_multimedia_payload(
     card_image = extracted_data.get("generated_image_url") if extracted_data else None
     if not card_image:
         p_str = str(extracted_data) if extracted_data else ""
-        if "友達" in p_str or "お酒" in p_str or "teacup" in p_str or "relaxation_porch" in p_str:
-            card_image = "/family/assets/generated_relaxation_porch.jpg"
+        if "喫茶" in p_str or "カフェ" in p_str or "コーヒー" in p_str or "珈琲" in p_str:
+            if "教室" in p_str or "文化祭" in p_str or "学園祭" in p_str:
+                card_image = "/family/assets/generated_bunkasai.jpg"
+            else:
+                card_image = "/family/assets/generated_kissaten.jpg"
+        elif "文化祭" in p_str or "学園祭" in p_str or "教室" in p_str or "bunkasai" in p_str:
+            card_image = "/family/assets/generated_bunkasai.jpg"
         elif "運動会" in p_str or "お弁当" in p_str or "煮物" in p_str or "undoukai" in p_str:
             card_image = "/family/assets/generated_undoukai_bento.jpg"
-        elif "文化祭" in p_str or "学園祭" in p_str or "bunkasai" in p_str:
-            card_image = "/family/assets/generated_bunkasai.jpg"
+        elif "友達" in p_str or "お酒" in p_str or "teacup" in p_str or "relaxation_porch" in p_str or "縁側" in p_str:
+            card_image = "/family/assets/generated_relaxation_porch.jpg"
         else:
             card_image = template["image_url"]
 
@@ -611,7 +616,8 @@ def modify_or_create_etegami(
     # 1. Check if resident specified an explicit motif or alteration
     explicit_motif = bool(motif_hint and motif_hint.strip())
     motif_candidates = [
-        "文化祭", "学園祭", "学校", "高校", "青春", "映画", "映画館", "シネマ",
+        "文化祭", "学園祭", "学校", "高校", "青春", "教室", "映画", "映画館", "シネマ",
+        "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
         "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶", "のんびり",
         "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和", "昔の思い出",
         "春", "桜", "さくら", "花見", "お花見", "夏", "朝顔", "風鈴", "向日葵", "ひまわり",
@@ -637,6 +643,14 @@ def modify_or_create_etegami(
             "stamp_icon": "🍵",
             "season": "autumn",
             "source": "healing"
+        },
+        {
+            "image_url": "/family/assets/generated_kissaten.jpg",
+            "theme": "【手作り絵手紙】懐かしの喫茶店と思い出の味",
+            "calligraphy": "香り広がる 懐かしいひととき",
+            "stamp_icon": "☕",
+            "season": "autumn",
+            "source": "reminiscence"
         },
         {
             "image_url": "/family/assets/generated_healing_sparrows.jpg",
@@ -682,8 +696,20 @@ def modify_or_create_etegami(
 
     # 2. Explicit motif mappings (resident or Gemini requested specific adjustments)
     if explicit_motif:
-        if any(k in combined for k in ["喫茶店", "カフェ", "コーヒー", "お茶会"]):
-            selected_image = "/family/assets/generated_relaxation_porch.jpg"
+        if any(k in combined for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
+            # Classroom cafe / culture festival
+            selected_image = "/family/assets/generated_bunkasai.jpg"
+            if any(k in combined for k in ["喫茶", "カフェ", "コーヒー"]):
+                theme_title = "【手作り絵手紙】懐かしの教室喫茶と思い出"
+                calligraphy_text = message_hint or "仲間と楽しんだ 喫茶の思い出"
+            else:
+                theme_title = "【手作り絵手紙】青春の文化祭と思い出"
+                calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
+            stamp_icon = "🍁"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "お茶会"]):
+            selected_image = "/family/assets/generated_kissaten.jpg"
             theme_title = "【手作り絵手紙】懐かしの喫茶店と思い出の味"
             calligraphy_text = message_hint or "香り広がる 懐かしいひととき"
             stamp_icon = "☕"
@@ -694,20 +720,6 @@ def modify_or_create_etegami(
             theme_title = "【手作り絵手紙】心を込めた作品展の思い出"
             calligraphy_text = message_hint or "彩り豊かな 創作のよろこび"
             stamp_icon = "🎨"
-            season_key = "autumn"
-            base_source = "reminiscence"
-        elif any(k in combined for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
-            # Attempt dynamic generation with gemini-3-pro-image, fallback to generated_bunkasai.jpg
-            custom_prompt = (
-                "A gentle nostalgic Japanese watercolor painting, Etegami art style. "
-                "Inside a nostalgic Japanese high school classroom during a culture festival (bunkasai) in autumn. "
-                "Class cafe with handmade decorations, paper banners, happy students in uniforms, warm afternoon sunlight, masterpiece."
-            )
-            dyn_img = generate_image_with_gemini(custom_prompt, output_filename=f"generated_bunkasai_{user_id}.jpg")
-            selected_image = dyn_img or "/family/assets/generated_bunkasai.jpg"
-            theme_title = "【手作り絵手紙】青春の文化祭と思い出"
-            calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
-            stamp_icon = "🍁"
             season_key = "autumn"
             base_source = "reminiscence"
         elif any(k in combined for k in ["映画", "映画館", "シネマ", "名画"]):
@@ -787,11 +799,23 @@ def modify_or_create_etegami(
             pass
 
         for msg in recent_user_msgs:
-            if any(k in msg for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
+            if any(k in msg for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
                 selected_image = "/family/assets/generated_bunkasai.jpg"
-                theme_title = "【手作り絵手紙】青春の文化祭と思い出"
-                calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
+                if any(k in msg for k in ["喫茶", "カフェ", "コーヒー"]):
+                    theme_title = "【手作り絵手紙】懐かしの教室喫茶と思い出"
+                    calligraphy_text = message_hint or "仲間と楽しんだ 喫茶の思い出"
+                else:
+                    theme_title = "【手作り絵手紙】青春の文化祭と思い出"
+                    calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
                 stamp_icon = "🍁"
+                season_key = "autumn"
+                base_source = "reminiscence"
+                break
+            elif any(k in msg for k in ["喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "お茶会"]):
+                selected_image = "/family/assets/generated_kissaten.jpg"
+                theme_title = "【手作り絵手紙】懐かしの喫茶店と思い出の味"
+                calligraphy_text = message_hint or "香り広がる 懐かしいひととき"
+                stamp_icon = "☕"
                 season_key = "autumn"
                 base_source = "reminiscence"
                 break
@@ -894,6 +918,12 @@ def modify_or_create_etegami(
         "badge_text": badge_text,
         "base_source": base_source,
         "generated_image_url": selected_image,
+        "image_generation_prompt": {
+            "positive_prompt": f"A gentle nostalgic Japanese watercolor painting, Etegami art style. Depicting {theme_title}, soft sunlight, nostalgic atmosphere, pastel palette, high quality illustration.",
+            "negative_prompt": "modern gadgets, smartphones, photorealistic, 3D render, dark, text, watermark",
+            "art_style": "Japanese Watercolor / Etegami (絵手紙・水彩画風)",
+            "aspect_ratio": "4:3"
+        },
         "postcard_metadata": {
             "headline": theme_title,
             "calligraphy_message": calligraphy_text,

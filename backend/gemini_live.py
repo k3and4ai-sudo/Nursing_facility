@@ -734,6 +734,14 @@ class GeminiLiveSession:
             elif (now - self.last_etegami_update_time < 4.0):
                 print(f"[Gemini Live Session]: Etegami recently updated (<4s) - ignoring duplicate trigger: '{eval_text[-60:]}'")
             else:
+                # If an opening parenthesis is present, ensure closing parenthesis has arrived before triggering
+                paren_start = eval_text.find("（") if "（" in eval_text else eval_text.find("(")
+                if paren_start != -1:
+                    has_closing_paren = ("）" in eval_text[paren_start:]) or (")" in eval_text[paren_start:])
+                    if not has_closing_paren:
+                        print(f"[Gemini Live Session]: Trigger phrase parenthesis still open in stream: '{eval_text[-60:]}' - waiting for next chunk...")
+                        return
+
                 # Extract update content reported by Gemini
                 # Format: "みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）"
                 # or freeform: "〜〜更新お願いします。モチーフは桜で、文字は春が来たよにしてください。"
@@ -751,7 +759,7 @@ class GeminiLiveSession:
 
                 # Fallback: scan for known seasonal / reminiscence motifs in text
                 if not motif:
-                    for kw in ["文化祭", "学園祭", "喫茶店", "カフェ", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
+                    for kw in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
                         if kw in eval_text:
                             motif = kw
                             break

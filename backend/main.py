@@ -1606,7 +1606,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
                 msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
             if not motif:
-                for kw in ["文化祭", "学園祭", "喫茶店", "カフェ", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
+                for kw in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
                     if kw in full_text:
                         motif = kw
                         break
@@ -1858,7 +1858,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "描きたい", "かきたい", "書きたい", "描く", "かく", "更新", "直して", "変えて", "出して", "作って",
                 "になっていない", "になってません", "変わってない", "変わっていません", "違います", "違う", "更新されない", "更新されてない", "更新されていません"
             ])) or
-            (any(m in clean for m in ["文化祭", "学園祭", "喫茶店", "カフェ", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉"]) and
+            (any(m in clean for m in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉"]) and
              any(act in clean for act in [
                  "にして", "を描", "をか", "描きたい", "かきたい", "出して", "見せて", "更新", "出てきてない", "変えて",
                  "やりまし", "やりました", "やった", "になっていな", "なってない", "更新され"
@@ -1868,7 +1868,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         if is_create_or_update:
             detected_motif = ""
             for motif_cand in [
-                "文化祭", "学園祭", "喫茶店", "カフェ", "展覧会", "作品展", "一作展", "映画", "映画館",
+                "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館",
                 "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
                 "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
                 "桜", "さくら", "花見", "お花見", "朝顔", "あさがお", "風鈴", "向日葵", "ひまわり",
@@ -3064,14 +3064,15 @@ def api_get_image_prompt(terminal_id: str):
     extracted from the resident's conversation history.
     """
     record = db.get_latest_image_prompt_payload(terminal_id=terminal_id)
-    if not record:
+    payload = record.get("payload", {}) if record else {}
+    if not payload or "image_generation_prompt" not in payload:
         user = db.get_user_by_terminal(terminal_id)
         if not user:
             raise HTTPException(status_code=404, detail="端末が見つかりません。")
-        # Extract on the fly if not yet cached
+        # Extract on the fly if not yet cached or if legacy payload missing prompt
         payload = multimedia.extract_image_prompt_from_conversation(user["id"], terminal_id)
         return {"status": "success", "data": payload}
-    return {"status": "success", "data": record.get("payload", {})}
+    return {"status": "success", "data": payload}
 
 @app.post("/api/family/multimedia/extract_image_prompt/{terminal_id}")
 def api_extract_image_prompt(terminal_id: str):
