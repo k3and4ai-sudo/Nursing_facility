@@ -66,10 +66,80 @@ def get_current_season() -> str:
     else:
         return "winter"
 
+import os
+import base64
 import urllib.request
 import json
 import time
 from backend import config, database as db
+
+def generate_image_with_gemini(
+    prompt: str,
+    output_filename: str = "generated_gemini_etegami.jpg",
+    model_name: str = "gemini-3-pro-image"
+) -> Optional[str]:
+    """
+    Calls Google Gemini Image Generation model (default: gemini-3-pro-image, fallback: gemini-2.5-flash-image)
+    via Google AI Studio REST API to dynamically generate and save an artwork.
+    Returns relative URL (/family/assets/...) on success, or None on quota/error.
+    """
+    api_key = config.GEMINI_API_KEY
+    if not api_key:
+        print("[Gemini Image Gen Notice]: GEMINI_API_KEY is not configured.")
+        return None
+
+    # Try requested model (gemini-3-pro-image), and fallback to flash if needed
+    models_to_try = [model_name]
+    if model_name != "gemini-2.5-flash-image":
+        models_to_try.append("gemini-2.5-flash-image")
+
+    for m in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt}
+                    ]
+                }
+            ]
+        }
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    for p in parts:
+                        if "inlineData" in p:
+                            b64_data = p["inlineData"].get("data", "")
+                            if b64_data:
+                                img_bytes = base64.b64decode(b64_data)
+                                assets_dir = os.path.join(os.path.dirname(config.BASE_DIR), "frontend/family/assets")
+                                docs_dir = os.path.join(os.path.dirname(config.BASE_DIR), "docs/assets")
+                                os.makedirs(assets_dir, exist_ok=True)
+                                os.makedirs(docs_dir, exist_ok=True)
+                                
+                                target_file = os.path.join(assets_dir, output_filename)
+                                with open(target_file, "wb") as f_out:
+                                    f_out.write(img_bytes)
+                                docs_target = os.path.join(docs_dir, output_filename)
+                                with open(docs_target, "wb") as f_out2:
+                                    f_out2.write(img_bytes)
+                                print(f"[Gemini Image Gen SUCCESS]: Saved {m} generated image to {output_filename}")
+                                return f"/family/assets/{output_filename}"
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            print(f"[Gemini Image Gen Notice]: Model {m} returned HTTP {e.code} ({err_body[:100]}...). Falling back.")
+        except Exception as e:
+            print(f"[Gemini Image Gen Notice]: Model {m} call failed: {e}. Falling back.")
+
+    return None
 
 def get_all_templates() -> List[Dict[str, Any]]:
     """Returns the list of all seasonal templates for UI selection."""
@@ -402,6 +472,8 @@ def generate_multimedia_payload(
             card_image = "/family/assets/generated_relaxation_porch.jpg"
         elif "運動会" in p_str or "お弁当" in p_str or "煮物" in p_str or "undoukai" in p_str:
             card_image = "/family/assets/generated_undoukai_bento.jpg"
+        elif "文化祭" in p_str or "学園祭" in p_str or "bunkasai" in p_str:
+            card_image = "/family/assets/generated_bunkasai.jpg"
         else:
             card_image = template["image_url"]
 
@@ -597,6 +669,14 @@ def modify_or_create_etegami(
             "stamp_icon": "🍁",
             "season": "autumn",
             "source": "reminiscence"
+        },
+        {
+            "image_url": "/family/assets/generated_bunkasai.jpg",
+            "theme": "【手作り絵手紙】青春の文化祭と思い出",
+            "calligraphy": "仲間と創った 懐かしい日々",
+            "stamp_icon": "🍁",
+            "season": "autumn",
+            "source": "reminiscence"
         }
     ]
 
@@ -617,7 +697,14 @@ def modify_or_create_etegami(
             season_key = "autumn"
             base_source = "reminiscence"
         elif any(k in combined for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
-            selected_image = "/family/assets/generated_undoukai_bento.jpg"
+            # Attempt dynamic generation with gemini-3-pro-image, fallback to generated_bunkasai.jpg
+            custom_prompt = (
+                "A gentle nostalgic Japanese watercolor painting, Etegami art style. "
+                "Inside a nostalgic Japanese high school classroom during a culture festival (bunkasai) in autumn. "
+                "Class cafe with handmade decorations, paper banners, happy students in uniforms, warm afternoon sunlight, masterpiece."
+            )
+            dyn_img = generate_image_with_gemini(custom_prompt, output_filename=f"generated_bunkasai_{user_id}.jpg")
+            selected_image = dyn_img or "/family/assets/generated_bunkasai.jpg"
             theme_title = "【手作り絵手紙】青春の文化祭と思い出"
             calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
             stamp_icon = "🍁"
@@ -689,28 +776,81 @@ def modify_or_create_etegami(
             stamp_icon = "🍂"
             base_source = "reminiscence"
     else:
-        # 3. If no explicit motif provided, cycle to next distinct preset based on currently displayed artwork
-        current_img = ""
+        # Check recent chat history turns from newest to oldest first
+        recent_user_msgs = []
         try:
-            latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
-            if latest_row and latest_row.get("payload"):
-                current_img = latest_row["payload"].get("generated_image_url") or ""
+            recent_chats = db.get_chat_history(user_id, limit=25)
+            for c in reversed(recent_chats):
+                if c.get("sender") == "user":
+                    recent_user_msgs.append(c.get("message", "").lower())
         except Exception:
             pass
 
-        curr_idx = -1
-        for idx, p in enumerate(ROTATING_PRESETS):
-            if p["image_url"] == current_img:
-                curr_idx = idx
+        for msg in recent_user_msgs:
+            if any(k in msg for k in ["文化祭", "学園祭", "学校", "高校", "青春"]):
+                selected_image = "/family/assets/generated_bunkasai.jpg"
+                theme_title = "【手作り絵手紙】青春の文化祭と思い出"
+                calligraphy_text = message_hint or "仲間と創った 懐かしい日々"
+                stamp_icon = "🍁"
+                season_key = "autumn"
+                base_source = "reminiscence"
                 break
-        
-        next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
-        selected_image = next_preset["image_url"]
-        theme_title = next_preset["theme"]
-        calligraphy_text = message_hint or next_preset["calligraphy"]
-        stamp_icon = next_preset["stamp_icon"]
-        season_key = next_preset["season"]
-        base_source = next_preset["source"]
+            elif any(k in msg for k in ["桜", "さくら", "花見", "お花見", "春", "入学式"]):
+                selected_image = "/family/assets/sample_postcard_spring.jpg"
+                theme_title = "【手作り絵手紙】満開の桜と春爛漫"
+                calligraphy_text = message_hint or "春の和みを お届けします"
+                stamp_icon = "🌸"
+                season_key = "spring"
+                base_source = "reminiscence"
+                break
+            elif any(k in msg for k in ["運動会", "お弁当", "煮物", "昭和", "子供の頃", "若い頃", "小学校", "おにぎり"]):
+                selected_image = "/family/assets/generated_undoukai_bento.jpg"
+                theme_title = "【手作り絵手紙】懐かしの運動会とお弁当"
+                calligraphy_text = message_hint or "家族で囲んだ 懐かしい味"
+                stamp_icon = "🍱"
+                season_key = "autumn"
+                base_source = "reminiscence"
+                break
+            elif any(k in msg for k in ["夕暮れ", "夕焼け", "夕日", "縁側", "お茶", "のんびり", "一息", "休憩", "相談", "悩み", "安心"]):
+                selected_image = "/family/assets/generated_relaxation_porch.jpg"
+                theme_title = "【手作り絵手紙】夕暮れの縁側とお茶"
+                calligraphy_text = message_hint or "肩の力を抜いて のんびり お茶にしましょ"
+                stamp_icon = "🍵"
+                season_key = "autumn"
+                base_source = "healing"
+                break
+            elif any(k in msg for k in ["小鳥", "すずめ", "雀", "寄り添う", "ことり", "さえずり", "寂しい", "不安", "一人"]):
+                selected_image = "/family/assets/generated_healing_sparrows.jpg"
+                theme_title = "【手作り絵手紙】寄り添う小鳥の温もり"
+                calligraphy_text = message_hint or "心穏やかに 寄り添う日々"
+                stamp_icon = "🕊️"
+                season_key = "autumn"
+                base_source = "healing"
+                break
+
+        # 3. If no chat topic matched either, cycle to next distinct preset based on currently displayed artwork
+        if not selected_image:
+            current_img = ""
+            try:
+                latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
+                if latest_row and latest_row.get("payload"):
+                    current_img = latest_row["payload"].get("generated_image_url") or ""
+            except Exception:
+                pass
+
+            curr_idx = -1
+            for idx, p in enumerate(ROTATING_PRESETS):
+                if p["image_url"] == current_img:
+                    curr_idx = idx
+                    break
+            
+            next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
+            selected_image = next_preset["image_url"]
+            theme_title = next_preset["theme"]
+            calligraphy_text = message_hint or next_preset["calligraphy"]
+            stamp_icon = next_preset["stamp_icon"]
+            season_key = next_preset["season"]
+            base_source = next_preset["source"]
 
     # Failsafe for unassigned image
     if not selected_image:
