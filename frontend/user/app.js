@@ -302,7 +302,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const seasonText = seasonMap[data.season] || (data.season ? `🌿 ${data.season}` : "🍁 秋");
         const dateText = data.date_str || new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
 
-        if (updatingBadge) updatingBadge.classList.remove("hidden");
+        const voiceHint = document.getElementById("etegami-voice-hint");
+        if (data.is_updating === true) {
+            if (updatingBadge) updatingBadge.classList.remove("hidden");
+            if (voiceHint) voiceHint.classList.remove("hidden");
+        } else {
+            if (updatingBadge) updatingBadge.classList.add("hidden");
+            if (voiceHint) voiceHint.classList.add("hidden");
+        }
 
         // Smooth cross-fade transition
         if (cardImg && cardImgNext) {
@@ -1273,17 +1280,70 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[LiveWS]: Received etegami_updating ->", data.updating);
                 isEtegamiUpdating = !!data.updating;
                 const updatingBadge = document.getElementById("etegami-updating-badge");
-                if (updatingBadge) {
-                    if (data.updating) {
-                        updatingBadge.classList.remove("hidden");
-                    } else {
-                        updatingBadge.classList.add("hidden");
+                const lampEtegami = document.getElementById("lamp-etegami");
+                const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
+                const voiceHint = document.getElementById("etegami-voice-hint");
+
+                if (data.updating) {
+                    if (updatingBadge) updatingBadge.classList.remove("hidden");
+                    if (voiceHint) voiceHint.classList.remove("hidden");
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("hidden", "lamp-completed");
+                        lampEtegami.classList.add("lamp-updating");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：絵手紙更新中...";
+                    }
+                } else {
+                    if (updatingBadge) updatingBadge.classList.add("hidden");
+                    if (voiceHint) voiceHint.classList.add("hidden");
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("lamp-updating");
+                        lampEtegami.classList.add("lamp-completed");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "✨ みまもりさん：絵手紙更新完了";
+                        clearTimeout(window._etegamiLampTimer);
+                        window._etegamiLampTimer = setTimeout(() => {
+                            if (lampEtegami) {
+                                lampEtegami.classList.remove("lamp-completed");
+                                lampEtegami.classList.add("hidden");
+                            }
+                        }, 4000);
                     }
                 }
             } else if (data.type === "mimamori_acknowledgement") {
                 console.log("[LiveWS]: Received mimamori_acknowledgement ->", data.message);
                 if (data.message) {
-                    showTemporaryToast(data.message, 4000);
+                    showTemporaryToast(data.message, 4500);
+                }
+                const lampEtegami = document.getElementById("lamp-etegami");
+                const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
+                const voiceHint = document.getElementById("etegami-voice-hint");
+                if (data.action === "etegami_updated") {
+                    if (voiceHint) voiceHint.classList.add("hidden");
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("hidden", "lamp-updating");
+                        lampEtegami.classList.add("lamp-completed");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "✨ みまもりさん：絵手紙更新完了";
+                        clearTimeout(window._etegamiLampTimer);
+                        window._etegamiLampTimer = setTimeout(() => {
+                            if (lampEtegami) {
+                                lampEtegami.classList.remove("lamp-completed");
+                                lampEtegami.classList.add("hidden");
+                            }
+                        }, 4000);
+                    }
+                } else if (data.action === "etegami_complete") {
+                    if (voiceHint) voiceHint.classList.add("hidden");
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("hidden", "lamp-updating");
+                        lampEtegami.classList.add("lamp-completed");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "💮 みまもりさん：絵手紙完成";
+                        clearTimeout(window._etegamiLampTimer);
+                        window._etegamiLampTimer = setTimeout(() => {
+                            if (lampEtegami) {
+                                lampEtegami.classList.remove("lamp-completed");
+                                lampEtegami.classList.add("hidden");
+                            }
+                        }, 4000);
+                    }
                 }
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);

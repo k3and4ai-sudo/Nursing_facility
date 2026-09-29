@@ -1594,7 +1594,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             ("更新" in full_text or "お願い" in full_text or "ファイル" in full_text or "json" in full_text.lower())
         )
         if is_gemini_update_in_turn and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
-            if not getattr(session, "has_resident_requested_etegami", False):
+            if not getattr(session, "has_resident_spoken_in_session", False) or not getattr(session, "has_resident_requested_etegami", False):
                 print(f"[Gemini Live Session ({terminal_id})]: Blocked unsolicited Gemini Etegami update in turn text (resident has not requested etegami in this session).")
             else:
                 motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', full_text)
@@ -1760,7 +1760,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 await websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_updated",
-                    "message": f"🎨 みまもりさん：絵手紙を更新しました（{card_info.get('title', '')}）"
+                    "message": f"✨ みまもりさん：絵手紙の更新が完了しました（{card_info.get('title', '')}）"
+                })
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": False
                 })
                 # Broadcast to staff dashboard
                 await manager.broadcast_to_staff({
@@ -1811,6 +1815,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_complete",
                     "message": "💮 みまもりさん：絵手紙を完成として記録・保存しました"
+                })
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": False
                 })
                 await manager.broadcast_to_staff({
                     "type": "etegami_updated",
@@ -2157,15 +2165,18 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "force_open": False
                 })
             else:
-                initial_card = multimedia.modify_or_create_etegami(
-                    user_id=user["id"],
-                    terminal_id=terminal_id,
-                    motif_hint="秋",
-                    message_hint="心穏やかに 寄り添う日々"
-                )
                 await websocket.send_json({
                     "type": "etegami_update",
-                    **initial_card,
+                    "title": "【手作り絵手紙】秋の訪れとコスモス庭園",
+                    "image_url": "/family/assets/sample_postcard.jpg",
+                    "calligraphy": "おだやかな 秋の日に… お元気で",
+                    "stamp_icon": "🌸",
+                    "season": "autumn",
+                    "date_str": "",
+                    "is_completed": False,
+                    "status": "drafting",
+                    "badge_text": "🎨 下絵制作中",
+                    "base_source": "reminiscence",
                     "force_open": False
                 })
         except Exception as e:

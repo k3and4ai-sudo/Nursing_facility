@@ -218,6 +218,7 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
         etegami_callback.assert_not_called()
 
         # 1. Normal trigger from Gemini after resident requested etegami
+        session.has_resident_spoken_in_session = True
         session.has_resident_requested_etegami = True
         frame1 = json.dumps({
             "serverContent": {

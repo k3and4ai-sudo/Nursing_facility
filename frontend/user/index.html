@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20260925_etegami_pos_fix">
+    <link rel="stylesheet" href="style.css?v=20260929_etegami_lamp_compact">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -176,6 +176,9 @@
                     </div>
 
                     <!-- 和風色紙フレーム (クリックで拡大鑑賞) -->
+                    <div id="etegami-voice-hint" class="etegami-voice-hint hidden">
+                        💡 絵手紙の更新中：「小鳥にして」「夕焼けの縁側に変えて」「文字を変えて」とお話しして手直しできます
+                    </div>
                     <div id="etegami-shikishi-frame" class="etegami-shikishi" title="クリックして大画面で鑑賞">
                         <div class="etegami-img-viewport">
                             <img id="etegami-card-img" src="/family/assets/sample_postcard.jpg" alt="デジタル絵手紙" class="etegami-img-layer current">
@@ -193,14 +196,11 @@
                         </div>
                     </div>
 
-                    <!-- カードフッター (題名と日付・音声変更のヒント) -->
+                    <!-- カードフッター (題名と日付) -->
                     <div class="etegami-card-footer">
                         <div class="etegami-meta-row">
                             <div id="etegami-title" class="etegami-title-text">【手作り絵手紙】秋の訪れとコスモス庭園</div>
                             <div id="etegami-date" class="etegami-date-text">2026年9月</div>
-                        </div>
-                        <div class="etegami-voice-hint">
-                            💡 「小鳥にして」「夕焼けの縁側に変えて」「文字を変えて」とお話しして手直しできます。気に入ったら「これで完成！」とお話しいただくか右上のボタンを押してください
                         </div>
                     </div>
                 </div>
@@ -239,6 +239,10 @@
                     <div id="lamp-speaking" class="status-lamp">
                         <span class="lamp-dot"></span>
                         <span class="lamp-label">🔊 Gemini応答中</span>
+                    </div>
+                    <div id="lamp-etegami" class="status-lamp lamp-etegami hidden">
+                        <span class="lamp-dot etegami-dot"></span>
+                        <span id="lamp-etegami-label" class="lamp-label">🎨 みまもりさん：絵手紙更新中...</span>
                     </div>
                 </div>
 
@@ -512,6 +516,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20260929_reconnect_fix"></script>
+    <script src="app.js?v=20260929_etegami_lamp_compact"></script>
 </body>
 </html>
