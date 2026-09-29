@@ -274,6 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    let isFirstEtegamiLoad = true;
     function updateEtegamiDisplay(data) {
         if (!data) return;
         if (data.force_open === true) {
@@ -386,7 +387,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         console.log("[Etegami Display Updated]:", newTitle, newCalligraphy, "isCompleted=", isCompleted);
         if (typeof showUIToast === "function") {
-            if (isCompleted) {
+            if (data.is_initial === true || isFirstEtegamiLoad) {
+                // Do not show toast on initial load
+                isFirstEtegamiLoad = false;
+            } else if (isCompleted) {
                 showUIToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, "simple");
             } else {
                 showUIToast(`🎨 絵手紙を更新しました`, "simple");
@@ -1150,8 +1154,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
 
-                // Detect Gemini Live etegami card commands (第一キーワード × 第二キーワード)
-                handleEtegamiVoiceTrigger(rawText, "GeminiLiveSpeech");
+                // Note: Etegami card visibility is controlled only by resident voice or user UI buttons, not Gemini speech.
 
                 // Detect Gemini Live recording commands
                 const isToStopRec = (
@@ -1246,14 +1249,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (typeof hideScheduleCard === "function") hideScheduleCard();
                 }
 
-                const isThoughtShowEtegami = data.thought && (data.thought.includes("絵手紙を表示") || data.thought.includes("絵手紙出して") || thought.includes("show etegami") || thought.includes("display etegami"));
-                const isThoughtHideEtegami = data.thought && (data.thought.includes("絵手紙をとじて") || data.thought.includes("絵手紙を閉じて") || data.thought.includes("絵手紙終了") || thought.includes("hide etegami") || thought.includes("close etegami"));
-
-                if (isThoughtShowEtegami) {
-                    if (typeof showEtegamiCard === "function") showEtegamiCard();
-                } else if (isThoughtHideEtegami) {
-                    if (typeof hideEtegamiCard === "function") hideEtegamiCard();
-                }
+                // Note: Gemini internal thought should never trigger etegami UI card transitions.
 
                 if (Date.now() - lastUIModeChangeTime > 4000) {
                     if (isThoughtSimple) {

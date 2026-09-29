@@ -287,13 +287,11 @@ class GeminiLiveSession:
                         # Strip internal robotic preambles completely from history
                         msg = re.sub(r"みまもりさん[、へ]?[^。.\n]+[。.・\n]?", "", raw_msg).strip()
                         msg = re.sub(r"^[「」\s]+", "", msg).strip()
-                        # Ignore system command leftovers like schedule closure or etegami loop remnants
+                        # Completely ignore any past drawing/painting/etegami messages from history
+                        if any(k in raw_msg for k in ["絵", "描", "画", "下絵", "手紙", "モチーフ", "文化祭", "喫茶店"]):
+                            continue
                         if any(k in msg for k in [
-                            "予定カードを閉じました", "予定カードの表示を終了", "予定を閉じて", "予程を閉じて", "予定消して",
-                            "どの部分をどのように描きかえ", "ご希望のモチーフや文字", "下絵を描きかえます", "更新できますか", "修正してみましょう",
-                            "デジタル絵手紙", "絵手紙", "下絵を描いてみました", "ご覧になれますか", "モチーフ:", "モチーフ：", "文字:", "文字：",
-                            "絵を更新して", "絵を描きたい", "絵をかきたい", "下絵", "描きかえます", "描きかえましょうか", "絵の画を更新", "絵手紙の画を",
-                            "を描きたい", "をかきたい", "の絵", "風景を描き", "風景をかき", "黒板", "生徒の机", "机が黒板", "描きかえました", "描いてみました"
+                            "予定カードを閉じました", "予定カードの表示を終了", "予定を閉じて", "予程を閉じて", "予定消して"
                         ]):
                             continue
                         if not msg or msg == last_msg_text:
@@ -395,19 +393,12 @@ class GeminiLiveSession:
                                         f"・利用者様が「絵を描きたい」「聞こえる？」など別の話題を話された場合は、予定の話は即座に忘れ、相手の発言に100%直接答えてください。\n"
                                         f"・「予定を上手にお伝えできず申し訳ありません」といった予定に関する謝罪や言い訳を繰り返すことも【厳禁】です！\n"
                                         f"・利用者が自ら「今日の予定は？」と質問した場合のみ、本日の予定リスト（登録がなければ「特に予定はありませんよ」）を声だけで短く優しく教えてあげてください。\n\n"
-                                        f"【重要指示2-4：デジタル絵手紙カードの表示・終了（非表示）について】\n"
-                                        f"★【最優先判定：閉じる・終了の要望】：\n"
-                                        f"利用者様が「閉じて」「閉じてください」「とじて」「絵を閉じて」「絵をとじて」「デジタル絵手紙を閉じて」「デジタル絵手紙をとじて」「デジタル絵手紙を閉じてください」「デジタル絵手紙非表示」「絵を消して」「お絵描きを終わる」「絵手紙終了」「もういいよ」「やめる」「やめて」など、終了や閉じることを希望された場合は、【表示指示よりも絶対に優先して】、必ず第一声で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙をとじてください。」\n"
-                                        f"続けて「はい、絵手紙を閉じましたよ。またいつでも描いてみてくださいね」とお伝えください。\n\n"
-                                        f"★【デジタル絵手紙の表示・起動の要望（※最優先！直前の話題に関係なく即座に絵手紙を表示！）】：\n"
-                                        f"利用者様が「絵を描きたい」「絵手紙を書きたい」「絵手紙」「絵を出して」「絵を開いて」「絵を起動して」「デジタル絵手紙を出して」「デジタル絵手紙を表示して」「デジタル絵手紙起動」「デジタル絵手紙」「絵手紙を出して」「絵手紙を表示して」「お絵描きしたい」「絵を描く」「ベジタル絵手紙」など、絵を描く意思や絵手紙の表示を口にされた場合は、【直前の予定などの話題は即座に打ち切り、予定表ではなく必ずデジタル絵手紙】として、必ず第一声で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙を表示してください。」\n"
-                                        f"続けて「はい、絵手紙を表示しましたよ。どんな絵を描きましょうか？」と優しく温かく案内してください。\n\n"
-                                        f"★【厳重禁止事項：絵手紙依頼時に予定カードを誤表示することの厳禁、連呼の厳禁】：\n"
-                                        f"・【予定カードとの混同厳禁】：利用者が「絵手紙」「絵」「デジタル絵手紙」の表示を希望された時に、予定カード（予定表）を表示したり「予定カードを表示します」と答えることは【絶対に厳禁】です！必ずデジタル絵手紙を表示してください。\n"
-                                        f"・【勝手な起動の厳禁】：利用者様が「絵を描きたい」「絵を出して」と明確に言っていない時（雑談、挨拶、呼びかけ、質問など）に、あなたから勝手に絵手紙を開いたり、「デジタル絵手紙を表示してください」と言ったりすることは【絶対に禁止】です！相手の発言内容に直接答えてください。\n"
-                                        f"・【連呼の厳禁】：すでに絵手紙を表示している時や、同じ会話の中で「デジタル絵手紙を表示してください」を繰り返すことは厳禁です。\n"
+                                        f"【重要指示2-4：デジタル絵手紙カードの操作と会話ルール】\n"
+                                        f"・デジタル絵手紙カードの画面表示・非表示（開閉）は、画面システム（みまもりさん）が利用者様の発話や画面ボタン操作を直接検知して全自動で行います。\n"
+                                        f"・ジェミナイは「みまもりさん、デジタル絵手紙を表示してください」「みまもりさん、デジタル絵手紙をとじてください」等の画面操作の依頼を【絶対に言ってはいけません】！\n"
+                                        f"・「はい、絵手紙を表示しましたよ」「絵手紙を閉じましたよ」などの画面操作報告も【絶対に言ってはいけません】！\n"
+                                        f"・カードが既に画面に表示されている時や、利用者様が「絵を描きたい」「絵手紙を出して」と仰った時は、画面の表示操作には一切触れず、純粋な会話相手として温かく「絵手紙ですね！どんな絵を描きましょうか？」「何か描いてみたい思い出はありますか？」と優しく尋ねてください。\n"
+                                        f"・利用者様から「閉じて」「やめる」「もういいよ」「おしまい」と言われた時は、「承知いたしました。またいつでも描いてみてくださいね」と優しく受容してください（みまもりさんへの指示は不要です）。\n"
                                         f"・【発音の注意】：『絵手紙』は必ず日本語で「え・て・が・み」と発音してください。「エテビティ」などの英語風の誤読・不自然な発音は厳重に禁止します。\n\n"
                                         f"★【厳重注意：挨拶と受け答えのルール・「どういたしまして」「こんにちは」の連呼禁止】：\n"
                                         f"・利用者様から「ありがとう」や「お礼」を言われていないのに、勝手に「どういたしまして」と返答することは絶対に禁止です。\n"
@@ -656,47 +647,8 @@ class GeminiLiveSession:
             .replace("手紙を書きたい", "絵手紙を書きたい")
             .replace("手紙書きたい", "絵手紙書きたい")
         )
-        general_hide = [
-            "一旦終了", "会話終了", "会話は終了", "会話を終了", "終了します", "終了して", "終了",
-            "おしまい", "もういいよ", "もうやめる", "やめる", "やめて",
-            "閉じてください", "とじてください", "閉じて", "とじて", "閉じる", "とじる", "閉じました", "とじました",
-            "消して", "けして", "消す", "けす", "消しました", "けしました", "非表示"
-        ]
-        etegami_hide = [
-            "絵を閉", "絵をとじ", "絵閉", "絵とじ", "絵手紙を閉", "絵手紙をとじ", "絵手紙閉", "絵手紙とじ",
-            "絵を消", "絵消", "絵手紙を消", "絵手紙消", "絵手紙終了", "絵を終了", "絵終了",
-            "デジタル絵手紙を閉", "デジタル絵手紙閉", "デジタル絵手紙終了", "デジタル絵手紙を終了", "デジタル絵手紙非表示",
-            "絵手紙非表示", "絵非表示", "お絵描きをやめる", "お絵描き終了", "お絵描きをおしま", "お絵描きおしま"
-        ]
-        is_to_hide_etegami = (
-            any(p in raw_norm for p in general_hide) or
-            any(p in raw_norm for p in etegami_hide) or
-            "hide etegami" in text_lower or
-            "close etegami" in text_lower
-        )
-        if is_to_hide_etegami and any(k in raw_norm for k in ["描きたい", "かきたい", "書きたい", "出して", "見せて", "開いて", "更新して"]):
-            is_to_hide_etegami = False
-
-        is_to_show_etegami = False
-        if not is_to_hide_etegami:
-            if "デジタル絵手紙" in raw_norm or "デジタルえてがみ" in raw_norm or "show etegami" in text_lower or "display etegami" in text_lower:
-                is_to_show_etegami = True
-            elif any(p in raw_norm for p in ["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"]):
-                is_to_show_etegami = True
-            elif any(k in raw_norm for k in ["絵", "え"]) and any(k in raw_norm for k in ["開いて", "ひらいて", "開く", "ひらく", "起動", "出して", "だして", "表示", "見せて", "みたい", "見たい", "したい", "お願い", "やって"]):
-                is_to_show_etegami = True
-
-        if is_to_show_etegami:
-            if not self.has_resident_requested_etegami:
-                print(f"[Gemini Live Session]: Ignored show etegami command from Gemini speech because resident has not requested etegami: '{text_val}'")
-            else:
-                print(f"[Gemini Live Session]: Detected show etegami card command: '{text_val}'")
-                if self.on_etegami_visibility_changed:
-                    self.on_etegami_visibility_changed(True)
-        elif is_to_hide_etegami:
-            print(f"[Gemini Live Session]: Detected hide etegami card command: '{text_val}'")
-            if self.on_etegami_visibility_changed:
-                self.on_etegami_visibility_changed(False)
+        # Note: Etegami card visibility (open/close) is controlled solely by resident speech (STT) or client UI buttons.
+        # Gemini speech never directly triggers on_etegami_visibility_changed.
 
         # Accumulate streaming chunks into session window for robust cross-chunk matching
         self.ai_streamed_text_buffer = (self.ai_streamed_text_buffer + text_val)[-600:]

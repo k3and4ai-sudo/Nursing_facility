@@ -1587,11 +1587,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             db.add_chat_message(user["id"], "ai", clean_text)
             print(f"[Gemini Live Session ({terminal_id})]: Saved complete turn AI text to DB ({len(clean_text)} chars): '{clean_text[:35]}...'")
 
-        # Check if Gemini requested etegami JSON update in this turn
+        # Check if Gemini requested etegami JSON update in this turn (requires explicit JSON/file and update keywords)
         is_gemini_update_in_turn = (
             ("みまもりさん" in full_text or "みまもり" in full_text) and
             ("デジタル絵手紙" in full_text or "絵手紙" in full_text) and
-            ("更新" in full_text or "お願い" in full_text or "ファイル" in full_text or "json" in full_text.lower())
+            ("json" in full_text.lower() or "ファイル" in full_text or "ファィル" in full_text) and
+            ("更新" in full_text or "下絵" in full_text)
         )
         if is_gemini_update_in_turn and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
             if not getattr(session, "has_resident_spoken_in_session", False) or not getattr(session, "has_resident_requested_etegami", False):
@@ -1618,8 +1619,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     if m and m.group(1).strip():
                         motif = m.group(1).strip().strip("（）()")[:25]
 
-                print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami JSON Update in turn text: '{full_text[:60]}...' -> motif='{motif}', msg='{msg}'")
-                asyncio.create_task(on_live_etegami_update(motif, msg))
+                if motif or msg:
+                    print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami JSON Update in turn text: '{full_text[:60]}...' -> motif='{motif}', msg='{msg}'")
+                    asyncio.create_task(on_live_etegami_update(motif, msg))
+                else:
+                    print(f"[Gemini Live Session ({terminal_id})]: Ignored Gemini Etegami JSON Update because motif is empty: '{full_text[:60]}...'")
 
         if ("デジタル絵手紙完成" in full_text or ("みまもりさん" in full_text and "絵手紙" in full_text and "完成" in full_text)) and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
             if getattr(session, "has_resident_requested_etegami", False):
@@ -1684,6 +1688,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
     async def on_live_etegami_visibility(visible: bool):
         try:
+            session.is_etegami_visible = visible
             print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible}")
             await websocket.send_json({
                 "type": "etegami_visibility",
@@ -1715,6 +1720,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         # Guard: Resident must have requested etegami in this session
         if not getattr(session, "has_resident_requested_etegami", False):
             print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - resident has not requested etegami in this session.")
+            return
+
+        # Guard: Do not update if both motif and msg are empty
+        if not motif and not msg:
+            print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - motif and msg are empty.")
             return
 
         # Prevent duplicate update if already updating
@@ -1904,8 +1914,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     if extracted and len(extracted) <= 10:
                         detected_motif = extracted
 
-            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident request in '{speech_text}' (motif='{detected_motif}')")
-            asyncio.create_task(on_live_etegami_update(detected_motif, ""))
+            # Only trigger update if a motif was specified or explicit redraw command was given
+            is_explicit_redraw = any(act in clean for act in ["描き直", "描きなお", "新しく", "別の絵", "違う絵", "絵を変え", "更新して"])
+            if detected_motif or is_explicit_redraw:
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident update request in '{speech_text}' (motif='{detected_motif}')")
+                asyncio.create_task(on_live_etegami_update(detected_motif, ""))
+            else:
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami view/start without motif in '{speech_text}' - opening card only.")
+                asyncio.create_task(on_live_etegami_visibility(True))
 
     # Initialize Gemini Live Session
     def on_gemini_thought(thought: str):
@@ -2142,6 +2158,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # Send initial Etegami card on connect so the terminal has data cached, but ensure it starts closed
         try:
+            session.is_etegami_visible = False
             await websocket.send_json({
                 "type": "etegami_visibility",
                 "visible": False
@@ -2162,7 +2179,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "status": existing.get("status", "drafting"),
                     "badge_text": existing.get("badge_text", "🎨 会話をもとに下絵を制作中"),
                     "base_source": existing.get("base_source", "reminiscence"),
-                    "force_open": False
+                    "force_open": False,
+                    "is_initial": True
                 })
             else:
                 await websocket.send_json({
@@ -2177,7 +2195,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "status": "drafting",
                     "badge_text": "🎨 下絵制作中",
                     "base_source": "reminiscence",
-                    "force_open": False
+                    "force_open": False,
+                    "is_initial": True
                 })
         except Exception as e:
             print(f"Error sending initial etegami card ({terminal_id}): {e}")
