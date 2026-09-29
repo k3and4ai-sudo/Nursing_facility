@@ -908,10 +908,13 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("WebSocket connected");
             connectionStatus.className = "status-dot online";
             reportTerminalStatus("idle");
+            micBtn.disabled = false;
+            statusText.textContent = "お話しする準備ができました";
             if (!userDetails) {
                 const registered = await checkRegistration(false);
                 if (!registered) {
                     statusText.textContent = "端末の登録をお待ちしています...";
+                    micBtn.disabled = true;
                 }
             }
         };

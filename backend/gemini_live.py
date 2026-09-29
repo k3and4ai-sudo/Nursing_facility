@@ -688,9 +688,12 @@ class GeminiLiveSession:
                 is_to_show_etegami = True
 
         if is_to_show_etegami:
-            print(f"[Gemini Live Session]: Detected show etegami card command: '{text_val}'")
-            if self.on_etegami_visibility_changed:
-                self.on_etegami_visibility_changed(True)
+            if not self.has_resident_requested_etegami:
+                print(f"[Gemini Live Session]: Ignored show etegami command from Gemini speech because resident has not requested etegami: '{text_val}'")
+            else:
+                print(f"[Gemini Live Session]: Detected show etegami card command: '{text_val}'")
+                if self.on_etegami_visibility_changed:
+                    self.on_etegami_visibility_changed(True)
         elif is_to_hide_etegami:
             print(f"[Gemini Live Session]: Detected hide etegami card command: '{text_val}'")
             if self.on_etegami_visibility_changed:
@@ -707,10 +710,13 @@ class GeminiLiveSession:
             "絵手紙完成" in eval_text
         )
         if is_gemini_etegami_complete:
-            print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger in eval_text: '{eval_text[-60:]}'")
-            self.ai_streamed_text_buffer = ""
-            if self.on_etegami_completed:
-                self.on_etegami_completed()
+            if not self.has_resident_requested_etegami:
+                print(f"[Gemini Live Session]: Ignored etegami completion trigger because resident has not requested etegami: '{eval_text[-60:]}'")
+            else:
+                print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger in eval_text: '{eval_text[-60:]}'")
+                self.ai_streamed_text_buffer = ""
+                if self.on_etegami_completed:
+                    self.on_etegami_completed()
 
         # Detect Etegami JSON update command from Gemini speech or thought
         # Target keywords:

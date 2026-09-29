@@ -1684,9 +1684,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
     async def on_live_etegami_visibility(visible: bool):
         try:
-            if 'session' in locals() and session:
-                session.has_resident_requested_etegami = visible
-            print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible} (has_resident_requested_etegami={visible})")
+            print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible}")
             await websocket.send_json({
                 "type": "etegami_visibility",
                 "visible": visible
