@@ -358,9 +358,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (statusBadge) {
             statusBadge.textContent = statusText;
             if (isCompleted) {
-                statusBadge.className = "etegami-status-badge badge-completed";
+                statusBadge.className = "etegami-status-badge badge-completed hidden";
             } else {
-                statusBadge.className = "etegami-status-badge badge-drafting";
+                statusBadge.className = "etegami-status-badge badge-drafting hidden";
+            }
+            if (data.is_updating === true) {
+                statusBadge.classList.remove("hidden");
             }
         }
 
@@ -371,8 +374,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 completeBtn.disabled = true;
             } else {
                 completeBtn.classList.remove("completed-done");
-                completeBtn.innerHTML = "<span>💮</span><span>これで完成！</span>";
+                completeBtn.innerHTML = "<span>💮</span><span>完成</span>";
                 completeBtn.disabled = false;
+            }
+            if (data.is_updating === true) {
+                completeBtn.classList.remove("hidden");
+            } else {
+                completeBtn.classList.add("hidden");
             }
         }
 
@@ -1283,10 +1291,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 const lampEtegami = document.getElementById("lamp-etegami");
                 const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
                 const voiceHint = document.getElementById("etegami-voice-hint");
+                const statusBadge = document.getElementById("etegami-status-badge");
+                const completeBtn = document.getElementById("btn-complete-etegami");
 
                 if (data.updating) {
                     if (updatingBadge) updatingBadge.classList.remove("hidden");
                     if (voiceHint) voiceHint.classList.remove("hidden");
+                    if (statusBadge) statusBadge.classList.remove("hidden");
+                    if (completeBtn) completeBtn.classList.remove("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-completed");
                         lampEtegami.classList.add("lamp-updating");
@@ -1295,6 +1307,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     if (updatingBadge) updatingBadge.classList.add("hidden");
                     if (voiceHint) voiceHint.classList.add("hidden");
+                    if (statusBadge) statusBadge.classList.add("hidden");
+                    if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("lamp-updating");
                         lampEtegami.classList.add("lamp-completed");
@@ -1316,8 +1330,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 const lampEtegami = document.getElementById("lamp-etegami");
                 const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
                 const voiceHint = document.getElementById("etegami-voice-hint");
+                const statusBadge = document.getElementById("etegami-status-badge");
+                const completeBtn = document.getElementById("btn-complete-etegami");
                 if (data.action === "etegami_updated") {
                     if (voiceHint) voiceHint.classList.add("hidden");
+                    if (statusBadge) statusBadge.classList.add("hidden");
+                    if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-updating");
                         lampEtegami.classList.add("lamp-completed");
@@ -1332,6 +1350,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 } else if (data.action === "etegami_complete") {
                     if (voiceHint) voiceHint.classList.add("hidden");
+                    if (statusBadge) statusBadge.classList.add("hidden");
+                    if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-updating");
                         lampEtegami.classList.add("lamp-completed");

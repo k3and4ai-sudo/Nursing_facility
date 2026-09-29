@@ -793,6 +793,10 @@ body {
     flex-shrink: 0 !important;
 }
 
+.status-lamp.hidden {
+    display: none !important;
+}
+
 .status-lamp .lamp-dot {
     width: 10px !important;
     height: 10px !important;
@@ -1715,34 +1719,44 @@ body.simple-mode .speech-box.user-box {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     color: #92400e;
     border: 1.5px solid #f59e0b;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 800;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 20px;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .etegami-season-tag {
     background: #ffffff;
     color: #475569;
     border: 1.5px solid #cbd5e1;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    padding: 3px 10px;
+    padding: 2px 8px;
     border-radius: 16px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .etegami-status-badge {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 800;
-    padding: 3px 12px;
+    padding: 2px 10px;
     border-radius: 16px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: all 0.3s ease;
+}
+
+.etegami-status-badge.hidden {
+    display: none !important;
 }
 
 .etegami-status-badge.badge-drafting {
@@ -1767,7 +1781,8 @@ body.simple-mode .speech-box.user-box {
 .etegami-header-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .etegami-complete-btn {
@@ -1775,15 +1790,21 @@ body.simple-mode .speech-box.user-box {
     color: #ffffff;
     border: 1.5px solid #b45309;
     border-radius: 20px;
-    padding: 4px 14px;
-    font-size: 0.9rem;
+    padding: 3px 10px;
+    font-size: 0.8rem;
     font-weight: 800;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 5px;
-    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.35);
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.35);
     transition: all 0.2s ease;
+}
+
+.etegami-complete-btn.hidden {
+    display: none !important;
 }
 
 .etegami-complete-btn:hover {
