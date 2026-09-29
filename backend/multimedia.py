@@ -696,7 +696,14 @@ def modify_or_create_etegami(
 
     # 2. Explicit motif mappings (resident or Gemini requested specific adjustments)
     if explicit_motif:
-        if any(k in combined for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
+        if any(k in combined for k in ["黒板", "机", "先生", "授業"]) or ("教室" in combined and not any(k in combined for k in ["文化祭", "学園祭", "喫茶", "カフェ"])):
+            selected_image = "/family/assets/generated_classroom.jpg"
+            theme_title = "【手作り絵手紙】懐かしの学校の教室と黒板"
+            calligraphy_text = message_hint or "黒板に向かい 学び励んだ 青春の日々"
+            stamp_icon = "🏫"
+            season_key = "autumn"
+            base_source = "reminiscence"
+        elif any(k in combined for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
             # Classroom cafe / culture festival
             selected_image = "/family/assets/generated_bunkasai.jpg"
             if any(k in combined for k in ["喫茶", "カフェ", "コーヒー"]):
@@ -799,7 +806,15 @@ def modify_or_create_etegami(
             pass
 
         for msg in recent_user_msgs:
-            if any(k in msg for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
+            if any(k in msg for k in ["黒板", "机", "先生", "授業"]) or ("教室" in msg and not any(k in msg for k in ["文化祭", "学園祭", "喫茶", "カフェ"])):
+                selected_image = "/family/assets/generated_classroom.jpg"
+                theme_title = "【手作り絵手紙】懐かしの学校の教室と黒板"
+                calligraphy_text = message_hint or "黒板に向かい 学び励んだ 青春の日々"
+                stamp_icon = "🏫"
+                season_key = "autumn"
+                base_source = "reminiscence"
+                break
+            elif any(k in msg for k in ["教室", "文化祭", "学園祭", "学校", "高校", "青春"]):
                 selected_image = "/family/assets/generated_bunkasai.jpg"
                 if any(k in msg for k in ["喫茶", "カフェ", "コーヒー"]):
                     theme_title = "【手作り絵手紙】懐かしの教室喫茶と思い出"

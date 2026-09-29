@@ -140,6 +140,7 @@ class TestEtegamiConversationBase(unittest.TestCase):
             on_etegami_completed=on_completed
         )
 
+        session.has_resident_requested_etegami = True
         session._handle_text_chunk("みまもりさん、デジタル絵手紙完成。とても素敵な絵手紙ができましたね！")
         self.assertEqual(len(completed_called), 1)
 

@@ -1481,6 +1481,9 @@ def check_etegami_visibility_intent(text: str):
         return None
     norm = (
         re.sub(r"[。、.!?！？\s]", "", text)
+        .replace("人事たるや手紙", "デジタル絵手紙")
+        .replace("人事たるや", "デジタル")
+        .replace("人事たる", "デジタル")
         .replace("絵お", "絵を")
         .replace("えお", "えを")
         .replace("手紙お", "手紙を")
@@ -1722,6 +1725,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - resident has not requested etegami in this session.")
             return
 
+        if not motif:
+            motif = getattr(session, "current_etegami_motif", "")
+        else:
+            session.current_etegami_motif = motif
+
         # Guard: Do not update if both motif and msg are empty
         if not motif and not msg:
             print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - motif and msg are empty.")
@@ -1871,7 +1879,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             return
         if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 3.0):
             return
-        clean = speech_text.replace(" ", "").replace("　", "")
+        clean = (
+            speech_text.replace(" ", "").replace("　", "")
+            .replace("人事たるや手紙", "デジタル絵手紙")
+            .replace("人事たるや", "デジタル")
+            .replace("人事たる", "デジタル")
+            .replace("手紙を更新", "絵手紙を更新")
+            .replace("手紙更新", "絵手紙更新")
+        )
 
         # Check completion keywords first
         if any(kw in clean for kw in etegami_complete_keywords):
@@ -1879,24 +1894,32 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_etegami_complete())
             return
 
+        is_scene_description = (
+            getattr(session, "is_etegami_visible", False) or getattr(session, "has_resident_requested_etegami", False)
+        ) and any(kw in clean for kw in [
+            "黒板", "机", "先生", "説明し", "並んで", "向かって", "教室", "生徒", "授業", "学校"
+        ])
+
         is_create_or_update = (
             any(kw in clean for kw in etegami_resident_keywords) or
             ("絵" in clean and any(act in clean for act in [
                 "描きたい", "かきたい", "書きたい", "描く", "かく", "更新", "直して", "変えて", "出して", "作って",
                 "になっていない", "になってません", "変わってない", "変わっていません", "違います", "違う", "更新されない", "更新されてない", "更新されていません"
             ])) or
-            (any(m in clean for m in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉"]) and
+            (any(m in clean for m in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "黒板", "机", "先生", "学校", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉"]) and
              any(act in clean for act in [
                  "にして", "を描", "をか", "描きたい", "かきたい", "出して", "見せて", "更新", "出てきてない", "変えて",
                  "やりまし", "やりました", "やった", "になっていな", "なってない", "更新され"
-             ]))
+             ])) or
+            is_scene_description
         )
 
         if is_create_or_update:
             session.has_resident_requested_etegami = True
             detected_motif = ""
             for motif_cand in [
-                "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館",
+                "黒板", "生徒の机", "机", "先生", "教室", "学校",
+                "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "展覧会", "作品展", "一作展", "映画", "映画館",
                 "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
                 "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
                 "桜", "さくら", "花見", "お花見", "朝顔", "あさがお", "風鈴", "向日葵", "ひまわり",
@@ -1914,11 +1937,17 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     if extracted and len(extracted) <= 10:
                         detected_motif = extracted
 
+            if detected_motif:
+                session.current_etegami_motif = detected_motif
+            elif getattr(session, "current_etegami_motif", ""):
+                detected_motif = session.current_etegami_motif
+
             # Only trigger update if a motif was specified or explicit redraw command was given
-            is_explicit_redraw = any(act in clean for act in ["描き直", "描きなお", "新しく", "別の絵", "違う絵", "絵を変え", "更新して"])
-            if detected_motif or is_explicit_redraw:
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident update request in '{speech_text}' (motif='{detected_motif}')")
-                asyncio.create_task(on_live_etegami_update(detected_motif, ""))
+            is_explicit_redraw = any(act in clean for act in ["描き直", "描きなお", "新しく", "別の絵", "違う絵", "絵を変え", "更新して", "更新"])
+            if detected_motif or is_explicit_redraw or is_scene_description:
+                eff_motif = detected_motif or getattr(session, "current_etegami_motif", "") or "学校の教室"
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident update request in '{speech_text}' (motif='{eff_motif}')")
+                asyncio.create_task(on_live_etegami_update(eff_motif, ""))
             else:
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami view/start without motif in '{speech_text}' - opening card only.")
                 asyncio.create_task(on_live_etegami_visibility(True))
