@@ -1594,33 +1594,37 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             ("更新" in full_text or "お願い" in full_text or "ファイル" in full_text or "json" in full_text.lower())
         )
         if is_gemini_update_in_turn and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
-            motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', full_text)
-            msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', full_text)
-            motif = motif_match.group(1).strip() if motif_match else ""
-            msg = msg_match.group(1).strip() if msg_match else ""
-            if motif:
-                motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
-                motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
-            if msg:
-                msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-                msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
-                msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-            if not motif:
-                for kw in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
-                    if kw in full_text:
-                        motif = kw
-                        break
-            if not motif:
-                m = re.search(r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)', full_text, re.IGNORECASE)
-                if m and m.group(1).strip():
-                    motif = m.group(1).strip().strip("（）()")[:25]
+            if not getattr(session, "has_resident_requested_etegami", False):
+                print(f"[Gemini Live Session ({terminal_id})]: Blocked unsolicited Gemini Etegami update in turn text (resident has not requested etegami in this session).")
+            else:
+                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', full_text)
+                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', full_text)
+                motif = motif_match.group(1).strip() if motif_match else ""
+                msg = msg_match.group(1).strip() if msg_match else ""
+                if motif:
+                    motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
+                    motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
+                if msg:
+                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
+                    msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
+                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
+                if not motif:
+                    for kw in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
+                        if kw in full_text:
+                            motif = kw
+                            break
+                if not motif:
+                    m = re.search(r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)', full_text, re.IGNORECASE)
+                    if m and m.group(1).strip():
+                        motif = m.group(1).strip().strip("（）()")[:25]
 
-            print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami JSON Update in turn text: '{full_text[:60]}...' -> motif='{motif}', msg='{msg}'")
-            asyncio.create_task(on_live_etegami_update(motif, msg))
+                print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami JSON Update in turn text: '{full_text[:60]}...' -> motif='{motif}', msg='{msg}'")
+                asyncio.create_task(on_live_etegami_update(motif, msg))
 
         if ("デジタル絵手紙完成" in full_text or ("みまもりさん" in full_text and "絵手紙" in full_text and "完成" in full_text)) and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
-            print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami Completion in turn text: '{full_text[:60]}...'")
-            asyncio.create_task(on_live_etegami_complete())
+            if getattr(session, "has_resident_requested_etegami", False):
+                print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami Completion in turn text: '{full_text[:60]}...'")
+                asyncio.create_task(on_live_etegami_complete())
 
     async def on_gemini_text(text: str):
         try:
@@ -1680,7 +1684,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
     async def on_live_etegami_visibility(visible: bool):
         try:
-            print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible}")
+            if 'session' in locals() and session:
+                session.has_resident_requested_etegami = visible
+            print(f"[Gemini Live Session ({terminal_id})]: Sending etegami_visibility -> {visible} (has_resident_requested_etegami={visible})")
             await websocket.send_json({
                 "type": "etegami_visibility",
                 "visible": visible
@@ -1708,6 +1714,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     etegami_lock = asyncio.Lock()
 
     async def on_live_etegami_update(motif: str, msg: str):
+        # Guard: Resident must have requested etegami in this session
+        if not getattr(session, "has_resident_requested_etegami", False):
+            print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - resident has not requested etegami in this session.")
+            return
+
         # Prevent duplicate update if already updating
         if getattr(session, "is_etegami_updating", False):
             print(f"[Gemini Live Session ({terminal_id})]: Already updating digital etegami - skipping duplicate request.")
@@ -1866,6 +1877,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         )
 
         if is_create_or_update:
+            session.has_resident_requested_etegami = True
             detected_motif = ""
             for motif_cand in [
                 "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館",

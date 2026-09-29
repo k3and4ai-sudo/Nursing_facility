@@ -204,7 +204,21 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
         sent_json = mock_ws.send.call_args[0][0]
         self.assertIn("みまもりさん、デジタル絵手紙JSONファイル更新お願いします", sent_json)
 
-        # 1. Normal trigger from Gemini with user-specified keyword
+        # 0. Unsolicited trigger when resident has not requested etegami -> should be blocked
+        session.has_resident_requested_etegami = False
+        frame_unsolicited = json.dumps({
+            "serverContent": {
+                "modelTurn": {
+                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファィル更新お願いします（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
+                }
+            }
+        })
+        mock_ws.messages.append(frame_unsolicited)
+        await session._receive_loop()
+        etegami_callback.assert_not_called()
+
+        # 1. Normal trigger from Gemini after resident requested etegami
+        session.has_resident_requested_etegami = True
         frame1 = json.dumps({
             "serverContent": {
                 "modelTurn": {

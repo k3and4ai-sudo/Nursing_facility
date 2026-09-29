@@ -205,6 +205,7 @@ class GeminiLiveSession:
         self.last_ui_mode_time = 0.0
         self.is_etegami_updating = False
         self.last_etegami_update_time = 0.0
+        self.has_resident_requested_etegami = False
         self.history = history or []
         self.schedules = schedules or []
         self.ws = None
@@ -288,7 +289,9 @@ class GeminiLiveSession:
                         # Ignore system command leftovers like schedule closure or etegami loop remnants
                         if any(k in msg for k in [
                             "予定カードを閉じました", "予定カードの表示を終了", "予定を閉じて", "予程を閉じて", "予定消して",
-                            "どの部分をどのように描きかえ", "ご希望のモチーフや文字", "下絵を描きかえます", "更新できますか", "修正してみましょう"
+                            "どの部分をどのように描きかえ", "ご希望のモチーフや文字", "下絵を描きかえます", "更新できますか", "修正してみましょう",
+                            "デジタル絵手紙", "絵手紙", "下絵を描いてみました", "ご覧になれますか", "モチーフ:", "モチーフ：", "文字:", "文字：",
+                            "絵を更新して", "絵を描きたい", "絵をかきたい", "下絵", "描きかえます", "描きかえましょうか", "絵の画を更新", "絵手紙の画を"
                         ]):
                             continue
                         if not msg or msg == last_msg_text:
@@ -432,7 +435,8 @@ class GeminiLiveSession:
                                         f"利用者の居室端末画面には、利用者が希望された時に開く「デジタル絵手紙」機能があります。\n"
                                         f"★【最重要警告：起動時にいきなり絵手紙の話を始めることは絶対に厳重禁止！】：\n"
                                         f"会話開始（起動）時に、過去の履歴に何があっても、あなたから「どの部分を描きかえましょうか？」や「絵手紙を作りましょうか？」などと絵手紙の話を切り出すことは【絶対に厳重禁止】です！\n"
-                                        f"利用者が今このセッションで自ら「絵を描きたい」「絵手紙を出して」と明確に言うまでは、絵手紙の話題は一切口にせず、相手の発言に優しく共感・応答してください。\n"
+                                        f"特に利用者様が「こんにちは」「おはよう」等の挨拶をされた時は、過去の話題や絵手紙の話を蒸し返さず、必ず純粋な温かい挨拶（例:「こんにちは、{nickname}！今日も良いお天気ですね、ご気分はいかがですか？」等）のみを優しく返してください。\n"
+                                        f"利用者が今このセッションで自ら「絵を描きたい」「絵手紙を出して」と明確に言うまでは、絵手紙の話題や「みまもりさん、デジタル絵手紙...」の報告は一切口にせず、相手の発言に優しく共感・応答してください。\n"
                                         f"★【重要：勝手な下絵作成の厳禁】：\n"
                                         f"利用者が「絵を描きたい」「絵手紙を作りたい」と希望していない通常の昔話や日常会話の最中に、勝手に絵手紙を作って案内することは【絶対に禁止】です！通常の会話は傾聴・共感のみを行ってください。\n"
                                         f"★【利用者が絵を描くことを希望された場合のみ】：\n"
@@ -729,6 +733,9 @@ class GeminiLiveSession:
             "絵手紙更新" in eval_text
         )
         if is_gemini_etegami:
+            if not self.has_resident_requested_etegami:
+                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami trigger (resident has not requested etegami in this session): '{eval_text[-60:]}'")
+                return
             if self.is_etegami_updating:
                 print(f"[Gemini Live Session]: Already updating Etegami - ignoring duplicate trigger: '{eval_text[-60:]}'")
             elif (now - self.last_etegami_update_time < 4.0):
