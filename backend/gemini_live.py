@@ -201,7 +201,7 @@ class GeminiLiveSession:
         self.on_etegami_prepare_mode = on_etegami_prepare_mode
         self.on_etegami_updated = on_etegami_updated
         self.on_etegami_completed = on_etegami_completed
-        self.etegami_prepare_mode = "asset_base"
+        self.etegami_prepare_mode = None
         self.recording_active = True
         self.last_recording_time = 0.0
         self.current_ui_mode = "simple"
@@ -374,6 +374,10 @@ class GeminiLiveSession:
                                         f"施設内の記録・見守り・安全管理を担当するローカルAIの名前は「みまもりさん」です。\n"
                                         f"利用者のニックネーム（呼び名）は「{nickname}」です。「{nickname}様」や「{nickname}さま」、「太郎さか様」のように「様」を付けたり二重敬称にするのは絶対に禁止です。呼びかける時は必ず正確に「{nickname}」と呼んでください。温かく優しく短い日本語で相槌を打ちながら会話してください。\n"
                                         f"否定せず受容・共感の姿勢を徹底し、思考解説や英語テキストは一切出力せず、即座に利用者様への短い1〜2文の日本語返答のみを音声出力してください。\n\n"
+                                        f"★【会話開始時の最重要ルール：挨拶と一般的な日常会話の徹底】：\n"
+                                        f"・会話開始時や起動時、最初の発話では、必ず温かい挨拶から始め、お元気ですか？体調はいかがですか？今日はお天気が良いですね、などと一般的な日常会話・雑談を行ってください。\n"
+                                        f"・あなたからいきなり「絵手紙」や「ベース画像」、「どの部分を描き直しますか？」などの絵手紙関連の話題を切り出すことは【絶対に厳禁】です！\n"
+                                        f"・利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」と明確に発言するまでは、絵手紙やベース画像についての話題をあなたから一切出してはいけません。\n\n"
                                         f"★【呼びかけ・接続確認への応答】：\n"
                                         f"利用者様から「ジェミナイさん、聞こえますか？」「聞こえる？」「もしもし」「おーい」などと呼びかけられた場合は、絶対に絵手紙や予定などの別の話題に脱線せず、「はい、よく聞こえていますよ！{nickname}、何かお話ししましょうか？」と自然に温かく応答してください。\n\n"
                                         f"【重要指示1：スタッフ呼び出しについて】\n"
@@ -444,16 +448,16 @@ class GeminiLiveSession:
                                         f"★【利用者が絵を描くこと・絵手紙を希望された場合の3ステップ】：\n"
                                         f"【ステップ1：最初の確認質問】\n"
                                         f"利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」などと希望された時は、いきなり下絵更新を指示するのではなく、まず第一声で利用者様に優しく：\n"
-                                        f"「今まで作った絵手紙をベースにしますか？」\n"
+                                        f"「今までの絵をベースにしますか？それとも新しく描きますか？」\n"
                                         f"と尋ねてください。\n\n"
                                         f"【ステップ2：利用者の意向に応じた準備指示】\n"
-                                        f"・利用者が「はい」「そうして」「前のでいいよ」「うん」などと答えた場合：\n"
+                                        f"・利用者が「はい」「そうして」「前のでいいよ」「うん」「今までの絵」「ベースにして」などと答えた場合：\n"
                                         f"必ず第一声で正確に：\n"
                                         f"「みまもりさん、絵手紙をベースにしてください。」\n"
-                                        f"と発言してください。続けて利用者様に「承知いたしました。どんな思い出やお話の絵手紙にしましょうか？」と優しく尋ねてください。\n\n"
-                                        f"・利用者が「いいえ」「新しく描いて」「違うのがいい」「新しい絵がいい」などと答えた場合：\n"
+                                        f"と発言してください。続けて利用者様に「承知いたしました。前回の絵をもとに、どんな思い出やお話の絵手紙にしましょうか？」と優しく尋ねてください。\n\n"
+                                        f"・利用者が「いいえ」「新しく描いて」「新しく描く」「新しい絵」「最初から」などと答えた場合：\n"
                                         f"必ず第一声で正確に：\n"
-                                        f"「みまもりさん、新しい画像をベースにしてください。」\n"
+                                        f"「みまもりさん、新しい絵を描いてください。」\n"
                                         f"と発言してください。続けて利用者様に「新しい絵ですね！どんな場面や思い出を描きましょうか？」と優しく尋ねてください。\n\n"
                                         f"【ステップ3：モチーフ決定による最初の画像表示】\n"
                                         f"会話が進み、描きたいモチーフや情景（例:「昔飼っていた犬」「運動会のお弁当」「喫茶店」「桜」など）が決まったら、必ず第一声の冒頭で正確に：\n"
@@ -682,29 +686,27 @@ class GeminiLiveSession:
         eval_text = self.ai_streamed_text_buffer
 
         # Detect Etegami Base Mode command from Gemini speech:
-        # e.g. "みまもりさん、絵手紙をベースにしてください" / "みまもり③さん、絵手紙をベースにしてください"
-        is_etegami_base = bool(re.search(r'みまもり[3③]?さん[、,\s]*絵手紙をベースにして', eval_text)) or ("絵手紙をベースにして" in eval_text)
+        # e.g. "みまもりさん、絵手紙をベースにしてください" / "みまもりさん、前回の絵をベースにしてください"
+        is_etegami_base = bool(re.search(r'みまもり[3③]?さん[、,\s]*(?:絵手紙|前回(?:の絵)?|今まで(?:の絵)?)(?:をベースにして|ベースにして)', eval_text)) or ("絵手紙をベースにして" in eval_text)
         if is_etegami_base:
-            if not self.has_resident_spoken_in_session:
-                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami Base trigger (resident has not spoken): '{eval_text[-60:]}'")
+            if not self.has_resident_requested_etegami:
+                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami Base trigger (resident has not requested etegami): '{eval_text[-60:]}'")
             else:
                 print(f"[Gemini Live Session]: Detected Gemini Etegami Base Mode Trigger in eval_text: '{eval_text[-60:]}'")
                 self.etegami_prepare_mode = "asset_base"
-                self.has_resident_requested_etegami = True
                 self.ai_streamed_text_buffer = ""
                 if self.on_etegami_prepare_mode:
                     self.on_etegami_prepare_mode("asset_base")
 
         # Detect Etegami Generate New Mode command from Gemini speech:
-        # e.g. "みまもりさん、新しい画像をベースにしてください" / "みまもり③さん、新しい画像をベースにしてください"
-        is_etegami_new = bool(re.search(r'みまもり[3③]?さん[、,\s]*新しい画像をベースにして', eval_text)) or ("新しい画像をベースにして" in eval_text)
+        # e.g. "みまもりさん、新しい絵を描いてください" / "みまもりさん、新しい画像をベースにしてください"
+        is_etegami_new = bool(re.search(r'みまもり[3③]?さん[、,\s]*(?:新しい(?:画像|絵)(?:をベースにして|を描いて|にして)|新規)', eval_text)) or ("新しい画像をベースにして" in eval_text) or ("新しい絵を描いて" in eval_text)
         if is_etegami_new:
-            if not self.has_resident_spoken_in_session:
-                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami New Mode trigger (resident has not spoken): '{eval_text[-60:]}'")
+            if not self.has_resident_requested_etegami:
+                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami New Mode trigger (resident has not requested etegami): '{eval_text[-60:]}'")
             else:
                 print(f"[Gemini Live Session]: Detected Gemini Etegami New Mode Trigger in eval_text: '{eval_text[-60:]}'")
                 self.etegami_prepare_mode = "generate_new"
-                self.has_resident_requested_etegami = True
                 self.ai_streamed_text_buffer = ""
                 if self.on_etegami_prepare_mode:
                     self.on_etegami_prepare_mode("generate_new")

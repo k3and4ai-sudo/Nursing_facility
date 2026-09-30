@@ -20,13 +20,28 @@ class TestEtegamiModes(unittest.TestCase):
             on_error=MagicMock(),
             on_etegami_prepare_mode=prepare_mock
         )
-        session.has_resident_spoken_in_session = True
+        session.has_resident_requested_etegami = True
         
         # Test detection of "みまもりさん、絵手紙をベースにしてください"
         session._handle_text_chunk("みまもりさん、絵手紙をベースにしてください。どんな思い出やお話の絵手紙にしましょうか？")
         prepare_mock.assert_called_with("asset_base")
         self.assertEqual(session.etegami_prepare_mode, "asset_base")
-        self.assertTrue(session.has_resident_requested_etegami)
+
+    def test_gemini_prepare_mode_blocked_if_no_resident_request(self):
+        prepare_mock = MagicMock()
+        session = GeminiLiveSession(
+            user=self.user,
+            on_audio_received=MagicMock(),
+            on_error=MagicMock(),
+            on_etegami_prepare_mode=prepare_mock
+        )
+        session.has_resident_spoken_in_session = True
+        session.has_resident_requested_etegami = False
+        
+        # If resident hasn't asked to draw etegami, unsolicited Gemini base mode is blocked
+        session._handle_text_chunk("みまもりさん、絵手紙をベースにしてください。")
+        prepare_mock.assert_not_called()
+        self.assertIsNone(session.etegami_prepare_mode)
 
     def test_gemini_prepare_mode_generate_new(self):
         prepare_mock = MagicMock()
@@ -36,13 +51,12 @@ class TestEtegamiModes(unittest.TestCase):
             on_error=MagicMock(),
             on_etegami_prepare_mode=prepare_mock
         )
-        session.has_resident_spoken_in_session = True
+        session.has_resident_requested_etegami = True
         
-        # Test detection of "みまもりさん、新しい画像をベースにしてください"
-        session._handle_text_chunk("みまもりさん、新しい画像をベースにしてください。新しい絵ですね！どんな場面を描きましょうか？")
+        # Test detection of "みまもりさん、新しい絵を描いてください"
+        session._handle_text_chunk("みまもりさん、新しい絵を描いてください。新しい絵ですね！どんな場面を描きましょうか？")
         prepare_mock.assert_called_with("generate_new")
         self.assertEqual(session.etegami_prepare_mode, "generate_new")
-        self.assertTrue(session.has_resident_requested_etegami)
 
     def test_gemini_prepare_mode_with_circle_3(self):
         prepare_mock = MagicMock()
@@ -52,7 +66,7 @@ class TestEtegamiModes(unittest.TestCase):
             on_error=MagicMock(),
             on_etegami_prepare_mode=prepare_mock
         )
-        session.has_resident_spoken_in_session = True
+        session.has_resident_requested_etegami = True
         
         # Test variation with "みまもり③さん"
         session._handle_text_chunk("みまもり③さん、新しい画像をベースにしてください。")

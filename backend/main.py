@@ -2065,6 +2065,22 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     detected_motif = motif_cand
                     break
             
+            # Excluded keywords for motif detection (e.g. mode answering keywords, generic words)
+            def is_invalid_motif(cand_text: str) -> bool:
+                if not cand_text or len(cand_text) < 1:
+                    return True
+                exact_banned = [
+                    "絵", "え", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "何か", "なに",
+                    "新しい", "新しく", "新しい絵", "新しいの", "最初から", "別のに",
+                    "前のでいい", "前の絵", "今までの絵", "ベースの絵", "ベース", "画像", "新しい画像"
+                ]
+                if cand_text in exact_banned:
+                    return True
+                contains_banned = [
+                    "新しい", "新しく", "ベース", "前ので", "今まで", "最初から", "聞こえ", "ますか", "です", "たい", "さん"
+                ]
+                return any(b in cand_text for b in contains_banned)
+
             # Dynamic regex extraction: e.g. "〇〇の風景も描いて" -> "〇〇の風景", "〇〇の絵を描きたい" -> "〇〇"
             if not detected_motif:
                 m_scene = re.search(r'([^\s、。]{2,10}?(?:の風景|の情景|の絵))', clean)
@@ -2072,7 +2088,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     cand = m_scene.group(1).replace("も", "").replace("今日の", "").replace("昔の", "")
                     if cand.endswith("の絵"):
                         cand = cand[:-2]
-                    if cand not in ["絵", "え", "絵手紙", "お絵描き"] and not any(w in cand for w in ["聞こえ", "ますか", "です", "たい", "さん"]):
+                    if not is_invalid_motif(cand):
                         detected_motif = cand
                 else:
                     m_draw = re.search(r'([^\s、。]{2,10}?)を(?:描|か|書)', clean)
@@ -2080,8 +2096,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                         cand = m_draw.group(1).replace("も", "").replace("今日の", "").replace("昔の", "")
                         if cand.endswith("の絵") or cand.endswith("の絵手紙"):
                             cand = cand[:-2] if cand.endswith("の絵") else cand[:-4]
-                        # Exclude generic words, question phrases, or speech artifacts
-                        if cand not in ["絵", "え", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "何か", "なに"] and not any(w in cand for w in ["聞こえ", "ますか", "です", "たい", "さん"]):
+                        if not is_invalid_motif(cand):
                             detected_motif = cand
 
             if detected_motif:
@@ -2089,6 +2104,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             elif getattr(session, "is_etegami_visible", False) and getattr(session, "current_etegami_motif", ""):
                 # Inherit previous motif only if card is already visible and open
                 detected_motif = session.current_etegami_motif
+
+            # Guard: If mode is not yet decided, stash detected motif and wait for resident's mode decision
+            if not getattr(session, "etegami_prepare_mode", None):
+                if detected_motif:
+                    print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Stashed motif '{detected_motif}' pending base-mode decision.")
+                    session.pending_motif = detected_motif
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without mode decision - waiting for resident to answer base question.")
+                return
 
             # Trigger update if a valid motif was specified or explicit redraw command was given
             is_explicit_redraw = any(act in clean for act in ["描き直", "描きなお", "新しくして", "別の絵", "違う絵", "絵を変え", "更新して", "更新"])
@@ -2279,20 +2302,46 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Whisper STT ({terminal_id})]: Voice triggered Hide Etegami Card: '{transcribed_text}'")
             asyncio.create_task(on_live_etegami_visibility(False))
 
-        # Check for resident etegami update trigger from STT text
-        check_resident_etegami_trigger(transcribed_text)
-
-        # Check for resident's answer to "今まで作った絵手紙をベースにしますか？" directly from Whisper STT
+        # Check for resident's answer to "今まで作った絵手紙をベースにしますか？それとも新しく描きますか？" directly from Whisper STT
         clean_ans = transcribed_text.replace(" ", "").replace("、", "").replace("。", "")
+        mode_just_decided = False
         if getattr(session, "has_resident_requested_etegami", False) and not getattr(session, "etegami_prepare_mode", None):
-            if any(w in clean_ans for w in ["いいえ", "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵"]):
+            is_new_choice = any(w in clean_ans for w in [
+                "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵", "新規", "新柄",
+                "新しいの", "新しい絵", "新しく描く", "新しく描きたい", "新しい絵を描く", "いいえ"
+            ])
+            is_base_choice = any(w in clean_ans for w in [
+                "はい", "うん", "そうして", "そう", "ベースに", "ベースで", "ベース", "前ので", "前のでいい",
+                "今までの", "今までので", "前回の絵", "前の絵", "今までの絵", "ベースの絵"
+            ])
+            if is_new_choice:
                 print(f"[Whisper STT ({terminal_id})]: Detected resident chose NEW etegami mode ('{transcribed_text}')")
                 session.etegami_prepare_mode = "generate_new"
+                mode_just_decided = True
                 asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
-            elif any(w in clean_ans for w in ["はい", "うん", "そうして", "そう", "ベースに", "前ので", "前のでいい", "今までの"]):
+            elif is_base_choice:
                 print(f"[Whisper STT ({terminal_id})]: Detected resident chose BASE etegami mode ('{transcribed_text}')")
                 session.etegami_prepare_mode = "asset_base"
+                mode_just_decided = True
                 asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
+
+            if mode_just_decided:
+                stashed = getattr(session, "pending_motif", "")
+                session.pending_motif = None
+                if stashed:
+                    print(f"[Whisper STT ({terminal_id})]: Executing stashed motif '{stashed}' after mode decision")
+                    ack_msg = f"🎨 みまもりさん：承知しました。{stashed}の絵手紙を描きますね。"
+                    asyncio.create_task(websocket.send_json({
+                        "type": "mimamori_acknowledgement",
+                        "action": "etegami_update_start",
+                        "message": ack_msg,
+                        "speak_text": f"承知しました。{stashed}の絵手紙を描きますね。"
+                    }))
+                    asyncio.create_task(on_live_etegami_update(stashed, ""))
+
+        # Check for resident etegami update trigger from STT text (only if not handling mode decision)
+        if not mode_just_decided:
+            check_resident_etegami_trigger(transcribed_text)
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [
@@ -2317,9 +2366,6 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         # Save user transcription to chat history if recording is active
         if session.recording_active and len(transcribed_text.strip()) > 1:
             db.add_chat_message(user["id"], "user", transcribed_text.strip())
-
-        # 2-2. Check for resident etegami update triggers from Whisper STT
-        check_resident_etegami_trigger(transcribed_text)
 
         # 3. Run local LLM safety guardrail inspection in background
         asyncio.create_task(_run_live_guardrail(transcribed_text))
@@ -2458,20 +2504,46 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 if user_text:
                     print(f"[Live Session EOS]: Received user text: '{user_text}' (audio chunks: {current_chunks})")
 
-                    # Check for resident etegami update trigger from user text (Double safety net)
-                    check_resident_etegami_trigger(user_text)
-
-                    # Check for resident's answer to "今まで作った絵手紙をベースにしますか？"
+                    # Check for resident's answer to "今まで作った絵手紙をベースにしますか？それとも新しく描きますか？"
                     clean_ans = user_text.replace(" ", "").replace("、", "").replace("。", "")
+                    mode_just_decided = False
                     if getattr(session, "has_resident_requested_etegami", False) and not getattr(session, "etegami_prepare_mode", None):
-                        if any(w in clean_ans for w in ["いいえ", "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵"]):
+                        is_new_choice = any(w in clean_ans for w in [
+                            "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵", "新規", "新柄",
+                            "新しいの", "新しい絵", "新しく描く", "新しく描きたい", "新しい絵を描く", "いいえ"
+                        ])
+                        is_base_choice = any(w in clean_ans for w in [
+                            "はい", "うん", "そうして", "そう", "ベースに", "ベースで", "ベース", "前ので", "前のでいい",
+                            "今までの", "今までので", "前回の絵", "前の絵", "今までの絵", "ベースの絵"
+                        ])
+                        if is_new_choice:
                             print(f"[Live Session EOS ({terminal_id})]: Detected resident chose NEW etegami mode ('{user_text}')")
                             session.etegami_prepare_mode = "generate_new"
+                            mode_just_decided = True
                             asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
-                        elif any(w in clean_ans for w in ["はい", "うん", "そうして", "そう", "ベースに", "前ので", "前のでいい", "今までの"]):
+                        elif is_base_choice:
                             print(f"[Live Session EOS ({terminal_id})]: Detected resident chose BASE etegami mode ('{user_text}')")
                             session.etegami_prepare_mode = "asset_base"
+                            mode_just_decided = True
                             asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
+
+                        if mode_just_decided:
+                            stashed = getattr(session, "pending_motif", "")
+                            session.pending_motif = None
+                            if stashed:
+                                print(f"[Live Session EOS ({terminal_id})]: Executing stashed motif '{stashed}' after mode decision")
+                                ack_msg = f"🎨 みまもりさん：承知しました。{stashed}の絵手紙を描きますね。"
+                                asyncio.create_task(websocket.send_json({
+                                    "type": "mimamori_acknowledgement",
+                                    "action": "etegami_update_start",
+                                    "message": ack_msg,
+                                    "speak_text": f"承知しました。{stashed}の絵手紙を描きますね。"
+                                }))
+                                asyncio.create_task(on_live_etegami_update(stashed, ""))
+
+                    # Check for resident etegami update trigger from user text (only if not handling mode decision)
+                    if not mode_just_decided:
+                        check_resident_etegami_trigger(user_text)
 
                     # Check for resident etegami visibility trigger (開く・起動・かきたい / 閉じる) from EOS user text
                     etegami_eos_intent = check_etegami_visibility_intent(user_text)
