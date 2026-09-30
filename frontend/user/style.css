@@ -1765,6 +1765,19 @@ body.simple-mode .speech-box.user-box {
     border: 1.5px solid #93c5fd;
 }
 
+.etegami-status-badge.badge-updating {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    color: #b45309;
+    border: 1.5px solid #f59e0b;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+    animation: updatingPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes updatingPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.9; }
+}
+
 .etegami-status-badge.badge-completed {
     background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
     color: #be185d;

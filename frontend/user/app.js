@@ -92,8 +92,14 @@ document.addEventListener("DOMContentLoaded", () => {
             todaySchedulesCard.classList.remove("hidden");
         }
         isScheduleCardVisible = true;
-        console.log("[Schedule Card]: Card shown.");
+        console.log("[Schedule Card]: Card shown. Auto-close timer set for 60 seconds.");
         updateShowScheduleBtnVisibility();
+
+        // 予定カードは60秒で自動で閉じる
+        scheduleCardHideTimer = setTimeout(() => {
+            console.log("[Schedule Card]: Auto-closing schedule card after 60 seconds.");
+            hideScheduleCard();
+        }, 60000);
 
         if (speakAnnouncement && currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
             if (typeof playScheduleAnnouncement === "function") {
@@ -295,7 +301,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const modalTitle = document.getElementById("etegami-modal-title");
         const modalSeasonTag = document.getElementById("etegami-modal-season-tag");
 
-        const newUrl = data.image_url || "/family/assets/sample_postcard.jpg";
+        const rawUrl = data.image_url || "/family/assets/sample_postcard.jpg";
+        const cacheBuster = Date.now();
+        const newUrl = rawUrl.includes("?") ? `${rawUrl}&t=${cacheBuster}` : `${rawUrl}?t=${cacheBuster}`;
         const newTitle = data.title || "【手作り絵手紙】";
         const newCalligraphy = data.calligraphy || "心穏やかに 寄り添う日々";
         const newStamp = data.stamp_icon || "🌸";
@@ -312,10 +320,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (voiceHint) voiceHint.classList.add("hidden");
         }
 
-        // Smooth cross-fade transition
+        // Auto show etegami card if force_open is requested
+        if (data.force_open === true && typeof showEtegamiCard === "function") {
+            showEtegamiCard();
+        }
+
+        // Smooth cross-fade transition with cache-busting
         if (cardImg && cardImgNext) {
             const imgLoader = new Image();
-            imgLoader.src = newUrl;
             imgLoader.onload = () => {
                 cardImgNext.src = newUrl;
                 cardImgNext.classList.add("current");
@@ -334,9 +346,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 850);
             };
             imgLoader.onerror = () => {
+                console.warn("[Etegami Image]: Failed to load image:", newUrl);
+                cardImg.src = rawUrl;
                 if (updatingBadge) updatingBadge.classList.add("hidden");
                 isEtegamiUpdating = false;
             };
+            imgLoader.src = newUrl;
+        } else if (cardImg) {
+            cardImg.src = newUrl;
         }
 
         if (calligraphyEl) calligraphyEl.textContent = newCalligraphy;
@@ -354,17 +371,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const statusBadge = document.getElementById("etegami-status-badge");
         const completeBtn = document.getElementById("btn-complete-etegami");
         const isCompleted = !!data.is_completed;
-        const statusText = data.badge_text || (isCompleted ? "💮 ご本人様と完成" : "🎨 下絵制作中");
 
         if (statusBadge) {
-            statusBadge.textContent = statusText;
-            if (isCompleted) {
-                statusBadge.className = "etegami-status-badge badge-completed hidden";
-            } else {
-                statusBadge.className = "etegami-status-badge badge-drafting hidden";
-            }
+            statusBadge.classList.remove("hidden");
             if (data.is_updating === true) {
-                statusBadge.classList.remove("hidden");
+                statusBadge.className = "etegami-status-badge badge-updating";
+                statusBadge.innerHTML = "<span class='spin-icon'>✨</span><span>絵手紙を描いています…</span>";
+            } else if (isCompleted) {
+                statusBadge.className = "etegami-status-badge badge-completed";
+                statusBadge.innerHTML = "<span>💮</span><span>ご本人様と完成</span>";
+            } else {
+                statusBadge.className = "etegami-status-badge badge-drafting";
+                statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
             }
         }
 
@@ -1068,6 +1086,11 @@ document.addEventListener("DOMContentLoaded", () => {
         liveWs.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === "live_audio_output") {
+                // If Mimamori-san is currently announcing schedules, drop Gemini Live audio to prevent interruption
+                if (isAnnouncementPlaying || isTTSAnnouncing) {
+                    console.log("[LiveWS]: Dropped live_audio_output because Mimamori schedule announcement is playing.");
+                    return;
+                }
                 console.log("[LiveWS]: Received live_audio_output chunk (b64 len:", data.data ? data.data.length : 0, ", rate:", data.sample_rate || 24000, ")");
                 setLiveLampState("speaking");
                 setAvatarState("speaking");
@@ -1201,7 +1224,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (aiResponseBox && cleanText) {
                     if (data.type === "live_text_output") {
-                        if (!aiResponseBox.textContent || aiResponseBox.textContent.includes("表示されます") || aiResponseBox.textContent.includes("待っています") || aiResponseBox.textContent.includes("リアルタイム音声応答中")) {
+                        if (!aiResponseBox.textContent || 
+                            aiResponseBox.textContent.includes("表示されます") || 
+                            aiResponseBox.textContent.includes("待っています") || 
+                            aiResponseBox.textContent.includes("リアルタイム音声") ||
+                            aiResponseBox.textContent.includes("お返答中")) {
                             aiResponseBox.textContent = cleanText;
                         } else if (!aiResponseBox.textContent.endsWith(cleanText)) {
                             aiResponseBox.textContent += cleanText;
@@ -1213,8 +1240,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     setAvatarState("speaking");
                 }
             } else if (data.type === "transcription_result") {
-                // If Web Speech API is already providing instant text, do not overwrite with delayed buffer
-                if (userSpeechBox && data.text && (!window.isSpeechRecActive || !userSpeechBox.textContent)) {
+                // Always display latest user speech transcription result on screen
+                if (userSpeechBox && data.text) {
                     userSpeechBox.textContent = data.text;
                 }
                 if (data.text) {
@@ -1293,17 +1320,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (data.updating) {
                     if (updatingBadge) updatingBadge.classList.remove("hidden");
                     if (voiceHint) voiceHint.classList.remove("hidden");
-                    if (statusBadge) statusBadge.classList.remove("hidden");
+                    if (statusBadge) {
+                        statusBadge.classList.remove("hidden");
+                        statusBadge.className = "etegami-status-badge badge-updating";
+                        statusBadge.innerHTML = "<span class='spin-icon'>✨</span><span>絵手紙を描いています…</span>";
+                    }
                     if (completeBtn) completeBtn.classList.remove("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-completed");
                         lampEtegami.classList.add("lamp-updating");
-                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：絵手紙更新中...";
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：絵を描いているところです";
                     }
                 } else {
                     if (updatingBadge) updatingBadge.classList.add("hidden");
                     if (voiceHint) voiceHint.classList.add("hidden");
-                    if (statusBadge) statusBadge.classList.add("hidden");
+                    if (statusBadge) {
+                        statusBadge.classList.remove("hidden");
+                        statusBadge.className = "etegami-status-badge badge-drafting";
+                        statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
+                    }
                     if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("lamp-updating");
@@ -1319,19 +1354,52 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
             } else if (data.type === "mimamori_acknowledgement") {
-                console.log("[LiveWS]: Received mimamori_acknowledgement ->", data.message);
+                console.log("[LiveWS]: Received mimamori_acknowledgement ->", data.message, "speak_text=", data.speak_text);
                 if (data.message) {
                     showTemporaryToast(data.message, 4500);
+                }
+                if (data.speak_text) {
+                    playTTSVoice(data.speak_text);
                 }
                 const lampEtegami = document.getElementById("lamp-etegami");
                 const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
                 const voiceHint = document.getElementById("etegami-voice-hint");
                 const statusBadge = document.getElementById("etegami-status-badge");
                 const completeBtn = document.getElementById("btn-complete-etegami");
-                if (data.action === "etegami_updated") {
+                if (data.action === "etegami_prepared") {
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("hidden", "lamp-completed");
+                        lampEtegami.classList.add("lamp-updating");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：準備中";
+                        clearTimeout(window._etegamiLampTimer);
+                        window._etegamiLampTimer = setTimeout(() => {
+                            if (lampEtegami) {
+                                lampEtegami.classList.remove("lamp-updating");
+                                lampEtegami.classList.add("hidden");
+                            }
+                        }, 5000);
+                    }
+                } else if (data.action === "etegami_busy") {
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("hidden", "lamp-completed");
+                        lampEtegami.classList.add("lamp-updating");
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：今絵を描いているところです";
+                        clearTimeout(window._etegamiLampTimer);
+                        window._etegamiLampTimer = setTimeout(() => {
+                            if (lampEtegami) {
+                                lampEtegami.classList.remove("lamp-updating");
+                                lampEtegami.classList.add("hidden");
+                            }
+                        }, 4000);
+                    }
+                } else if (data.action === "etegami_updated") {
                     if (voiceHint) voiceHint.classList.add("hidden");
-                    if (statusBadge) statusBadge.classList.add("hidden");
                     if (completeBtn) completeBtn.classList.add("hidden");
+                    if (statusBadge) {
+                        statusBadge.classList.remove("hidden");
+                        statusBadge.className = "etegami-status-badge badge-drafting";
+                        statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
+                    }
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-updating");
                         lampEtegami.classList.add("lamp-completed");
@@ -2057,7 +2125,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 let chunksSentInUtterance = 0;
                 let preSpeechRingBuffer = []; // ring buffer of last 3 chunks (~150ms) to preserve initial consonants
                 const NOISE_GATE_THRESHOLD = 0.0075; // Cut off mic hiss, room fan, air conditioner, rustling
-                const AI_ECHO_GUARD_MS = 1800; // 1.8s post-playback acoustic echo cooldown guard
+                const AI_ECHO_GUARD_MS = 400; // 0.4s minimal acoustic echo cooldown guard
 
                 recorder.onChunkCallback = (resampledChunk) => {
                     // Mute microphone completely when AI is speaking, modal is open, system is announcing,
@@ -2088,6 +2156,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     if (isVoiceActive) {
                         // User started speaking or is actively speaking
+                        if (!isSpeakingUtterance && userSpeechBox) {
+                            userSpeechBox.textContent = "🎙️ 聞き取り中...";
+                        }
                         if (voiceHangoverFrames <= 0 && preSpeechRingBuffer.length > 0) {
                             // Flush pre-speech buffer so leading consonants are intact
                             if (liveWs && liveWs.readyState === WebSocket.OPEN) {
@@ -2149,8 +2220,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const textToSend = (!isEcho && cleanText) ? cleanText : "";
                                 if (textToSend) handleEtegamiVoiceTrigger(textToSend, "ClientVadEOS");
 
-                                // Only send EOS if actual human speech occurred (either text recognized OR >= 6 chunks streamed)
-                                if (chunksSentInUtterance >= 6 || textToSend) {
+                                // Only send EOS if actual human speech occurred (either text recognized OR >= 3 chunks streamed for short words like 'はい', 'いいえ')
+                                if (chunksSentInUtterance >= 3 || textToSend) {
                                     if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                                         console.log("[Mic VAD] Speech concluded. Sending EOS frame (chunks:", chunksSentInUtterance, ", text:", textToSend || "<audio-only>", ")");
                                         liveWs.send(JSON.stringify({ type: "eos", text: textToSend }));

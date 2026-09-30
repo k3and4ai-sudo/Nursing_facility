@@ -180,6 +180,7 @@ class GeminiLiveSession:
         on_thought_received: Optional[Callable[[str], None]] = None,
         on_recording_status_changed: Optional[Callable[[bool, str], None]] = None,
         on_ui_mode_changed: Optional[Callable[[str], None]] = None,
+        on_etegami_prepare_mode: Optional[Callable[[str], None]] = None,
         on_etegami_updated: Optional[Callable[[str, str], None]] = None,
         on_etegami_completed: Optional[Callable[[], None]] = None,
         on_schedule_visibility_changed: Optional[Callable[[bool], None]] = None,
@@ -197,8 +198,10 @@ class GeminiLiveSession:
         self.on_ui_mode_changed = on_ui_mode_changed
         self.on_schedule_visibility_changed = on_schedule_visibility_changed
         self.on_etegami_visibility_changed = on_etegami_visibility_changed
+        self.on_etegami_prepare_mode = on_etegami_prepare_mode
         self.on_etegami_updated = on_etegami_updated
         self.on_etegami_completed = on_etegami_completed
+        self.etegami_prepare_mode = "asset_base"
         self.recording_active = True
         self.last_recording_time = 0.0
         self.current_ui_mode = "simple"
@@ -326,9 +329,11 @@ class GeminiLiveSession:
                         f"★【最重要：起動時（最初の挨拶時）の絶対厳守ルール】：\n"
                         f"・会話開始（起動）時は、過去の会話履歴に何が書かれていても、絶対に絵手紙の作成や修正・手直しの話をいきなり切り出さないでください！\n"
                         f"・利用者が今このセッションで「絵を描きたい」と発言するまでは、絵手紙の話題をあなたから出すことは【絶対に厳禁】です！\n"
-                        f"・起動時は必ず第一声で正確に：\n"
-                        f"「みまもりさん予定カードの表示をお願いします。」\n"
-                        f"と発言し、続けて「{nickname}、こんにちは！本日の予定を表示しましたよ」とお伝えください。挨拶後は自分から予定や絵手紙の話を長々と語らず、利用者の言葉を待ってください。\n\n"
+                        f"・起動時は「みまもりさん予定カードの表示をお願いします」等の予定カード表示指示は【絶対に言わないでください】（予定カードは起動時は非表示のままにします）。\n"
+                        f"・起動時の挨拶は、必ず温かくシンプルに：\n"
+                        f"「{nickname}、こんにちは！何かお手伝いできることはありますか？」\n"
+                        f"とだけお伝えし、挨拶後は自分から予定や絵手紙の話を長々と語らず、利用者の言葉を待ってください。\n"
+                        f"※利用者様から「今日の予定は何？」「予定を見せて」などと聞かれた時のみ、「みまもりさん、予定カードの表示をお願いします」と発言してカードを表示し、予定を優しくお伝えください。\n\n"
                     )
                 else:
                     today_schedules_text = (
@@ -341,6 +346,7 @@ class GeminiLiveSession:
                     schedule_startup_instruction = (
                         f"★【最重要：起動時（最初の挨拶時）の絶対厳守ルール】：\n"
                         f"・本日は予定が一切登録されていません。また、絵手紙の話をいきなり切り出すことも厳禁です。\n"
+                        f"・起動時は「みまもりさん予定カードの表示をお願いします」等の予定カード表示指示は【絶対に言わないでください】。\n"
                         f"・会話開始（起動）時の最初の挨拶では、必ず：\n"
                         f"「{nickname}、こんにちは！本日は特に予定は入っていませんので、ゆっくり過ごしてくださいね」\n"
                         f"とだけ温かく挨拶し、利用者の言葉を待ってください。\n"
@@ -435,11 +441,28 @@ class GeminiLiveSession:
                                         f"★【最重要規則：ジェミナイは絵手紙の更新や下絵完了について絶対に言及しないこと！】：\n"
                                         f"・絵手紙の「更新中」や「更新完了」の案内は、すべてローカルAI「みまもりさん」が画面ランプや通知メッセージで行います。\n"
                                         f"・ジェミナイは利用者に対して「描いてみましたよ」「描きかえましたよ」「更新しましたよ」「画面をご覧ください」「いかがでしょうか」等と【絵手紙の更新や画面表示について言及することは絶対に厳禁】です！\n"
-                                        f"★【利用者が絵を描くことを希望された場合のみ】：\n"
-                                        f"1. 下絵の作成・情景の説明や追加の様子をお話しされた時（絵手紙の作成中・希望時）：\n"
-                                        f"利用者が「〇〇の絵を描きたい」「〇〇にして」「絵を更新して」と希望された時や、【絵の様子・詳しい情景・説明の追加】（例:「生徒の机が黒板に向かっている」「先生が黒板の前で説明している」「〜が並んでいる」等）をお話しされた時は、必ず第一声の冒頭で正確に：\n"
+                                        f"★【利用者が絵を描くこと・絵手紙を希望された場合の3ステップ】：\n"
+                                        f"【ステップ1：最初の確認質問】\n"
+                                        f"利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」などと希望された時は、いきなり下絵更新を指示するのではなく、まず第一声で利用者様に優しく：\n"
+                                        f"「今まで作った絵手紙をベースにしますか？」\n"
+                                        f"と尋ねてください。\n\n"
+                                        f"【ステップ2：利用者の意向に応じた準備指示】\n"
+                                        f"・利用者が「はい」「そうして」「前のでいいよ」「うん」などと答えた場合：\n"
+                                        f"必ず第一声で正確に：\n"
+                                        f"「みまもりさん、絵手紙をベースにしてください。」\n"
+                                        f"と発言してください。続けて利用者様に「承知いたしました。どんな思い出やお話の絵手紙にしましょうか？」と優しく尋ねてください。\n\n"
+                                        f"・利用者が「いいえ」「新しく描いて」「違うのがいい」「新しい絵がいい」などと答えた場合：\n"
+                                        f"必ず第一声で正確に：\n"
+                                        f"「みまもりさん、新しい画像をベースにしてください。」\n"
+                                        f"と発言してください。続けて利用者様に「新しい絵ですね！どんな場面や思い出を描きましょうか？」と優しく尋ねてください。\n\n"
+                                        f"【ステップ3：モチーフ決定による最初の画像表示】\n"
+                                        f"会話が進み、描きたいモチーフや情景（例:「昔飼っていた犬」「運動会のお弁当」「喫茶店」「桜」など）が決まったら、必ず第一声の冒頭で正確に：\n"
                                         f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」\n"
-                                        f"とシステム定型句を発言してください。モチーフには利用者が説明してくださった具体的な様子（例:「黒板の前で説明する先生と並んだ生徒の机」）を反映してください。続けて利用者様には更新の話は一切せず、その情景やお話ししてくださった思い出への純粋な共感・傾聴の言葉（例：「黒板の前で先生が説明されている情景、とても懐かしいですね」「机がずらりと並んでいて活気がありますね」等）のみを温かくお話ししてください。\n"
+                                        f"とシステム定型句を発言してください。みまもりさんがステップ2で選ばれた方法（既存アセットから近いものを選ぶ、またはベースがない全く新しい画像を生成する）により最初の画像を画面に表示します。続けて利用者様には更新の話は一切せず、その情景やお話への温かい共感・傾聴の言葉のみをお話ししてください。\n\n"
+                                        f"【ステップ4：会話継続による情景追加・絵手紙の手直し】\n"
+                                        f"絵手紙についての会話が続くなかで、利用者様が追加の情景や手直し（例:「座敷を走り回っていた」「座敷の風景も描いて」「首輪を赤くして」「夕焼けの空にして」「猫にして」など）をお話しされた時も、必ず第一声で：\n"
+                                        f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」\n"
+                                        f"と発言して絵手紙の更新をみまもりさんに依頼してください。その後に利用者様へ温かい共感・傾聴の返答をしてください。\n\n"
                                         f"2. 完成・満足の意思を確認した時：\n"
                                         f"利用者様が「これでいいよ」「気に入った」「完成」「これで送って」「素敵だね」などと満足されたら、必ず第一声で正確に：\n"
                                         f"「みまもりさん、デジタル絵手紙完成」と発言してください。\n"
@@ -654,6 +677,34 @@ class GeminiLiveSession:
         self.ai_streamed_text_buffer = (self.ai_streamed_text_buffer + text_val)[-600:]
         eval_text = self.ai_streamed_text_buffer
 
+        # Detect Etegami Base Mode command from Gemini speech:
+        # e.g. "みまもりさん、絵手紙をベースにしてください" / "みまもり③さん、絵手紙をベースにしてください"
+        is_etegami_base = bool(re.search(r'みまもり[3③]?さん[、,\s]*絵手紙をベースにして', eval_text)) or ("絵手紙をベースにして" in eval_text)
+        if is_etegami_base:
+            if not self.has_resident_spoken_in_session:
+                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami Base trigger (resident has not spoken): '{eval_text[-60:]}'")
+            else:
+                print(f"[Gemini Live Session]: Detected Gemini Etegami Base Mode Trigger in eval_text: '{eval_text[-60:]}'")
+                self.etegami_prepare_mode = "asset_base"
+                self.has_resident_requested_etegami = True
+                self.ai_streamed_text_buffer = ""
+                if self.on_etegami_prepare_mode:
+                    self.on_etegami_prepare_mode("asset_base")
+
+        # Detect Etegami Generate New Mode command from Gemini speech:
+        # e.g. "みまもりさん、新しい画像をベースにしてください" / "みまもり③さん、新しい画像をベースにしてください"
+        is_etegami_new = bool(re.search(r'みまもり[3③]?さん[、,\s]*新しい画像をベースにして', eval_text)) or ("新しい画像をベースにして" in eval_text)
+        if is_etegami_new:
+            if not self.has_resident_spoken_in_session:
+                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami New Mode trigger (resident has not spoken): '{eval_text[-60:]}'")
+            else:
+                print(f"[Gemini Live Session]: Detected Gemini Etegami New Mode Trigger in eval_text: '{eval_text[-60:]}'")
+                self.etegami_prepare_mode = "generate_new"
+                self.has_resident_requested_etegami = True
+                self.ai_streamed_text_buffer = ""
+                if self.on_etegami_prepare_mode:
+                    self.on_etegami_prepare_mode("generate_new")
+
         # Detect Etegami Completion command from Gemini speech or thought
         is_gemini_etegami_complete = (
             "デジタル絵手紙完成" in eval_text or
@@ -714,16 +765,22 @@ class GeminiLiveSession:
                 motif = motif_match.group(1).strip() if motif_match else ""
                 msg = msg_match.group(1).strip() if msg_match else ""
                 if motif:
+                    motif = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', motif).strip()
                     motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
                     motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
+                    if motif in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ：", "none", "null"]:
+                        motif = ""
                 if msg:
+                    msg = re.sub(r'^(?:文字|言葉|添え字|メッセージ)[：:は]?\s*', '', msg).strip()
                     msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
                     msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
                     msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
+                    if msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
+                        msg = ""
 
                 # Fallback: scan for known seasonal / reminiscence motifs in text
                 if not motif:
-                    for kw in ["文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉"]:
+                    for kw in ["座敷を走り回る白い犬", "座敷と白い犬", "白い犬", "子犬", "座敷", "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉", "富士山", "猫"]:
                         if kw in eval_text:
                             motif = kw
                             break
@@ -749,7 +806,7 @@ class GeminiLiveSession:
                         print(f"[Gemini Live Session]: Trigger phrase detected but motif pending in stream: '{eval_text[-60:]}' - waiting for next chunk...")
                         return
 
-                # If still no motif, but there is content after the trigger phrase, extract hint
+                # If still no motif, but there is content after the trigger phrase, extract hint safely
                 if not motif:
                     trigger_patterns = [
                         r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)',
@@ -759,7 +816,14 @@ class GeminiLiveSession:
                         m = re.search(tp, eval_text, re.IGNORECASE)
                         if m and m.group(1).strip():
                             content_tail = m.group(1).strip().strip("（）()")
-                            if content_tail:
+                            sub_m = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', content_tail)
+                            if sub_m:
+                                cand = sub_m.group(1).strip()
+                                cand = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', cand).strip()
+                                cand = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', cand).strip()
+                                if cand and cand not in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ："]:
+                                    motif = cand
+                            elif content_tail and not content_tail.startswith("モチーフ"):
                                 motif = content_tail[:25]
                             break
 

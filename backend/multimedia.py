@@ -4,6 +4,7 @@ Implements Option 1: High-definition seasonal artwork + AI-assisted conversation
 Clean provider architecture ready for future external image AI (Imagen 3 / DALL-E 3) if activated.
 """
 
+import re
 import datetime
 from typing import List, Dict, Any, Optional
 
@@ -140,6 +141,304 @@ def generate_image_with_gemini(
             print(f"[Gemini Image Gen Notice]: Model {m} call failed: {e}. Falling back.")
 
     return None
+
+def create_artistic_watercolor_image(
+    motif: str,
+    theme_title: str,
+    season: str = "autumn",
+    output_filename: str = "generated_watercolor_etegami.jpg"
+) -> str:
+    """
+    Creates a dedicated high-quality Japanese watercolor / Etegami style artwork for novel resident motifs.
+    Dynamically renders authentic washi texture, soft watercolor washes, ink line-work, and concrete motif
+    artwork (e.g. cute puppy, cozy cat, gentle bird, seasonal flowers, tea cup, Mount Fuji, etc.).
+    Saves to frontend/family/assets and docs/assets.
+    """
+    import random
+    import math
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+    w, h = 800, 600
+    # Season palette definitions (soft washi tints & watercolor wash)
+    palettes = {
+        "spring": {
+            "bg": (254, 250, 252),
+            "wash1": (255, 222, 232, 90),
+            "wash2": (255, 200, 215, 80),
+            "accent": (216, 112, 147),
+            "seal": "🌸",
+            "flower_petal": (255, 185, 205, 210)
+        },
+        "summer": {
+            "bg": (248, 252, 254),
+            "wash1": (205, 238, 250, 90),
+            "wash2": (180, 220, 235, 80),
+            "accent": (70, 130, 180),
+            "seal": "🌻",
+            "flower_petal": (255, 210, 60, 220)
+        },
+        "autumn": {
+            "bg": (253, 251, 245),
+            "wash1": (252, 228, 200, 90),
+            "wash2": (245, 210, 165, 85),
+            "accent": (195, 95, 55),
+            "seal": "🍁",
+            "flower_petal": (230, 120, 140, 210)
+        },
+        "winter": {
+            "bg": (250, 252, 255),
+            "wash1": (225, 235, 246, 90),
+            "wash2": (195, 210, 230, 80),
+            "accent": (90, 115, 140),
+            "seal": "❄️",
+            "flower_petal": (205, 45, 55, 220)
+        }
+    }
+    p = palettes.get(season, palettes["autumn"])
+
+    # 1. Base Washi canvas
+    img = Image.new("RGB", (w, h), p["bg"])
+    draw = ImageDraw.Draw(img)
+
+    # Subtle washi fiber grain
+    for y in range(0, h, 6):
+        for x in range(0, w, 6):
+            n = random.randint(-4, 4)
+            c = max(0, min(255, p["bg"][0] + n))
+            draw.point((x, y), fill=(c, c - 2, max(0, c - 6)))
+
+    # 2. Watercolor wash layers (soft blurred atmospheric aura)
+    wash_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    wdraw = ImageDraw.Draw(wash_layer)
+    wdraw.ellipse([80, 60, 720, 540], fill=p["wash1"])
+    wdraw.ellipse([160, 120, 640, 480], fill=p["wash2"])
+    # Random gentle organic splashes
+    for _ in range(6):
+        rx = random.randint(140, 660)
+        ry = random.randint(120, 480)
+        rr = random.randint(60, 150)
+        wdraw.ellipse([rx - rr, ry - rr, rx + rr, ry + rr], fill=(p["wash2"][0], p["wash2"][1], p["wash2"][2], 40))
+
+    wash_layer = wash_layer.filter(ImageFilter.GaussianBlur(radius=28))
+    img.paste(wash_layer, (0, 0), wash_layer)
+
+    # 3. Dedicated Motif Painting Layer (Watercolor & Sumi-e)
+    clean_motif = motif.replace("高校時代の", "").replace("昔の", "").replace("今日の", "").strip() or "心温まる思い出"
+    m_lower = clean_motif.lower()
+
+    # Create dedicated art layer
+    art = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    adraw = ImageDraw.Draw(art)
+    ink = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    idraw = ImageDraw.Draw(ink)
+
+    cx, cy = 400, 290  # center for illustration
+
+    # Check motif category
+    if any(k in clean_motif for k in ["犬", "子犬", "いぬ", "イヌ", "ワンちゃん", "ポチ", "柴犬", "わんこ", "puppy", "dog"]):
+        # 🐶 Cute Etegami Watercolor Puppy
+        is_white = ("白" in clean_motif or "しろ" in clean_motif)
+        body_col = (255, 255, 252, 240) if is_white else (235, 195, 140, 230)
+        ear_col = (242, 222, 202, 230) if is_white else (210, 160, 95, 240)
+        
+        # Soft shadow under puppy
+        adraw.ellipse([cx - 130, cy + 130, cx + 130, cy + 175], fill=(210, 200, 190, 80))
+        # Body
+        adraw.ellipse([cx - 105, cy - 25, cx + 105, cy + 150], fill=body_col)
+        # Tail (wagging upward)
+        adraw.ellipse([cx + 75, cy + 30, cx + 135, cy + 90], fill=body_col)
+        # Head
+        adraw.ellipse([cx - 90, cy - 135, cx + 90, cy + 45], fill=body_col)
+        # Ears (floppy soft ears)
+        adraw.ellipse([cx - 115, cy - 110, cx - 55, cy - 15], fill=ear_col)
+        adraw.ellipse([cx + 55, cy - 110, cx + 115, cy - 15], fill=ear_col)
+        # Cute front paws
+        adraw.ellipse([cx - 70, cy + 120, cx - 18, cy + 160], fill=body_col)
+        adraw.ellipse([cx + 18, cy + 120, cx + 70, cy + 160], fill=body_col)
+
+        # Blur art for watercolor bleed
+        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+
+        # Ink layer: Collar, Face, and Sumi-e accents
+        # Red ribbon collar
+        idraw.arc([cx - 68, cy + 15, cx + 68, cy + 48], start=10, end=170, fill=(215, 45, 45, 240), width=7)
+        idraw.ellipse([cx - 9, cy + 40, cx + 9, cy + 58], fill=(240, 190, 45, 245))  # Gold bell
+
+        # Eyes (soft shining puppy eyes)
+        idraw.ellipse([cx - 44, cy - 52, cx - 24, cy - 30], fill=(38, 28, 24, 245))
+        idraw.ellipse([cx - 40, cy - 49, cx - 33, cy - 42], fill=(255, 255, 255, 255))  # Highlight
+        idraw.ellipse([cx + 24, cy - 52, cx + 44, cy - 30], fill=(38, 28, 24, 245))
+        idraw.ellipse([cx + 27, cy - 49, cx + 34, cy - 42], fill=(255, 255, 255, 255))
+
+        # Nose & smiling mouth
+        idraw.ellipse([cx - 15, cy - 25, cx + 15, cy - 4], fill=(42, 32, 28, 245))
+        idraw.arc([cx - 18, cy - 10, cx, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+        idraw.arc([cx, cy - 10, cx + 18, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+
+        # Soft sumi-e outline contours (Etegami style rough brushwork)
+        idraw.arc([cx - 90, cy - 135, cx + 90, cy + 45], start=130, end=210, fill=(65, 55, 48, 110), width=2)
+        idraw.arc([cx - 90, cy - 135, cx + 90, cy + 45], start=330, end=50, fill=(65, 55, 48, 110), width=2)
+        # Cute paw prints in corner
+        idraw.ellipse([cx - 240, cy + 120, cx - 215, cy + 140], fill=(215, 140, 130, 140))
+        idraw.ellipse([cx - 245, cy + 105, cx - 235, cy + 117], fill=(215, 140, 130, 140))
+        idraw.ellipse([cx - 230, cy + 100, cx - 220, cy + 112], fill=(215, 140, 130, 140))
+        idraw.ellipse([cx - 215, cy + 105, cx - 205, cy + 117], fill=(215, 140, 130, 140))
+
+    elif any(k in clean_motif for k in ["猫", "ねこ", "ネコ", "子猫", "三毛猫", "cat"]):
+        # 🐱 Cozy Etegami Cat
+        adraw.ellipse([cx - 110, cy + 130, cx + 110, cy + 170], fill=(210, 200, 190, 80))
+        adraw.ellipse([cx - 95, cy - 15, cx + 95, cy + 145], fill=(255, 252, 245, 235))  # Body
+        adraw.ellipse([cx + 65, cy + 50, cx + 130, cy + 95], fill=(230, 160, 100, 230))  # Calico patch
+        adraw.ellipse([cx - 85, cy - 120, cx + 85, cy + 30], fill=(255, 252, 245, 245))  # Head
+        # Ears (pointed)
+        adraw.polygon([(cx - 75, cy - 85), (cx - 50, cy - 145), (cx - 15, cy - 95)], fill=(250, 215, 205, 235))
+        adraw.polygon([(cx + 15, cy - 95), (cx + 50, cy - 145), (cx + 75, cy - 85)], fill=(250, 215, 205, 235))
+        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+
+        # Happy eyes, nose, whiskers
+        idraw.arc([cx - 45, cy - 50, cx - 18, cy - 28], start=200, end=340, fill=(45, 35, 30, 230), width=3)
+        idraw.arc([cx + 18, cy - 50, cx + 45, cy - 28], start=200, end=340, fill=(45, 35, 30, 230), width=3)
+        idraw.ellipse([cx - 8, cy - 30, cx + 8, cy - 16], fill=(235, 120, 130, 240))
+        # Whiskers
+        idraw.line([(cx - 50, cy - 25), (cx - 105, cy - 35)], fill=(65, 55, 50, 160), width=2)
+        idraw.line([(cx - 50, cy - 20), (cx - 105, cy - 15)], fill=(65, 55, 50, 160), width=2)
+        idraw.line([(cx + 50, cy - 25), (cx + 105, cy - 35)], fill=(65, 55, 50, 160), width=2)
+        idraw.line([(cx + 50, cy - 20), (cx + 105, cy - 15)], fill=(65, 55, 50, 160), width=2)
+
+    elif any(k in clean_motif for k in ["鳥", "小鳥", "雀", "すずめ", "ことり", "bird"]):
+        # 🕊️ Pair of Gentle Sparrows
+        adraw.ellipse([cx - 60, cy - 50, cx + 60, cy + 60], fill=(225, 175, 125, 230))  # Sparrow body
+        adraw.ellipse([cx - 45, cy - 110, cx + 45, cy - 25], fill=(195, 135, 85, 240))  # Head
+        adraw.ellipse([cx - 30, cy - 20, cx + 30, cy + 50], fill=(255, 250, 242, 230))  # White breast
+        # Branch
+        idraw.line([(cx - 160, cy + 90), (cx + 160, cy + 50)], fill=(95, 75, 60, 220), width=7)
+        # Beak & Eye
+        idraw.polygon([(cx + 40, cy - 70), (cx + 62, cy - 62), (cx + 40, cy - 55)], fill=(220, 160, 45, 240))
+        idraw.ellipse([cx + 15, cy - 75, cx + 27, cy - 63], fill=(35, 25, 20, 240))
+        idraw.ellipse([cx + 18, cy - 73, cx + 22, cy - 69], fill=(255, 255, 255, 255))
+        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+
+    elif any(k in clean_motif for k in ["富士", "富士山", "山", "夕日", "夕焼け", "夕暮れ", "mountain"]):
+        # 🗻 Serene Mount Fuji & Sunset
+        # Sun / Sky wash
+        adraw.ellipse([cx - 120, cy - 170, cx + 120, cy + 70], fill=(255, 130, 95, 170))
+        # Mountain base
+        adraw.polygon([(cx - 240, cy + 140), (cx, cy - 80), (cx + 240, cy + 140)], fill=(75, 115, 165, 220))
+        # Snow cap
+        adraw.polygon([(cx - 70, cy - 15), (cx, cy - 80), (cx + 70, cy - 15)], fill=(255, 255, 255, 240))
+        art = art.filter(ImageFilter.GaussianBlur(radius=4))
+
+    elif any(k in clean_motif for k in ["茶", "湯呑み", "カフェ", "コーヒー", "珈琲", "tea", "coffee"]):
+        # 🍵 Warm Tea Cup with Steam
+        adraw.ellipse([cx - 100, cy + 110, cx + 100, cy + 150], fill=(130, 85, 55, 220))  # Saucer
+        adraw.rectangle([cx - 70, cy - 30, cx + 70, cy + 100], fill=(245, 242, 235, 240))  # Cup body
+        adraw.ellipse([cx - 70, cy + 70, cx + 70, cy + 115], fill=(245, 242, 235, 240))
+        adraw.ellipse([cx - 70, cy - 50, cx + 70, cy - 10], fill=(125, 175, 95, 230))   # Green tea surface
+        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+        # Steam lines
+        idraw.arc([cx - 35, cy - 120, cx - 5, cy - 55], start=120, end=300, fill=(180, 170, 160, 160), width=3)
+        idraw.arc([cx + 5, cy - 140, cx + 35, cy - 75], start=120, end=300, fill=(180, 170, 160, 160), width=3)
+
+    else:
+        # 🌸 Seasonal Etegami Flower & Motif Art (Universal)
+        # Blooming watercolor flower petals
+        petal_color = p.get("flower_petal", (245, 140, 160, 210))
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            px = cx + int(math.cos(rad) * 65)
+            py = cy + int(math.sin(rad) * 65)
+            adraw.ellipse([px - 45, py - 45, px + 45, py + 45], fill=petal_color)
+        adraw.ellipse([cx - 35, cy - 35, cx + 35, cy + 35], fill=(255, 225, 75, 240))  # Flower center
+        # Leaves
+        adraw.ellipse([cx - 150, cy + 60, cx - 60, cy + 120], fill=(115, 175, 95, 200))
+        adraw.ellipse([cx + 60, cy + 60, cx + 150, cy + 120], fill=(115, 175, 95, 200))
+        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+        idraw.arc([cx - 35, cy - 35, cx + 35, cy + 35], start=0, end=360, fill=(160, 95, 35, 180), width=2)
+
+    # Composite watercolor art and ink layers onto washi canvas
+    img.paste(art, (0, 0), art)
+    img.paste(ink, (0, 0), ink)
+
+    # Re-obtain draw after composite
+    draw = ImageDraw.Draw(img)
+
+    # 4. Soft decorative watercolor frame (hand-brushed inner boundary)
+    inset = 35
+    for i in range(3):
+        color_val = (p["accent"][0], p["accent"][1], p["accent"][2])
+        draw.rectangle([inset + i, inset + i, w - inset - i, h - inset - i], outline=color_val, width=1)
+
+    # 5. Hanko stamp mark (bottom right, traditional Japanese red seal)
+    font_path = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+    if not os.path.exists(font_path):
+        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+
+    try:
+        sub_font = ImageFont.truetype(font_path, 22) if os.path.exists(font_path) else ImageFont.load_default()
+        stamp_x = w - inset - 75
+        stamp_y = h - inset - 75
+        draw.rectangle([stamp_x, stamp_y, stamp_x + 48, stamp_y + 48], outline=(185, 48, 38), width=2)
+        seal_char = "和" if season != "spring" else "絆"
+        draw.text((stamp_x + 12, stamp_y + 11), seal_char, fill=(185, 48, 38), font=sub_font)
+    except Exception as e_seal:
+        print(f"[Artistic Seal Draw Notice]: {e_seal}")
+
+    # 6. Save output
+    assets_dir = os.path.join(os.path.dirname(config.BASE_DIR), "frontend/family/assets")
+    docs_dir = os.path.join(os.path.dirname(config.BASE_DIR), "docs/assets")
+    os.makedirs(assets_dir, exist_ok=True)
+    os.makedirs(docs_dir, exist_ok=True)
+
+    target_file = os.path.join(assets_dir, output_filename)
+    img.save(target_file, quality=95)
+    docs_target = os.path.join(docs_dir, output_filename)
+    try:
+        img.save(docs_target, quality=95)
+    except Exception:
+        pass
+
+    print(f"[Artistic Watercolor SUCCESS]: Generated dedicated artwork for '{clean_motif}' -> {output_filename}")
+    return f"/family/assets/{output_filename}"
+
+def generate_new_etegami_artwork(
+    motif: str,
+    theme_title: str,
+    season: str = "autumn",
+    user_id: int = 1
+) -> str:
+    """
+    Generates a completely new digital postcard artwork for novel resident memories or topics.
+    First attempts generation via Gemini Image Generation API.
+    If unavailable or quota-limited (429), immediately generates an artistic procedural Japanese watercolor image.
+    Always returns a functional relative image URL.
+    """
+    clean_motif = motif.replace("高校時代の", "").replace("昔の", "").replace("今日の", "").strip() or "心温まる情景"
+    timestamp = int(time.time())
+    output_filename = f"generated_custom_etegami_{user_id}_{timestamp}.jpg"
+
+    # Construct rich English prompt for Japanese watercolor / Etegami style
+    prompt = (
+        f"A beautiful and peaceful Japanese watercolor painting, traditional Etegami art style. "
+        f"Depicting {clean_motif}, gentle natural light, nostalgic serene atmosphere, "
+        f"soft pastel watercolor wash on textured washi paper, calming Japanese aesthetic, high resolution masterpiece."
+    )
+
+    # 1. Try Gemini Image Generation
+    generated_url = generate_image_with_gemini(
+        prompt=prompt,
+        output_filename=output_filename,
+        model_name="gemini-3.1-flash-image"
+    )
+    if generated_url:
+        return generated_url
+
+    # 2. Resilient Fallback: Create dedicated procedural Japanese watercolor image
+    return create_artistic_watercolor_image(
+        motif=clean_motif,
+        theme_title=theme_title,
+        season=season,
+        output_filename=output_filename
+    )
 
 def get_all_templates() -> List[Dict[str, Any]]:
     """Returns the list of all seasonal templates for UI selection."""
@@ -596,11 +895,13 @@ def modify_or_create_etegami(
     motif_hint: str = "",
     message_hint: str = "",
     season_hint: Optional[str] = None,
-    is_completed: bool = False
+    is_completed: bool = False,
+    mode: str = "asset_base"
 ) -> Dict[str, Any]:
     """
     Modifies or generates an Etegami card based on resident's conversational requests
     and past reminiscence / healing conversation history.
+    Supports mode="asset_base" (re-using existing assets) and mode="generate_new" (creating novel artworks).
     Allows resident to review draft artwork, adjust motifs/words, and finalize (complete) it.
     """
     now = datetime.datetime.now()
@@ -694,8 +995,33 @@ def modify_or_create_etegami(
         }
     ]
 
-    # 2. Explicit motif mappings (resident or Gemini requested specific adjustments)
-    if explicit_motif:
+    # 2. Mode-aware artwork selection or dynamic generation
+    clean_motif = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', motif_hint).strip()
+    clean_motif = clean_motif.replace("高校時代の", "").replace("昔の", "").replace("今日の", "").strip()
+    clean_motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', clean_motif).strip()
+    if clean_motif in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ："]:
+        clean_motif = ""
+
+    clean_msg = re.sub(r'^(?:文字|言葉|添え字|メッセージ)[：:は]?\s*', '', message_hint).strip()
+    clean_msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', clean_msg).strip()
+    if clean_msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
+        clean_msg = ""
+
+    if mode == "generate_new":
+        # Resident chose to create a completely new artwork without using existing base
+        target_motif = clean_motif or "心温まるひととき"
+        theme_title = f"【手作り絵手紙】{target_motif}の温もり"
+        calligraphy_text = clean_msg or f"心温まる {target_motif}に 思いを添えて"
+        stamp_icon = "🎨"
+        base_source = "ai_generated_new"
+        selected_image = generate_new_etegami_artwork(
+            motif=target_motif,
+            theme_title=theme_title,
+            season=season_key,
+            user_id=user_id
+        )
+    elif explicit_motif:
+        # Resident requested asset_base, check matching existing presets
         if any(k in combined for k in ["黒板", "机", "先生", "授業"]) or ("教室" in combined and not any(k in combined for k in ["文化祭", "学園祭", "喫茶", "カフェ"])):
             selected_image = "/family/assets/generated_classroom.jpg"
             theme_title = "【手作り絵手紙】懐かしの学校の教室と黒板"
@@ -785,15 +1111,19 @@ def modify_or_create_etegami(
             stamp_icon = "🍁"
             season_key = "autumn"
             base_source = "reminiscence"
-        elif motif_hint:
-            # Fallback for arbitrary custom motif
-            template = SEASONAL_TEMPLATES.get(season_key, SEASONAL_TEMPLATES["autumn"])
-            selected_image = template["image_url"]
-            clean_motif = motif_hint.replace("高校時代の", "").replace("昔の", "")
-            theme_title = f"【手作り絵手紙】{clean_motif}の温もり"
-            calligraphy_text = message_hint or f"懐かしい {clean_motif}に 思いを馳せて"
+        else:
+            # Appropriate asset not found for novel motif -> generate dedicated artwork
+            target_motif = clean_motif or "心温まるひととき"
+            theme_title = f"【手作り絵手紙】{target_motif}の温もり"
+            calligraphy_text = clean_msg or f"懐かしい {target_motif}に 思いを馳せて"
             stamp_icon = "🍂"
-            base_source = "reminiscence"
+            base_source = "ai_generated_novel"
+            selected_image = generate_new_etegami_artwork(
+                motif=target_motif,
+                theme_title=theme_title,
+                season=season_key,
+                user_id=user_id
+            )
     else:
         # Check recent chat history turns from newest to oldest first
         recent_user_msgs = []
