@@ -522,7 +522,7 @@ class GeminiLiveSession:
             print(f"[Gemini Live Session Auto-Reconnect Failed]: {e}")
             return False
 
-    async def send_audio_chunk(self, pcm_16k_bytes: bytes):
+    async def send_audio_chunk(self, pcm_16k_bytes):
         """Sends raw 16kHz PCM audio chunk to Gemini Live API as realtime_input."""
         self._interrupted = False
 
@@ -534,7 +534,11 @@ class GeminiLiveSession:
         self.audio_chunks_in_turn += 1
         if self.audio_chunks_in_turn >= 4:
             self.has_resident_spoken_in_session = True
-        b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
+
+        if isinstance(pcm_16k_bytes, str):
+            b64_audio = pcm_16k_bytes
+        else:
+            b64_audio = base64.b64encode(pcm_16k_bytes).decode("utf-8")
         if not self.is_connected or not self.ws:
             # Buffer chunk while reconnecting (keep last 50 chunks = ~2.5s)
             self.pending_chunks.append(b64_audio)

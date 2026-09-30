@@ -2418,6 +2418,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     user_pcm_chunk_count += 1
 
                     pcm_bytes = base64.b64decode(b64_chunk)
+                    if user_pcm_chunk_count == 1 or user_pcm_chunk_count % 30 == 0:
+                        print(f"[Live PCM ({terminal_id})]: Received audio chunk #{user_pcm_chunk_count} ({len(pcm_bytes)} bytes)")
                     # 1. Ensure Gemini Live WebSocket session is active and relay PCM
                     if not session.is_connected:
                         await session.ensure_connected()

@@ -905,14 +905,9 @@ document.addEventListener("DOMContentLoaded", () => {
             roomBadge.textContent = `${userDetails.room_number}号室 ${userDetails.name}様`;
             hideRegisterScreen();
             micBtn.disabled = false;
-            statusText.textContent = "お話しする準備ができました";
-            // 📅 起動時に本日のご予定を読み込み＆初回のみ音声案内 (即時フラグロックで二重起動防止)
+            // 📅 起動時に本日のご予定を読み込み (カードは非表示で保持し、勝手な音声案内は行いません)
             if (typeof loadTodaySchedules === "function") {
-                const shouldAnnounce = triggerAnnouncement && !hasAnnouncedTodaySchedulesOnBoot;
-                if (shouldAnnounce) {
-                    hasAnnouncedTodaySchedulesOnBoot = true;
-                }
-                loadTodaySchedules(shouldAnnounce);
+                loadTodaySchedules(false);
             }
             return true;
         } catch (err) {
@@ -2124,7 +2119,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 let voiceHangoverFrames = 0;
                 let chunksSentInUtterance = 0;
                 let preSpeechRingBuffer = []; // ring buffer of last 3 chunks (~150ms) to preserve initial consonants
-                const NOISE_GATE_THRESHOLD = 0.0075; // Cut off mic hiss, room fan, air conditioner, rustling
+                const NOISE_GATE_THRESHOLD = 0.0018; // Sensitive threshold for laptop/tablet internal mics
                 const AI_ECHO_GUARD_MS = 400; // 0.4s minimal acoustic echo cooldown guard
 
                 recorder.onChunkCallback = (resampledChunk) => {
@@ -2150,7 +2145,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const rms = Math.sqrt(sum / resampledChunk.length);
 
                     // 2. Hardware-level instant VAD with noise-gate
-                    const speechThreshold = (currentLampState === "thinking") ? 0.016 : NOISE_GATE_THRESHOLD;
+                    const speechThreshold = (currentLampState === "thinking") ? 0.005 : NOISE_GATE_THRESHOLD;
                     const isVoiceActive = rms > speechThreshold || window.isSpeechRecActive;
                     const b64Pcm = float32ToInt16Base64(resampledChunk);
 
@@ -2177,7 +2172,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         isSpeakingUtterance = true;
                         vadSilenceFrames = 0;
 
-                        if (currentLampState !== "thinking" || rms > 0.018) {
+                        if (currentLampState !== "thinking" || rms > 0.008) {
                             setLiveLampState("sending");
                         }
 
@@ -2188,6 +2183,9 @@ document.addEventListener("DOMContentLoaded", () => {
                                 data: b64Pcm
                             }));
                             chunksSentInUtterance++;
+                            if (chunksSentInUtterance === 1 || chunksSentInUtterance % 25 === 0) {
+                                console.log(`[Mic VAD]: Streaming chunk #${chunksSentInUtterance} to Gemini Live (rms: ${rms.toFixed(4)})`);
+                            }
                         }
                     } else if (voiceHangoverFrames > 0) {
                         // Trailing speech hangover window: stream chunk to avoid cutting word endings
@@ -2569,15 +2567,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            // 起動時の自動音声連絡 (autoAnnounce = true の場合のみ1回実行)
-            if (autoAnnounce && currentScheduleAnnouncementAudio && !isAnnouncementPlaying) {
-                console.log("[Care-Link Boot]: Announcing today's schedules with synthesized voice (one-time on boot)...");
-                if (bootAnnouncementTimeout) clearTimeout(bootAnnouncementTimeout);
-                bootAnnouncementTimeout = setTimeout(() => {
-                    isBootScheduleAnnouncement = true;
-                    playScheduleAnnouncement();
-                }, 1000);
-            }
+            // 予定データ取得完了 (※起動時の勝手な音声再生や画面タップ乗っ取りは行いません)
         } catch (err) {
             console.warn("Failed to load today schedules:", err);
             if (todaySchedulesList) {
@@ -2651,13 +2641,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }, 1200);
 
-                // 起動後みまもりさんが今日の予定を話し終わると60秒後に予定カードは消す
                 if (isBootScheduleAnnouncement) {
                     isBootScheduleAnnouncement = false;
-                    console.log("[Schedule Announcement]: Boot announcement finished. Schedule card will auto-hide in 60s.");
                     if (scheduleCardHideTimer) clearTimeout(scheduleCardHideTimer);
                     scheduleCardHideTimer = setTimeout(() => {
-                        console.log("[Schedule Card]: 60s elapsed after boot announcement, hiding schedule card now.");
                         hideScheduleCard();
                     }, 60000);
                 }
@@ -2671,34 +2658,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 isAISpeaking = false;
                 isTTSAnnouncing = false;
                 window.isSpeechRecActive = false;
-
-                // If blocked on boot by browser autoplay policy, arm one-time user gesture trigger
-                if (isBootScheduleAnnouncement || !hasAnnouncedTodaySchedulesOnBoot) {
-                    console.log("[Schedule Announcement]: Autoplay blocked by browser. Arming one-time gesture unlock on any tap...");
-                    if (btnReAnnounceSchedules) {
-                        btnReAnnounceSchedules.classList.add("attention-pulse");
-                    }
-                    if (statusText && !isModalOpen) {
-                        statusText.textContent = "👆 画面をタップすると本日の予定をご案内します";
-                    }
-
-                    const onFirstUserTap = () => {
-                        window.removeEventListener("pointerdown", onFirstUserTap, true);
-                        window.removeEventListener("click", onFirstUserTap, true);
-                        window.removeEventListener("touchstart", onFirstUserTap, true);
-                        if (btnReAnnounceSchedules) {
-                            btnReAnnounceSchedules.classList.remove("attention-pulse");
-                        }
-                        if (!isAnnouncementPlaying && currentScheduleAnnouncementAudio) {
-                            console.log("[Schedule Announcement]: Unlocking boot schedule announcement on first user interaction!");
-                            isBootScheduleAnnouncement = true;
-                            playScheduleAnnouncement();
-                        }
-                    };
-                    window.addEventListener("pointerdown", onFirstUserTap, { once: true, capture: true });
-                    window.addEventListener("click", onFirstUserTap, { once: true, capture: true });
-                    window.addEventListener("touchstart", onFirstUserTap, { once: true, capture: true });
-                } else if (!isModalOpen) {
+                if (!isModalOpen) {
                     statusText.textContent = "お話しする準備ができました";
                     setLiveLampState("idle");
                     setAvatarState("idle");
@@ -3658,7 +3618,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             await checkSystemInfo();
             updateDebugUI();
-            await checkRegistration(true);
+            await checkRegistration(false);
             connectWS();
             initSmartwatchModule();
             if (isDebugMode) {
