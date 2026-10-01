@@ -201,6 +201,7 @@ class GeminiLiveSession:
         self.on_etegami_prepare_mode = on_etegami_prepare_mode
         self.on_etegami_updated = on_etegami_updated
         self.on_etegami_completed = on_etegami_completed
+        self.on_api_error = None
         self.etegami_prepare_mode = None
         self.recording_active = True
         self.last_recording_time = 0.0
@@ -928,7 +929,13 @@ class GeminiLiveSession:
             async for msg in self.ws:
                 data = json.loads(msg)
                 if "error" in data:
-                    print(f"[Gemini Live Server API Error]: {data['error']}")
+                    err_info = data["error"]
+                    print(f"[Gemini Live Server API Error]: {err_info}")
+                    if self.on_api_error:
+                        try:
+                            self.on_api_error(err_info)
+                        except Exception as e_cb:
+                            print(f"[Gemini Live API Error Callback Failed]: {e_cb}")
                 
                 server_content = data.get("serverContent", {})
                 if server_content.get("turnComplete"):

@@ -74,6 +74,12 @@ import json
 import time
 from backend import config, database as db
 
+LAST_IMAGE_GEN_NOTICE: Optional[Dict[str, Any]] = None
+
+def get_last_image_gen_notice() -> Optional[Dict[str, Any]]:
+    global LAST_IMAGE_GEN_NOTICE
+    return LAST_IMAGE_GEN_NOTICE
+
 def generate_image_with_gemini(
     prompt: str,
     output_filename: str = "generated_gemini_etegami.jpg",
@@ -84,9 +90,16 @@ def generate_image_with_gemini(
     via Google AI Studio REST API to dynamically generate and save an artwork.
     Returns relative URL (/family/assets/...) on success, or None on quota/error.
     """
+    global LAST_IMAGE_GEN_NOTICE
     api_key = config.GEMINI_API_KEY
     if not api_key:
         print("[Gemini Image Gen Notice]: GEMINI_API_KEY is not configured.")
+        LAST_IMAGE_GEN_NOTICE = {
+            "has_error": True,
+            "code": "CONFIG_MISSING",
+            "model": model_name,
+            "message": "Gemini APIキーが設定されていません。"
+        }
         return None
 
     # Try requested model (gemini-3-pro-image), and fallback to flash if needed
@@ -133,12 +146,33 @@ def generate_image_with_gemini(
                                 with open(docs_target, "wb") as f_out2:
                                     f_out2.write(img_bytes)
                                 print(f"[Gemini Image Gen SUCCESS]: Saved {m} generated image to {output_filename}")
+                                LAST_IMAGE_GEN_NOTICE = None
                                 return f"/family/assets/{output_filename}"
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
             print(f"[Gemini Image Gen Notice]: Model {m} returned HTTP {e.code} ({err_body[:100]}...). Falling back.")
+            if e.code == 429:
+                LAST_IMAGE_GEN_NOTICE = {
+                    "has_error": True,
+                    "code": 429,
+                    "model": m,
+                    "message": f"Google AI Studio 画像生成モデル ({m}) が利用枠制限 (HTTP 429: クォータ上限) に達しました。水彩画エンジンで絵手紙を生成しました。"
+                }
+            else:
+                LAST_IMAGE_GEN_NOTICE = {
+                    "has_error": True,
+                    "code": e.code,
+                    "model": m,
+                    "message": f"Gemini 画像生成モデル ({m}) でエラーが発生しました (HTTP {e.code})。水彩画エンジンで生成しました。"
+                }
         except Exception as e:
             print(f"[Gemini Image Gen Notice]: Model {m} call failed: {e}. Falling back.")
+            LAST_IMAGE_GEN_NOTICE = {
+                "has_error": True,
+                "code": "NETWORK_OR_TIMEOUT",
+                "model": m,
+                "message": f"Gemini 画像生成モデルの通信に失敗しました ({e})。水彩画エンジンで生成しました。"
+            }
 
     return None
 
@@ -1310,6 +1344,11 @@ def modify_or_create_etegami(
     except Exception as e:
         print(f"[Etegami Real-Time Update DB Error]: {e}")
 
+    last_notice = get_last_image_gen_notice()
+    api_notice_msg = last_notice.get("message") if (last_notice and mode == "generate_new") else None
+    if api_notice_msg:
+        payload["api_notice"] = api_notice_msg
+
     return {
         "title": theme_title,
         "theme": theme_title,
@@ -1323,7 +1362,9 @@ def modify_or_create_etegami(
         "status": status,
         "badge_text": badge_text,
         "base_source": base_source,
-        "postcard_metadata": payload["postcard_metadata"]
+        "postcard_metadata": payload["postcard_metadata"],
+        "api_notice": api_notice_msg,
+        "api_error": last_notice if (last_notice and mode == "generate_new") else None
     }
 
 

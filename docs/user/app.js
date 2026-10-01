@@ -384,6 +384,10 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (isCompleted) {
                 statusBadge.className = "etegami-status-badge badge-completed";
                 statusBadge.innerHTML = "<span>💮</span><span>ご本人様と完成</span>";
+            } else if (data.api_notice) {
+                statusBadge.className = "etegami-status-badge badge-drafting";
+                statusBadge.innerHTML = "<span>🎨</span><span>水彩画描画（Gemini画像API 429制限）</span>";
+                statusBadge.title = data.api_notice;
             } else {
                 statusBadge.className = "etegami-status-badge badge-drafting";
                 statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
@@ -1444,6 +1448,19 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);
                 updateEtegamiDisplay(data);
+            } else if (data.type === "api_error_notice") {
+                console.warn("[LiveWS]: Received api_error_notice ->", data.title, data.message);
+                const bannerText = `⚠️ ${data.title || 'APIエラー'}: ${data.message}`;
+                if (typeof showTemporaryToast === "function") {
+                    showTemporaryToast(bannerText, 7000);
+                } else if (typeof showUIToast === "function") {
+                    showUIToast(bannerText, "warning");
+                }
+                const debugBadge = document.getElementById("debug-badge");
+                if (debugBadge) {
+                    debugBadge.textContent = bannerText;
+                    debugBadge.classList.remove("hidden");
+                }
             }
         };
 

@@ -1749,8 +1749,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"Error sending transcription result to client ({terminal_id}): {e}")
 
-    def on_gemini_error(err_msg: str):
-        print(f"Gemini Live Session Error ({terminal_id}): {err_msg}")
+    def on_gemini_error(err_msg: Any):
+        msg_str = str(err_msg)
+        print(f"Gemini Live Session Error ({terminal_id}): {msg_str}")
+        asyncio.create_task(websocket.send_json({
+            "type": "api_error_notice",
+            "title": "Gemini Live API エラー",
+            "message": f"Gemini 音声会話でエラーが発生しました: {msg_str}"
+        }))
 
     # Fetch recent conversation history and today schedules for memory context sync
     recent_history = db.get_chat_history(user["id"], limit=6)
@@ -1852,6 +1858,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "force_open": True,
                     **card_info
                 })
+                if card_info.get("api_notice"):
+                    await websocket.send_json({
+                        "type": "api_error_notice",
+                        "title": "Google AI Studio API通知",
+                        "message": card_info["api_notice"],
+                        "details": card_info.get("api_error")
+                    })
                 await websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_updated",
@@ -2164,6 +2177,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         history=recent_history,
         schedules=today_schedules
     )
+    session.on_api_error = on_gemini_error
 
     latest_whisper_transcription = {"text": "", "time": 0.0}
 
