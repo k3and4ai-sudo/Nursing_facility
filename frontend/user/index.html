@@ -162,7 +162,11 @@
                             <span class="etegami-main-badge">🎨 絵手紙</span>
                             <span id="etegami-season-tag" class="etegami-season-tag">🍁 秋</span>
                             <span id="etegami-status-badge" class="etegami-status-badge badge-drafting">🎨 下絵表示中</span>
-                            <span id="etegami-engine-badge" class="etegami-engine-badge badge-engine-local" title="描画エンジン: 自立水彩画 (Local)">🖌️ 自立水彩画 (Local)</span>
+                            <div id="etegami-engine-selector" class="etegami-engine-selector" title="画像生成エンジンの切り替え">
+                                <button id="btn-engine-toggle-free" class="engine-toggle-btn active" type="button" title="完全無料のAIで生成">🟢 無料AI</button>
+                                <button id="btn-engine-toggle-paid" class="engine-toggle-btn" type="button" title="Google Image (有料) で生成">🔵 有料</button>
+                            </div>
+                            <span id="etegami-engine-badge" class="etegami-engine-badge badge-engine-free" title="描画エンジン">🖌️ 無料AI (Pollinations)</span>
                         </div>
                         <div class="etegami-header-actions">
                             <button id="btn-complete-etegami" class="etegami-complete-btn hidden" title="下絵の手直しを終了して完成にする">
@@ -344,6 +348,34 @@
                     <button id="resume-pii-btn" class="modal-btn resume-huge-btn" style="width: 100%; max-width: 380px; min-height: 100px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.5rem; font-weight: 900; padding: 16px 28px; border-radius: 28px; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.45); display: flex; align-items: center; justify-content: center; gap: 12px;">
                         <span style="font-size: 2.2rem; line-height: 1;">💬</span>
                         <span>会話を再開する</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🎨 画像生成AI エンジン選択（無料 vs 有料）事前確認モーダル -->
+        <div id="etegami-engine-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card" style="text-align: center; padding: 32px 24px; max-width: 580px; width: 95%; border: 4px solid #10b981; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(16, 185, 129, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div style="font-size: 3.8rem; margin-bottom: 8px; line-height: 1;">🎨</div>
+                <div style="display: inline-block; background: #ecfdf5; color: #059669; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; margin-bottom: 10px;">画像作成前の有料版確認</div>
+                <h2 style="color: #065f46; margin-bottom: 10px; font-size: 1.8rem; font-weight: 900;">画像生成AIを選んでください</h2>
+                <p style="font-size: 1.15rem; line-height: 1.6; color: #374151; margin-bottom: 24px; font-weight: 600;">
+                    声で「無料」「有料」とお話しいただくか、<br>下のボタンを直接タッチしてください。
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 14px; width: 100%;">
+                    <button id="btn-modal-choose-free" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: space-between;">
+                        <div style="text-align: left;">
+                            <div style="font-size: 1.25rem;">🟢 無料 AI (Pollinations) で描く</div>
+                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">完全無料・登録不要・素早い水彩画</div>
+                        </div>
+                        <span style="font-size: 1.6rem;">👉</span>
+                    </button>
+                    <button id="btn-modal-choose-paid" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
+                        <div style="text-align: left;">
+                            <div style="font-size: 1.25rem;">🔵 Google Image (有料版) で描く</div>
+                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">Google AI Studio クラウド生成 (有料枠)</div>
+                        </div>
+                        <span style="font-size: 1.6rem;">👉</span>
                     </button>
                 </div>
             </div>

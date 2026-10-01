@@ -1801,6 +1801,61 @@ body.simple-mode .speech-box.user-box {
     box-shadow: 0 1px 4px rgba(99, 102, 241, 0.2);
 }
 
+.etegami-engine-selector {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    padding: 2px;
+    border-radius: 20px;
+    border: 1px solid #cbd5e1;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.engine-toggle-btn {
+    border: none;
+    background: transparent;
+    padding: 3px 10px;
+    border-radius: 16px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.engine-toggle-btn:hover {
+    color: #1e293b;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.engine-toggle-btn.active#btn-engine-toggle-free {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.35);
+}
+
+.engine-toggle-btn.active#btn-engine-toggle-paid {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.35);
+}
+
+.etegami-engine-badge.badge-engine-free {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    color: #065f46;
+    border: 1.5px solid #10b981;
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.2);
+}
+
+.etegami-engine-badge.badge-engine-paid {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e40af;
+    border: 1.5px solid #3b82f6;
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+}
+
 .etegami-engine-badge.badge-engine-preset {
     background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
     color: #9a3412;

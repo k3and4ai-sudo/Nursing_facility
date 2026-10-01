@@ -176,6 +176,55 @@ def generate_image_with_gemini(
 
     return None
 
+def generate_image_with_pollinations(
+    prompt: str,
+    output_filename: str = "generated_pollinations_etegami.jpg"
+) -> Optional[str]:
+    """
+    Calls Pollinations.ai free API (completely free, no API key or account required)
+    to dynamically generate authentic artwork.
+    Returns relative URL (/family/assets/...) on success, or None on failure.
+    """
+    global LAST_IMAGE_GEN_NOTICE
+    import urllib.parse
+    import requests
+    try:
+        encoded_prompt = urllib.parse.quote(prompt)
+        # Using model=turbo for fast, reliable, rate-limit-friendly free generation
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=turbo&nologo=true"
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=25.0
+        )
+        if resp.status_code == 200 and len(resp.content) > 1000:
+            img_bytes = resp.content
+            assets_dir = os.path.join(os.path.dirname(config.BASE_DIR), "frontend/family/assets")
+            docs_dir = os.path.join(os.path.dirname(config.BASE_DIR), "docs/assets")
+            os.makedirs(assets_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            target_file = os.path.join(assets_dir, output_filename)
+            with open(target_file, "wb") as f_out:
+                f_out.write(img_bytes)
+            docs_target = os.path.join(docs_dir, output_filename)
+            with open(docs_target, "wb") as f_out2:
+                f_out2.write(img_bytes)
+            print(f"[Pollinations Image Gen SUCCESS]: Saved free AI image to {output_filename} ({len(img_bytes)} bytes)")
+            LAST_IMAGE_GEN_NOTICE = None
+            return f"/family/assets/{output_filename}"
+        else:
+            print(f"[Pollinations Image Gen Notice]: Received HTTP {resp.status_code} ({len(resp.content)} bytes). Falling back to watercolor.")
+    except Exception as e:
+        print(f"[Pollinations Image Gen Notice]: Free generation failed: {e}. Falling back to watercolor.")
+        LAST_IMAGE_GEN_NOTICE = {
+            "has_error": True,
+            "code": "POLLINATIONS_ERROR",
+            "model": "pollinations.ai (無料)",
+            "message": f"Pollinations無料画像AIの通信でエラーが発生しました ({e})。水彩画エンジンで生成しました。"
+        }
+    return None
+
 def create_artistic_watercolor_image(
     motif: str,
     theme_title: str,
@@ -581,16 +630,46 @@ def get_last_used_image_engine() -> Dict[str, Any]:
     global LAST_USED_IMAGE_ENGINE
     return dict(LAST_USED_IMAGE_ENGINE)
 
+def translate_motif_for_etegami_art(motif: str) -> str:
+    """Translates resident motif keywords to expressive English descriptions for watercolor painting."""
+    m = motif.lower()
+    translations = [
+        ("白", "white"), ("黒", "black"), ("柴犬", "shiba inu puppy dog"),
+        ("犬", "cute friendly puppy dog"), ("わんこ", "cute puppy"),
+        ("猫", "gentle cozy Japanese cat"), ("ねこ", "gentle cozy cat"),
+        ("インコ", "cute colorful parakeet bird"), ("小鳥", "gentle Japanese sparrow bird"),
+        ("鳥", "peaceful singing bird"), ("すずめ", "little sparrow bird"),
+        ("桜", "spring cherry blossoms"), ("さくら", "blooming cherry blossoms"),
+        ("コスモス", "blooming pink cosmos flowers in autumn garden"), ("秋桜", "pink cosmos flowers"),
+        ("紅葉", "vibrant red autumn maple leaves"), ("もみじ", "red maple leaves"),
+        ("向日葵", "bright blooming sunflower"), ("ひまわり", "sunflower"),
+        ("朝顔", "fresh morning glory flowers with dew drops"),
+        ("富士山", "majestic Mount Fuji with soft morning clouds"),
+        ("お茶", "traditional Japanese green tea cup with gentle steam"),
+        ("縁側", "traditional Japanese engawa wooden porch with garden view"),
+        ("喫茶店", "cozy retro Japanese kissaten coffee shop with coffee cup"),
+        ("椿", "red camellia flower on fresh winter snow"),
+        ("雪", "quiet peaceful winter snow garden")
+    ]
+    english_elements = []
+    for k, v in translations:
+        if k in motif:
+            english_elements.append(v)
+    if english_elements:
+        return " and ".join(english_elements)
+    return motif
+
 def generate_new_etegami_artwork(
     motif: str,
     theme_title: str,
     season: str = "autumn",
-    user_id: int = 1
+    user_id: int = 1,
+    engine: str = "pollinations"
 ) -> str:
     """
     Generates a completely new digital postcard artwork for novel resident memories or topics.
-    First attempts generation via Gemini Image Generation API.
-    If unavailable or quota-limited (429), immediately generates an artistic procedural Japanese watercolor image.
+    Supports engine="pollinations" (free, no key) and engine="google_image" (paid).
+    If chosen provider is unavailable or quota-limited (429), gracefully falls back to procedural watercolor.
     Always returns a functional relative image URL.
     """
     global LAST_USED_IMAGE_ENGINE
@@ -598,34 +677,70 @@ def generate_new_etegami_artwork(
     timestamp = int(time.time())
     output_filename = f"generated_custom_etegami_{user_id}_{timestamp}.jpg"
 
+    english_motif = translate_motif_for_etegami_art(clean_motif)
+
     # Construct rich English prompt for Japanese watercolor / Etegami style
     prompt = (
         f"A beautiful and peaceful Japanese watercolor painting, traditional Etegami art style. "
-        f"Depicting {clean_motif}, gentle natural light, nostalgic serene atmosphere, "
+        f"Depicting {english_motif}, gentle natural light, nostalgic serene atmosphere, "
         f"soft pastel watercolor wash on textured washi paper, calming Japanese aesthetic, high resolution masterpiece."
     )
 
-    # 1. Try Gemini Image Generation
-    generated_url = generate_image_with_gemini(
-        prompt=prompt,
-        output_filename=output_filename,
-        model_name="gemini-3.1-flash-image"
-    )
-    if generated_url:
-        LAST_USED_IMAGE_ENGINE = {
-            "engine": "gemini_imagen",
-            "name": "Google AI (Imagen)",
-            "type": "cloud",
-            "desc": "Google AI Studio クラウド画像生成 (Imagen)"
-        }
-        return generated_url
+    is_paid_requested = engine in ["google_image", "paid", "google", "有料"]
+
+    if is_paid_requested:
+        print(f"[Etegami Generation]: Resident selected Google Image (Paid) for motif '{clean_motif}'")
+        # 1. Try Gemini Image Generation (Paid)
+        generated_url = generate_image_with_gemini(
+            prompt=prompt,
+            output_filename=output_filename,
+            model_name="gemini-3.1-flash-image"
+        )
+        if generated_url:
+            LAST_USED_IMAGE_ENGINE = {
+                "engine": "gemini_imagen",
+                "name": "Google Image (有料)",
+                "type": "cloud_paid",
+                "desc": "Google AI Studio クラウド画像生成 (有料版)"
+            }
+            return generated_url
+
+        print("[Etegami Generation]: Google Image quota/error. Trying Pollinations.ai fallback before watercolor.")
+        # Fallback to Pollinations if Google Image fails
+        poll_url = generate_image_with_pollinations(
+            prompt=prompt,
+            output_filename=output_filename
+        )
+        if poll_url:
+            LAST_USED_IMAGE_ENGINE = {
+                "engine": "pollinations_fallback",
+                "name": "Pollinations.ai (無料自動切替)",
+                "type": "cloud_free",
+                "desc": "有料版クォータ超過に伴い無料AI (Pollinations) で生成"
+            }
+            return poll_url
+    else:
+        print(f"[Etegami Generation]: Resident selected Pollinations.ai (Free) for motif '{clean_motif}'")
+        # 1. Try Pollinations.ai (Completely Free)
+        generated_url = generate_image_with_pollinations(
+            prompt=prompt,
+            output_filename=output_filename
+        )
+        if generated_url:
+            LAST_USED_IMAGE_ENGINE = {
+                "engine": "pollinations",
+                "name": "Pollinations.ai (無料)",
+                "type": "cloud_free",
+                "desc": "Pollinations.ai 完全無料AI画像生成"
+            }
+            return generated_url
 
     # 2. Resilient Fallback: Create dedicated procedural Japanese watercolor image
     LAST_USED_IMAGE_ENGINE = {
         "engine": "local_watercolor",
         "name": "自立水彩画 (Local)",
         "type": "local",
-        "desc": "ローカル水彩画エンジン（通信障害・429制限時も自立稼働）"
+        "desc": "ローカル水彩画エンジン（通信障害・制限時も自立稼働）"
     }
     return create_artistic_watercolor_image(
         motif=clean_motif,
@@ -1090,7 +1205,8 @@ def modify_or_create_etegami(
     message_hint: str = "",
     season_hint: Optional[str] = None,
     is_completed: bool = False,
-    mode: str = "asset_base"
+    mode: str = "asset_base",
+    image_engine: str = "pollinations"
 ) -> Dict[str, Any]:
     """
     Modifies or generates an Etegami card based on resident's conversational requests
@@ -1212,7 +1328,8 @@ def modify_or_create_etegami(
             motif=target_motif,
             theme_title=theme_title,
             season=season_key,
-            user_id=user_id
+            user_id=user_id,
+            engine=image_engine
         )
     elif explicit_motif:
         # Resident requested asset_base, check matching existing presets
@@ -1316,7 +1433,8 @@ def modify_or_create_etegami(
                 motif=target_motif,
                 theme_title=theme_title,
                 season=season_key,
-                user_id=user_id
+                user_id=user_id,
+                engine=image_engine
             )
     else:
         # Check recent chat history turns from newest to oldest first
@@ -1477,9 +1595,9 @@ def modify_or_create_etegami(
     }
 
     # Determine which engine generated/selected the image
-    if base_source == "ai_generated_novel":
+    if base_source in ["ai_generated_novel", "ai_generated_new"] or "generated_custom_etegami_" in (selected_image or ""):
         engine_meta = get_last_used_image_engine()
-    elif "sample_postcard" in selected_image or "generated_" in selected_image:
+    elif "sample_postcard" in (selected_image or "") or "generated_" in (selected_image or ""):
         engine_meta = {
             "engine": "preset_archive",
             "name": "季節アーカイブ",

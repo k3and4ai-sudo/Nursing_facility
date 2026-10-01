@@ -390,28 +390,30 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        // 🏷️ 絵手紙 描画エンジンバッジの更新 (Cloud vs Local vs Preset)
+        // 🏷️ 絵手紙 描画エンジンバッジ & セレクターの更新
         const engineBadge = document.getElementById("etegami-engine-badge");
         const modalEngineBadge = document.getElementById("etegami-modal-engine-badge");
 
-        let engineType = data.engine_type || (data.engine === "gemini_imagen" ? "cloud" : (data.engine === "preset_archive" ? "preset" : "local"));
-        let engineName = data.engine_name || (engineType === "cloud" ? "☁️ Google AI (Imagen)" : (engineType === "preset" ? "🍁 季節アーカイブ" : "🖌️ 自立水彩画 (Local)"));
-        let engineDesc = data.engine_desc || (engineType === "cloud" ? "Google AI Studio クラウド画像生成" : (engineType === "preset" ? "厳選された季節の絵手紙" : "ローカル水彩画エンジン（自前描画）"));
+        let engineType = "free";
+        let engineName = "🟢 無料AI (Pollinations)";
+        let engineDesc = "Pollinations.ai 完全無料AI画像生成";
 
-        if (data.image_url && (data.image_url.includes("sample_postcard") || data.image_url.includes("generated_relaxation") || data.image_url.includes("generated_healing") || data.image_url.includes("generated_classroom") || data.image_url.includes("generated_bunkasai") || data.image_url.includes("generated_kissaten") || data.image_url.includes("generated_undoukai"))) {
+        if (data.engine === "pollinations" || data.engine_type === "cloud_free") {
+            engineType = "free";
+            engineName = "🟢 無料AI (Pollinations)";
+            engineDesc = "Pollinations.ai 完全無料AI画像生成（登録不要）";
+        } else if (data.engine === "gemini_imagen" || data.engine_type === "cloud_paid") {
+            engineType = "paid";
+            engineName = "🔵 Google Image (有料)";
+            engineDesc = "Google AI Studio クラウド画像生成 (有料版)";
+        } else if (data.image_url && (data.image_url.includes("sample_postcard") || data.image_url.includes("generated_relaxation") || data.image_url.includes("generated_healing") || data.image_url.includes("generated_classroom") || data.image_url.includes("generated_bunkasai") || data.image_url.includes("generated_kissaten") || data.image_url.includes("generated_undoukai"))) {
             engineType = "preset";
             engineName = "🍁 季節アーカイブ";
             engineDesc = "施設選定アーカイブ絵手紙";
-        } else if (data.api_notice || data.engine === "local_watercolor" || (data.image_url && data.image_url.includes("generated_custom_etegami"))) {
-            if (data.api_notice || !data.engine || data.engine === "local_watercolor") {
-                engineType = "local";
-                engineName = "🖌️ 自立水彩画 (Local)";
-                engineDesc = data.api_notice ? `自立水彩画エンジン (${data.api_notice})` : "ローカル水彩画エンジン（通信障害やAPI制限時も手元PCで即時自立描画）";
-            } else if (data.engine === "gemini_imagen") {
-                engineType = "cloud";
-                engineName = "☁️ Google AI (Imagen)";
-                engineDesc = "Google AI Studio クラウド画像生成 (Imagen)";
-            }
+        } else if (data.api_notice || data.engine === "local_watercolor") {
+            engineType = "local";
+            engineName = "🖌️ 自立水彩画 (Local)";
+            engineDesc = data.api_notice ? `自立水彩画エンジン (${data.api_notice})` : "ローカル水彩画エンジン（通信障害やAPI制限時も手元PCで即時自立描画）";
         }
 
         const updateEngineBadgeEl = (el) => {
@@ -422,6 +424,10 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         updateEngineBadgeEl(engineBadge);
         updateEngineBadgeEl(modalEngineBadge);
+
+        if (typeof updateEngineToggleUI === "function") {
+            updateEngineToggleUI(data.engine === "gemini_imagen" ? "google_image" : "pollinations");
+        }
 
         if (completeBtn) {
             if (isCompleted) {
@@ -1477,6 +1483,17 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);
                 updateEtegamiDisplay(data);
+            } else if (data.type === "etegami_engine_confirm_prompt") {
+                console.log("[LiveWS]: Received etegami_engine_confirm_prompt ->", data);
+                const confirmModal = document.getElementById("etegami-engine-confirm-modal");
+                if (confirmModal) confirmModal.classList.remove("hidden");
+            } else if (data.type === "etegami_engine_updated") {
+                console.log("[LiveWS]: Received etegami_engine_updated ->", data);
+                const confirmModal = document.getElementById("etegami-engine-confirm-modal");
+                if (confirmModal) confirmModal.classList.add("hidden");
+                if (typeof updateEngineToggleUI === "function") {
+                    updateEngineToggleUI(data.engine);
+                }
             } else if (data.type === "api_error_notice") {
                 console.warn("[LiveWS]: Received api_error_notice ->", data.title, data.message);
                 const bannerText = `⚠️ ${data.title || 'APIエラー'}: ${data.message}`;
@@ -3705,6 +3722,48 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // 🎨 Etegami Image Generation Engine Selector & Confirmation Modal Controls
+    function updateEngineToggleUI(engine) {
+        const btnFree = document.getElementById("btn-engine-toggle-free");
+        const btnPaid = document.getElementById("btn-engine-toggle-paid");
+        const isPaid = (engine === "google_image" || engine === "paid" || engine === "gemini_imagen");
+        if (btnFree) btnFree.classList.toggle("active", !isPaid);
+        if (btnPaid) btnPaid.classList.toggle("active", isPaid);
+    }
+
+    function initEtegamiEngineSelector() {
+        const btnFree = document.getElementById("btn-engine-toggle-free");
+        const btnPaid = document.getElementById("btn-engine-toggle-paid");
+        const btnModalFree = document.getElementById("btn-modal-choose-free");
+        const btnModalPaid = document.getElementById("btn-modal-choose-paid");
+        const confirmModal = document.getElementById("etegami-engine-confirm-modal");
+
+        const sendEngineChoice = (engine) => {
+            updateEngineToggleUI(engine);
+            if (confirmModal) confirmModal.classList.add("hidden");
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                console.log("[Etegami Engine]: Sending set_image_engine ->", engine);
+                liveWs.send(JSON.stringify({
+                    type: "set_image_engine",
+                    engine: engine
+                }));
+            }
+        };
+
+        if (btnFree) {
+            btnFree.addEventListener("click", () => sendEngineChoice("pollinations"));
+        }
+        if (btnPaid) {
+            btnPaid.addEventListener("click", () => sendEngineChoice("google_image"));
+        }
+        if (btnModalFree) {
+            btnModalFree.addEventListener("click", () => sendEngineChoice("pollinations"));
+        }
+        if (btnModalPaid) {
+            btnModalPaid.addEventListener("click", () => sendEngineChoice("google_image"));
+        }
+    }
+
     // Initialize application connection
     async function initApp() {
         try {
@@ -3713,6 +3772,7 @@ document.addEventListener("DOMContentLoaded", () => {
             await checkRegistration(false);
             connectWS();
             initSmartwatchModule();
+            initEtegamiEngineSelector();
             if (isDebugMode) {
                 connectLiveWS();
             }

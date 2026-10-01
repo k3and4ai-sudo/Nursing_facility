@@ -1718,7 +1718,49 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
 
+    session.etegami_image_engine = "pollinations"  # Default: free AI
+    session.has_confirmed_image_engine = False
+    session.pending_motif_for_engine_confirm = None
+
     etegami_lock = asyncio.Lock()
+
+    async def on_live_etegami_engine_decision(engine: str):
+        try:
+            is_paid = engine in ["google_image", "paid", "google", "有料"]
+            eff_engine = "google_image" if is_paid else "pollinations"
+            session.etegami_image_engine = eff_engine
+            session.has_confirmed_image_engine = True
+            engine_name = "Google Image (有料)" if is_paid else "Pollinations.ai (無料)"
+            print(f"[Gemini Live Session ({terminal_id})]: Etegami image engine set to '{eff_engine}' ({engine_name})")
+
+            # Acknowledge to resident
+            if is_paid:
+                msg = "🎨 みまもりさん：承知しました。Google Image（有料版）で作成します"
+                speak = "承知しました。Google Imageで下絵を作成しますね。"
+            else:
+                msg = "🎨 みまもりさん：承知しました。無料AI（Pollinations）で作成します"
+                speak = "承知しました。無料のAIで下絵を作成しますね。"
+
+            await websocket.send_json({
+                "type": "mimamori_acknowledgement",
+                "action": "etegami_engine_decided",
+                "message": msg,
+                "speak_text": speak
+            })
+            await websocket.send_json({
+                "type": "etegami_engine_updated",
+                "engine": eff_engine,
+                "engine_name": engine_name
+            })
+
+            # Check if there is a pending motif waiting for engine decision
+            pending = getattr(session, "pending_motif_for_engine_confirm", None)
+            session.pending_motif_for_engine_confirm = None
+            if pending:
+                print(f"[Gemini Live Session ({terminal_id})]: Executing pending motif '{pending}' with chosen engine '{eff_engine}'")
+                asyncio.create_task(on_live_etegami_update(pending, ""))
+        except Exception as e:
+            print(f"Error handling etegami engine decision ({terminal_id}): {e}")
 
     async def on_live_etegami_prepare_mode(mode: str):
         try:
@@ -1730,7 +1772,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             ))
             if mode == "generate_new":
                 msg = "🎨 みまもりさん：承知しました。新しい絵手紙の作成を準備します"
-                speak = "承知しました。新しい絵手紙ですね。どんな絵を描きましょうか？"
+                speak = "承知しました。新しい絵手紙ですね。画像の作成には、無料のAIと有料のGoogle Imageのどちらを使いますか？どんな絵を描きましょうか？"
+                # Send engine prompt to client UI
+                await websocket.send_json({
+                    "type": "etegami_engine_confirm_prompt",
+                    "message": "下絵の作成に有料版（Google Image）を使用しますか？それとも無料AI（Pollinations）にしますか？",
+                    "current_engine": getattr(session, "etegami_image_engine", "pollinations")
+                })
             else:
                 msg = "🎨 みまもりさん：承知しました。絵手紙をベースにする準備をします"
                 speak = "承知しました。以前の絵手紙をベースにしますね。どんな絵を描きましょうか？"
@@ -1764,18 +1812,40 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Gemini Live Session ({terminal_id})]: Already updating digital etegami - skipping duplicate request.")
             return
 
+        curr_mode = getattr(session, "etegami_prepare_mode", "asset_base")
+        # Guard: In generate_new mode, ask resident whether to use paid Google Image or free AI if not yet confirmed
+        if curr_mode == "generate_new" and not getattr(session, "has_confirmed_image_engine", False):
+            print(f"[Gemini Live Session ({terminal_id})]: Awaiting image engine confirmation before generating artwork for motif='{motif}'")
+            session.pending_motif_for_engine_confirm = motif
+            confirm_msg = "🎨 みまもりさん：下絵の作成には、無料のAI（Pollinations）と有料のGoogle Imageのどちらを使いますか？"
+            confirm_speak = "下絵の作成には、無料のAIと、有料のGoogle Imageのどちらを使いますか？"
+            await websocket.send_json({
+                "type": "mimamori_acknowledgement",
+                "action": "etegami_engine_confirm",
+                "message": confirm_msg,
+                "speak_text": confirm_speak
+            })
+            await websocket.send_json({
+                "type": "etegami_engine_confirm_prompt",
+                "motif": motif,
+                "message": "下絵の作成に有料版（Google Image）を使用しますか？それとも無料AI（Pollinations）にしますか？",
+                "current_engine": getattr(session, "etegami_image_engine", "pollinations")
+            })
+            return
+
         async with etegami_lock:
             if getattr(session, "is_etegami_updating", False):
                 return
             session.is_etegami_updating = True
             session.last_etegami_update_time = time.time()
             try:
-                curr_mode = getattr(session, "etegami_prepare_mode", "asset_base")
-                print(f"[Gemini Live Session ({terminal_id})]: Live Etegami Update executing with motif='{motif}', msg='{msg}', mode='{curr_mode}'")
+                curr_engine = getattr(session, "etegami_image_engine", "pollinations")
+                print(f"[Gemini Live Session ({terminal_id})]: Live Etegami Update executing with motif='{motif}', msg='{msg}', mode='{curr_mode}', engine='{curr_engine}'")
                 
                 # 1. Notify user terminal that Mimamori-san acknowledged and started updating
+                engine_label = "Google Image (有料)" if curr_engine == "google_image" else "無料AI (Pollinations)"
                 loading_msg = (
-                    f"🎨 みまもりさん：{motif}の絵手紙を描いています。少々お待ちください…"
+                    f"🎨 みまもりさん：{motif}の絵手紙を描いています（{engine_label}）。少々お待ちください…"
                     if curr_mode == "generate_new"
                     else f"🎨 みまもりさん：承知しました。{motif}の下絵を準備します"
                 )
@@ -1798,7 +1868,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     terminal_id=terminal_id,
                     motif_hint=motif,
                     message_hint=msg,
-                    mode=curr_mode
+                    mode=curr_mode,
+                    image_engine=curr_engine
                 )
                 # 2. Artwork is now prepared: show Etegami card with the new draft artwork
                 session.is_etegami_visible = True
@@ -2342,8 +2413,25 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     }))
                     asyncio.create_task(on_live_etegami_update(stashed, ""))
 
-        # Check for resident etegami update trigger from STT text (only if not handling mode decision)
-        if not mode_just_decided:
+        # Check for free vs paid image engine selection directly from Whisper STT
+        engine_just_decided = False
+        is_free_choice = any(w in clean_ans for w in [
+            "無料", "タダ", "ただ", "フリー", "ポリネーション", "無料の", "無料版", "お金かからない", "お金のかからない", "無料がいい", "無料で"
+        ])
+        is_paid_choice = any(w in clean_ans for w in [
+            "有料", "google", "グーグル", "有料で", "有料版", "有料の", "有料がいい", "お金払って", "綺麗な方", "きれいに", "グーグルの"
+        ])
+        if is_free_choice and not is_paid_choice:
+            print(f"[Whisper STT ({terminal_id})]: Detected resident chose FREE engine ('{transcribed_text}')")
+            engine_just_decided = True
+            asyncio.create_task(on_live_etegami_engine_decision("pollinations"))
+        elif is_paid_choice:
+            print(f"[Whisper STT ({terminal_id})]: Detected resident chose PAID engine ('{transcribed_text}')")
+            engine_just_decided = True
+            asyncio.create_task(on_live_etegami_engine_decision("google_image"))
+
+        # Check for resident etegami update trigger from STT text (only if not handling mode or engine decision)
+        if not mode_just_decided and not engine_just_decided:
             check_resident_etegami_trigger(transcribed_text)
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
@@ -2548,8 +2636,25 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                                 }))
                                 asyncio.create_task(on_live_etegami_update(stashed, ""))
 
-                    # Check for resident etegami update trigger from user text (only if not handling mode decision)
-                    if not mode_just_decided:
+                    # Check for free vs paid image engine selection directly from user text at EOS
+                    engine_just_decided = False
+                    is_free_choice = any(w in clean_ans for w in [
+                        "無料", "タダ", "ただ", "フリー", "ポリネーション", "無料の", "無料版", "お金かからない", "お金のかからない", "無料がいい", "無料で"
+                    ])
+                    is_paid_choice = any(w in clean_ans for w in [
+                        "有料", "google", "グーグル", "有料で", "有料版", "有料の", "有料がいい", "お金払って", "綺麗な方", "きれいに", "グーグルの"
+                    ])
+                    if is_free_choice and not is_paid_choice:
+                        print(f"[Live Session EOS ({terminal_id})]: Detected resident chose FREE engine ('{user_text}')")
+                        engine_just_decided = True
+                        asyncio.create_task(on_live_etegami_engine_decision("pollinations"))
+                    elif is_paid_choice:
+                        print(f"[Live Session EOS ({terminal_id})]: Detected resident chose PAID engine ('{user_text}')")
+                        engine_just_decided = True
+                        asyncio.create_task(on_live_etegami_engine_decision("google_image"))
+
+                    # Check for resident etegami update trigger from user text (only if not handling mode or engine decision)
+                    if not mode_just_decided and not engine_just_decided:
                         check_resident_etegami_trigger(user_text)
 
                     # Check for resident etegami visibility trigger (開く・起動・かきたい / 閉じる) from EOS user text
@@ -2619,6 +2724,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "active": False,
                     "message": "会話記録停止"
                 })
+
+            elif msg_type == "set_image_engine":
+                target_engine = data.get("engine", "pollinations")
+                print(f"[Client Message ({terminal_id})]: UI requested set_image_engine -> {target_engine}")
+                asyncio.create_task(on_live_etegami_engine_decision(target_engine))
 
             elif msg_type == "client_ui_mode":
                 new_mode = data.get("mode", "simple")
