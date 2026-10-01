@@ -1040,25 +1040,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updatePostcardEngineBadge(meta) {
         const badge = document.getElementById("postcard-engine-badge");
-        if (!badge) return;
+        const banner = document.getElementById("postcard-engine-banner");
+        const bannerText = document.getElementById("postcard-engine-text");
+        const bannerSub = document.getElementById("postcard-engine-sub");
+
         const imgUrl = (meta && (meta.card_image_url || meta.image_url)) || "";
         let engineType = (meta && meta.engine_type) || "local";
-        let engineName = (meta && meta.engine_name) || "🖌️ 自立水彩画 (Local)";
-        let engineDesc = (meta && meta.engine_desc) || "ローカル水彩画エンジン";
+        let engineName = (meta && meta.engine_name) || "🖌️ 自立水彩画エンジン (手元PC)";
+        let engineDesc = (meta && meta.engine_desc) || "Google AI制限時も手元で自立描画";
 
         if (imgUrl && (imgUrl.includes("sample_postcard") || imgUrl.includes("generated_relaxation") || imgUrl.includes("generated_healing") || imgUrl.includes("generated_classroom") || imgUrl.includes("generated_bunkasai") || imgUrl.includes("generated_kissaten") || imgUrl.includes("generated_undoukai"))) {
             engineType = "preset";
-            engineName = "🍁 季節アーカイブ";
-            engineDesc = "施設選定アーカイブ絵手紙";
+            engineName = "🍁 施設選定アーカイブ";
+            engineDesc = "四季の厳選絵手紙ライブラリ";
         } else if (imgUrl.includes("generated_custom_etegami")) {
             engineType = "local";
-            engineName = "🖌️ 自立水彩画 (Local)";
-            engineDesc = "ローカル水彩画エンジン（手元PCで自立描画）";
+            engineName = "🖌️ 自立水彩画エンジン (手元PC)";
+            engineDesc = "Google AI制限時も手元で自立描画";
+        } else if (meta && meta.engine_type === "cloud") {
+            engineType = "cloud";
+            engineName = "☁️ Google AI (Imagen)";
+            engineDesc = "Google Cloud AI 生成";
         }
 
-        badge.className = `etegami-engine-badge badge-engine-${engineType}`;
-        badge.textContent = engineName;
-        badge.title = `描画エンジン: ${engineDesc}`;
+        if (badge) {
+            badge.className = `etegami-engine-badge badge-engine-${engineType}`;
+            badge.textContent = engineName;
+            badge.title = `描画エンジン: ${engineDesc}`;
+        }
+
+        if (banner) {
+            banner.className = `postcard-engine-banner banner-engine-${engineType}`;
+            if (bannerText) bannerText.textContent = engineName;
+            if (bannerSub) bannerSub.textContent = `（${engineDesc}）`;
+        }
     }
 
     // 3. Render Charts with Chart.js

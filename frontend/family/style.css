@@ -679,6 +679,55 @@ body.family-theme {
     border: 1px solid #f97316;
 }
 
+/* 🎨 描画エンジン視認性向上バナー */
+.postcard-engine-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.postcard-engine-banner .engine-banner-label {
+    font-weight: 900;
+    opacity: 0.85;
+}
+
+.postcard-engine-banner .engine-banner-name {
+    font-weight: 900;
+    font-size: 0.95rem;
+}
+
+.postcard-engine-banner .engine-banner-sub {
+    font-size: 0.78rem;
+    font-weight: 600;
+    opacity: 0.75;
+    margin-left: auto;
+}
+
+.postcard-engine-banner.banner-engine-local {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    color: #065f46;
+    border: 1.5px solid #10b981;
+}
+
+.postcard-engine-banner.banner-engine-cloud {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    color: #3730a3;
+    border: 1.5px solid #6366f1;
+}
+
+.postcard-engine-banner.banner-engine-preset {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    color: #9a3412;
+    border: 1.5px solid #f97316;
+}
+
 .postcard-season-bar {
     display: flex;
     flex-wrap: wrap;
