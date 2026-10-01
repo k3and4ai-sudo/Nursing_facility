@@ -445,11 +445,15 @@ class GeminiLiveSession:
                                         f"★【最重要規則：ジェミナイは絵手紙の更新や下絵完了について絶対に言及しないこと！】：\n"
                                         f"・絵手紙の「更新中」や「更新完了」の案内は、すべてローカルAI「みまもりさん」が画面ランプや通知メッセージで行います。\n"
                                         f"・ジェミナイは利用者に対して「描いてみましたよ」「描きかえましたよ」「更新しましたよ」「画面をご覧ください」「いかがでしょうか」等と【絵手紙の更新や画面表示について言及することは絶対に厳禁】です！\n"
-                                        f"★【利用者が絵を描くこと・絵手紙を希望された場合の3ステップ】：\n"
-                                        f"【ステップ1：最初の確認質問】\n"
+                                        f"★【利用者が絵を描くこと・絵手紙を希望された場合のステップ進行】：\n"
+                                        f"★【最重要厳守ルール：ベースか新規かの確認質問は会話全体で【1回だけ】！繰り返すことは絶対に厳禁！】：\n"
+                                        f"・利用者が自ら最初に「絵を描きたい」「絵手紙を作りたい」と言った時だけ、1回だけ「今までの絵をベースにしますか？それとも新しく描きますか？」と尋ねてください。\n"
+                                        f"・利用者がすでに「新しい絵」「新しく描く」「前のでいい」「ベースにして」等と答えた後、または具体的な題材（犬、座敷、花、昔の思い出など）を話し始めた時は、この確認質問は【絶対に二度と繰り返してはいけません】！\n"
+                                        f"・利用者がモチーフや思い出を話したら、すぐにステップ3へ進み、第一声で正確に「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」と発言して下絵作成を依頼してください！\n\n"
+                                        f"【ステップ1：最初の確認質問（初回のみ）】\n"
                                         f"利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」などと希望された時は、いきなり下絵更新を指示するのではなく、まず第一声で利用者様に優しく：\n"
                                         f"「今までの絵をベースにしますか？それとも新しく描きますか？」\n"
-                                        f"と尋ねてください。\n\n"
+                                        f"と尋ねてください。（※既に答えている場合やモチーフを話している時は絶対に尋ねないこと！）\n\n"
                                         f"【ステップ2：利用者の意向に応じた準備指示】\n"
                                         f"・利用者が「はい」「そうして」「前のでいいよ」「うん」「今までの絵」「ベースにして」などと答えた場合：\n"
                                         f"必ず第一声で正確に：\n"
@@ -894,6 +898,27 @@ class GeminiLiveSession:
         """Immediately halts forwarding of Gemini audio and mutes current audio stream."""
         self._interrupted = True
         print("[Gemini Live Session]: Interruption active - muting current audio.")
+
+    async def send_system_note(self, note: str):
+        """Injects a high-priority system context instruction into Gemini Live WebSocket without triggering voice."""
+        if not await self.ensure_connected():
+            return
+        try:
+            client_content = {
+                "clientContent": {
+                    "turns": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"【重要システム通知】{note}"}]
+                        }
+                    ],
+                    "turnComplete": True
+                }
+            }
+            await self.ws.send(json.dumps(client_content))
+            print(f"[Gemini Live Session]: Injected system context note: '{note}'")
+        except Exception as e:
+            print(f"[Gemini Live Session]: Failed to inject system note: {e}")
 
     async def _receive_loop(self):
         """Receives audio and text response frames from Gemini Live API and forwards to output callbacks."""

@@ -135,12 +135,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function showEtegamiCard() {
+    function showEtegamiCard(forceScroll = true) {
         if (etegamiCard) {
             etegamiCard.classList.remove("hidden");
-            try {
-                etegamiCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            } catch (e) {}
+            if (forceScroll) {
+                setTimeout(() => {
+                    try {
+                        etegamiCard.scrollIntoView({ behavior: "smooth", block: "center" });
+                    } catch (e) {}
+                }, 100);
+            }
         }
         isEtegamiCardVisible = true;
         console.log("[Etegami Card]: Card shown.");
@@ -404,18 +408,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         console.log("[Etegami Display Updated]:", newTitle, newCalligraphy, "isCompleted=", isCompleted);
-        if (typeof showUIToast === "function") {
-            if (data.is_initial === true || isFirstEtegamiLoad) {
-                // Do not show toast on initial load
-                isFirstEtegamiLoad = false;
-            } else if (isCompleted) {
-                showUIToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, "simple");
+        if (data.is_initial === true || isFirstEtegamiLoad) {
+            isFirstEtegamiLoad = false;
+        } else {
+            // New or updated artwork ready: prominently show and center card
+            showEtegamiCard(true);
+            if (isCompleted) {
+                if (typeof showTemporaryToast === "function") {
+                    showTemporaryToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, 5000);
+                } else if (typeof showUIToast === "function") {
+                    showUIToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, "simple");
+                }
             } else {
-                showUIToast(`🎨 絵手紙を更新しました`, "simple");
+                if (typeof showTemporaryToast === "function") {
+                    showTemporaryToast(`🎨 みまもりさん：新しい絵手紙を描きました（${newTitle}）`, 5500);
+                } else if (typeof showUIToast === "function") {
+                    showUIToast(`🎨 みまもりさん：新しい絵手紙を描きました（${newTitle}）`, "simple");
+                }
             }
         }
         if (data && data.force_open === true) {
-            showEtegamiCard();
+            showEtegamiCard(true);
         }
     }
 

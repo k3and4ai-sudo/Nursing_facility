@@ -1760,6 +1760,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         try:
             session.etegami_prepare_mode = mode
             print(f"[Gemini Live Session ({terminal_id})]: Etegami prepare mode set to '{mode}'")
+            mode_label = "新しい絵を描く" if mode == "generate_new" else "今までの絵をベースにする"
+            asyncio.create_task(session.send_system_note(
+                f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
+            ))
             if mode == "generate_new":
                 msg = "🎨 みまもりさん：承知しました。新しい絵手紙の作成を準備します"
                 speak = "承知しました。新しい絵手紙ですね。どんな絵を描きましょうか？"
@@ -2326,6 +2330,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
 
             if mode_just_decided:
+                mode_label = "新しい絵を描く" if session.etegami_prepare_mode == "generate_new" else "今までの絵をベースにする"
+                asyncio.create_task(session.send_system_note(
+                    f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
+                ))
                 stashed = getattr(session, "pending_motif", "")
                 session.pending_motif = None
                 if stashed:
@@ -2528,6 +2536,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                             asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
 
                         if mode_just_decided:
+                            mode_label = "新しい絵を描く" if session.etegami_prepare_mode == "generate_new" else "今までの絵をベースにする"
+                            asyncio.create_task(session.send_system_note(
+                                f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
+                            ))
                             stashed = getattr(session, "pending_motif", "")
                             session.pending_motif = None
                             if stashed:
