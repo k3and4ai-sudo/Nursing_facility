@@ -1718,10 +1718,6 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_schedules = db.get_schedules_by_user_and_date(user["id"], today_str)
 
-    session.etegami_image_engine = "pollinations"  # Default: free AI
-    session.has_confirmed_image_engine = False
-    session.pending_motif_for_engine_confirm = None
-
     etegami_lock = asyncio.Lock()
 
     async def on_live_etegami_engine_decision(engine: str):
@@ -2222,6 +2218,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         schedules=today_schedules
     )
     session.on_api_error = on_gemini_error
+    session.etegami_image_engine = "pollinations"  # Default: free AI
+    session.has_confirmed_image_engine = False
+    session.pending_motif_for_engine_confirm = None
 
     latest_whisper_transcription = {"text": "", "time": 0.0}
 
