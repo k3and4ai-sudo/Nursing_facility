@@ -184,66 +184,23 @@ class TestGeminiLiveSession(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session3.api_key, "explicit_override_key_777")
 
     @patch("backend.gemini_live.websockets.connect", new_callable=AsyncMock)
-    async def test_gemini_etegami_trigger_and_duplicate_prevention(self, mock_ws_connect):
-        """Test detection of 'みまもりさん、デジタル絵手紙JSONファイル更新お願いします' and duplicate prevention."""
+    async def test_gemini_etegami_prompt_prohibits_robotic_commands(self, mock_ws_connect):
+        """Test that setup prompt strictly forbids robotic system commands like 'みまもりさん、デジタル絵手紙JSONファイル更新'."""
         mock_ws = AsyncWsMock()
         mock_ws_connect.return_value = mock_ws
 
-        etegami_callback = MagicMock()
         session = GeminiLiveSession(
             user=self.user,
             on_audio_received=MagicMock(),
             on_error=MagicMock(),
-            on_text_received=MagicMock(),
-            on_etegami_updated=etegami_callback
+            on_text_received=MagicMock()
         )
         session.api_key = "test_key"
         await session.connect()
 
-        # Verify prompt setup contains the instruction
+        # Verify prompt setup contains the prohibition rule
         sent_json = mock_ws.send.call_args[0][0]
-        self.assertIn("みまもりさん、デジタル絵手紙JSONファイル更新お願いします", sent_json)
-
-        # 0. Unsolicited trigger when resident has not requested etegami -> should be blocked
-        session.has_resident_requested_etegami = False
-        frame_unsolicited = json.dumps({
-            "serverContent": {
-                "modelTurn": {
-                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファィル更新お願いします（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
-                }
-            }
-        })
-        mock_ws.messages.append(frame_unsolicited)
-        await session._receive_loop()
-        etegami_callback.assert_not_called()
-
-        # 1. Normal trigger from Gemini after resident requested etegami
-        session.has_resident_spoken_in_session = True
-        session.has_resident_requested_etegami = True
-        frame1 = json.dumps({
-            "serverContent": {
-                "modelTurn": {
-                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファィル更新お願いします（モチーフ: 寄り添う小鳥、文字: いつもありがとう）"}]
-                }
-            }
-        })
-        mock_ws.messages.append(frame1)
-        await session._receive_loop()
-        etegami_callback.assert_called_once_with("寄り添う小鳥", "いつもありがとう")
-
-        # 2. Duplicate trigger while is_etegami_updating is True -> should do nothing
-        etegami_callback.reset_mock()
-        session.is_etegami_updating = True
-        frame2 = json.dumps({
-            "serverContent": {
-                "modelTurn": {
-                    "parts": [{"text": "みまもりさん、デジタル絵手紙JSONファイル更新お願いします"}]
-                }
-            }
-        })
-        mock_ws.messages.append(frame2)
-        await session._receive_loop()
-        etegami_callback.assert_not_called()
+        self.assertIn("システム呪文（みまもりさん、JSONファイル等）を絶対に声に出して発言しないこと", sent_json)
 
         await session.close()
 

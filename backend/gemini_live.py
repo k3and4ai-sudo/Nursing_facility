@@ -447,35 +447,30 @@ class GeminiLiveSession:
                                         f"・絵手紙の「更新中」や「更新完了」の案内は、すべてローカルAI「みまもりさん」が画面ランプや通知メッセージで行います。\n"
                                         f"・ジェミナイは利用者に対して「描いてみましたよ」「描きかえましたよ」「更新しましたよ」「画面をご覧ください」「いかがでしょうか」等と【絵手紙の更新や画面表示について言及することは絶対に厳禁】です！\n"
                                         f"★【利用者が絵を描くこと・絵手紙を希望された場合のステップ進行】：\n"
+                                        f"★【絶対厳禁：システム呪文（みまもりさん、JSONファイル等）を絶対に声に出して発言しないこと！】：\n"
+                                        f"・あなたは高齢の利用者様と直接声でお話しするパートナーです。「みまもりさん」「JSON」「ファイル更新」「システム」などの機械的・システム的な言葉は【絶対に一言も声に出して発言してはいけません】！\n"
+                                        f"・下絵の生成や準備は、すべて裏側のシステム（みまもりさん）が利用者様の発話を聞いて自動的に行います。\n"
+                                        f"・ジェミナイは常に温かい血の通ったお友達として、利用者様のお話に傾聴・共感してください。\n\n"
                                         f"★【最重要厳守ルール：ベースか新規かの確認質問は会話全体で【1回だけ】！繰り返すことは絶対に厳禁！】：\n"
                                         f"・利用者が自ら最初に「絵を描きたい」「絵手紙を作りたい」と言った時だけ、1回だけ「今までの絵をベースにしますか？それとも新しく描きますか？」と尋ねてください。\n"
-                                        f"・利用者がすでに「新しい絵」「新しく描く」「前のでいい」「ベースにして」等と答えた後、または具体的な題材（犬、座敷、花、昔の思い出など）を話し始めた時は、この確認質問は【絶対に二度と繰り返してはいけません】！\n"
-                                        f"・利用者がモチーフや思い出を話したら、すぐにステップ3へ進み、第一声で正確に「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」と発言して下絵作成を依頼してください！\n\n"
+                                        f"・利用者がすでに「新しい絵」「新しく描く」「前のでいい」「ベースにして」等と答えた後、または具体的な題材（犬、座敷、花、昔の思い出など）を話し始めた時は、この確認質問は【絶対に二度と繰り返してはいけません】！\n\n"
                                         f"【ステップ1：最初の確認質問（初回のみ）】\n"
-                                        f"利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」などと希望された時は、いきなり下絵更新を指示するのではなく、まず第一声で利用者様に優しく：\n"
+                                        f"利用者が自ら「絵を描きたい」「絵手紙を作りたい」「絵手紙を出して」などと希望された時は、まず第一声で利用者様に優しく：\n"
                                         f"「今までの絵をベースにしますか？それとも新しく描きますか？」\n"
                                         f"と尋ねてください。（※既に答えている場合やモチーフを話している時は絶対に尋ねないこと！）\n\n"
-                                        f"【ステップ2：利用者の意向に応じた準備指示】\n"
+                                        f"【ステップ2：利用者の意向に応じた返答】\n"
                                         f"・利用者が「はい」「そうして」「前のでいいよ」「うん」「今までの絵」「ベースにして」などと答えた場合：\n"
-                                        f"必ず第一声で正確に：\n"
-                                        f"「みまもりさん、絵手紙をベースにしてください。」\n"
-                                        f"と発言してください。続けて利用者様に「承知いたしました。前回の絵をもとに、どんな思い出やお話の絵手紙にしましょうか？」と優しく尋ねてください。\n\n"
+                                        f"「承知いたしました！前回の絵をもとに、どんな思い出やお話の絵手紙にしましょうか？」と優しく尋ねてください。\n"
                                         f"・利用者が「いいえ」「新しく描いて」「新しく描く」「新しい絵」「最初から」などと答えた場合：\n"
-                                        f"必ず第一声で正確に：\n"
-                                        f"「みまもりさん、新しい絵を描いてください。」\n"
-                                        f"と発言してください。続けて利用者様に「新しい絵ですね！どんな場面や思い出を描きましょうか？」と優しく尋ねてください。\n\n"
-                                        f"【ステップ3：モチーフ決定による最初の画像表示】\n"
-                                        f"会話が進み、描きたいモチーフや情景（例:「昔飼っていた犬」「運動会のお弁当」「喫茶店」「桜」など）が決まったら、必ず第一声の冒頭で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」\n"
-                                        f"とシステム定型句を発言してください。みまもりさんがステップ2で選ばれた方法（既存アセットから近いものを選ぶ、またはベースがない全く新しい画像を生成する）により最初の画像を画面に表示します。続けて利用者様には更新の話は一切せず、その情景やお話への温かい共感・傾聴の言葉のみをお話ししてください。\n\n"
-                                        f"【ステップ4：会話継続による情景追加・絵手紙の手直し】\n"
-                                        f"絵手紙についての会話が続くなかで、利用者様が追加の情景や手直し（例:「座敷を走り回っていた」「座敷の風景も描いて」「首輪を赤くして」「夕焼けの空にして」「猫にして」など）をお話しされた時も、必ず第一声で：\n"
-                                        f"「みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）」\n"
-                                        f"と発言して絵手紙の更新をみまもりさんに依頼してください。その後に利用者様へ温かい共感・傾聴の返答をしてください。\n\n"
+                                        f"「新しい絵ですね！どんな場面や思い出を描きましょうか？」と優しく尋ねてください。\n\n"
+                                        f"【ステップ3：モチーフやお話への温かい傾聴と共感】\n"
+                                        f"会話が進み、描きたいモチーフや情景（例:「昔飼っていた犬」「運動会のお弁当」「喫茶店」「桜」など）が決まったら、\n"
+                                        f"利用者様のお話に深く共感し、『犬ですね！とても温かいですね。どんなワンちゃんだったのですか？』のように、その情景やお気持ちを優しく受け止めて楽しく会話を続けてください。（※下絵は裏で自動的に準備されますので、絵の更新や呪文は一切言わないでください）\n\n"
+                                        f"【ステップ4：情景追加や手直しの傾聴】\n"
+                                        f"絵手紙についての会話が続くなかで、利用者様が追加の情景（例:「座敷を走り回っていた」「夕焼けの空にして」など）をお話しされた時も、温かく受け止めて「座敷を元気いっぱいに走っていたのですね！微笑ましいですね」と楽しく会話を弾ませてください。\n\n"
                                         f"2. 完成・満足の意思を確認した時：\n"
-                                        f"利用者様が「これでいいよ」「気に入った」「完成」「これで送って」「素敵だね」などと満足されたら、必ず第一声で正確に：\n"
-                                        f"「みまもりさん、デジタル絵手紙完成」と発言してください。\n"
-                                        f"続けて利用者様に「わあ、素敵な思い出のお話を聞かせてくださりありがとうございました」と温かく受容してください（更新や画面操作の完了はみまもりさんが伝えます）。\n"
+                                        f"利用者様が「これでいいよ」「気に入った」「完成」「これで送って」「素敵だね」などと満足されたら、\n"
+                                        f"「わあ、素敵な思い出のお話を聞かせてくださりありがとうございました！とても心が温まります」と温かく受容してください。\n"
                                         f"3. 会話終了や絵手紙を閉じる時：\n"
                                         f"利用者様から「一旦終了します」「会話を終了します」「絵を閉じて」「もういいよ」「おしまい」と言われたら、\n"
                                         f"「承知いたしました。またいつでもお気軽にお話ししましょうね」と優しく応答してください。\n\n"
@@ -731,118 +726,8 @@ class GeminiLiveSession:
                 if self.on_etegami_completed:
                     self.on_etegami_completed()
 
-        # Detect Etegami JSON update command from Gemini speech or thought
-        # Target keywords:
-        # "みまもりさん、デジタル絵手紙JSONファィル更新お願いします" / "みまもりさん、デジタル絵手紙JSONファイル更新お願いします"
-        norm_val = eval_text.replace("ファィル", "ファイル").replace("ｊｓｏｎ", "json").replace("ＪＳＯＮ", "json").lower()
-        is_gemini_etegami_json = (
-            ("みまもりさん" in eval_text or "みまもり" in eval_text) and
-            ("デジタル絵手紙" in eval_text or "絵手紙" in eval_text) and
-            ("json" in norm_val or "ファイル" in norm_val) and
-            ("更新" in eval_text or "お願い" in eval_text)
-        ) or (
-            "デジタル絵手紙jsonファイル更新" in norm_val or
-            "デジタル絵手紙jsonファィル更新" in eval_text.lower()
-        )
-        is_gemini_etegami = is_gemini_etegami_json or (
-            "デジタル絵手紙更新" in eval_text or
-            "デジタル絵手紙を更新" in eval_text or
-            ("みまもりさん" in eval_text and "絵手紙" in eval_text and "更新" in eval_text) or
-            ("絵手紙" in eval_text and "更新" in eval_text and "お願い" in eval_text) or
-            "絵手紙更新" in eval_text
-        )
-        if is_gemini_etegami:
-            if not self.has_resident_spoken_in_session or not self.has_resident_requested_etegami:
-                print(f"[Gemini Live Session]: Blocked unsolicited Gemini Etegami trigger (resident has not requested etegami in this session): '{eval_text[-60:]}'")
-                return
-            if self.is_etegami_updating:
-                print(f"[Gemini Live Session]: Already updating Etegami - ignoring duplicate trigger: '{eval_text[-60:]}'")
-            elif (now - self.last_etegami_update_time < 4.0):
-                print(f"[Gemini Live Session]: Etegami recently updated (<4s) - ignoring duplicate trigger: '{eval_text[-60:]}'")
-            else:
-                # If an opening parenthesis is present, ensure closing parenthesis has arrived before triggering
-                paren_start = eval_text.find("（") if "（" in eval_text else eval_text.find("(")
-                if paren_start != -1:
-                    has_closing_paren = ("）" in eval_text[paren_start:]) or (")" in eval_text[paren_start:])
-                    if not has_closing_paren:
-                        print(f"[Gemini Live Session]: Trigger phrase parenthesis still open in stream: '{eval_text[-60:]}' - waiting for next chunk...")
-                        return
-
-                # Extract update content reported by Gemini
-                # Format: "みまもりさん、デジタル絵手紙JSONファイル更新お願いします（モチーフ: ○○、文字: ○○）"
-                # or freeform: "〜〜更新お願いします。モチーフは桜で、文字は春が来たよにしてください。"
-                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', eval_text)
-                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', eval_text)
-                motif = motif_match.group(1).strip() if motif_match else ""
-                msg = msg_match.group(1).strip() if msg_match else ""
-                if motif:
-                    motif = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', motif).strip()
-                    motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
-                    motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
-                    if motif in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ：", "none", "null"]:
-                        motif = ""
-                if msg:
-                    msg = re.sub(r'^(?:文字|言葉|添え字|メッセージ)[：:は]?\s*', '', msg).strip()
-                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-                    msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
-                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-                    if msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
-                        msg = ""
-
-                # Fallback: scan for known seasonal / reminiscence motifs in text
-                if not motif:
-                    for kw in ["座敷を走り回る白い犬", "座敷と白い犬", "白い犬", "子犬", "座敷", "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉", "富士山", "猫"]:
-                        if kw in eval_text:
-                            motif = kw
-                            break
-
-                # If still no motif, check if the phrase appears incomplete (Gemini still streaming parameters)
-                if not motif:
-                    cleaned_tail = eval_text.rstrip("。、 　\n")
-                    has_pending_motif = (
-                        cleaned_tail.endswith("お願い") or
-                        cleaned_tail.endswith("お願いします") or
-                        cleaned_tail.endswith("お願い致し") or
-                        cleaned_tail.endswith("いたします") or
-                        cleaned_tail.endswith("更新") or
-                        cleaned_tail.endswith("ファイル") or
-                        cleaned_tail.endswith("ファィル") or
-                        cleaned_tail.endswith("json") or
-                        cleaned_tail.endswith("JSON") or
-                        "（" in eval_text or
-                        "(" in eval_text or
-                        "モチーフ" in eval_text
-                    )
-                    if has_pending_motif:
-                        print(f"[Gemini Live Session]: Trigger phrase detected but motif pending in stream: '{eval_text[-60:]}' - waiting for next chunk...")
-                        return
-
-                # If still no motif, but there is content after the trigger phrase, extract hint safely
-                if not motif:
-                    trigger_patterns = [
-                        r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)',
-                        r'デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)'
-                    ]
-                    for tp in trigger_patterns:
-                        m = re.search(tp, eval_text, re.IGNORECASE)
-                        if m and m.group(1).strip():
-                            content_tail = m.group(1).strip().strip("（）()")
-                            sub_m = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', content_tail)
-                            if sub_m:
-                                cand = sub_m.group(1).strip()
-                                cand = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', cand).strip()
-                                cand = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', cand).strip()
-                                if cand and cand not in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ："]:
-                                    motif = cand
-                            elif content_tail and not content_tail.startswith("モチーフ"):
-                                motif = content_tail[:25]
-                            break
-
-                print(f"[Gemini Live Session]: Detected Gemini Etegami JSON Update Trigger in eval_text: '{eval_text[-80:]}' -> motif='{motif}', msg='{msg}'")
-                self.last_etegami_update_time = now
-                self.ai_streamed_text_buffer = ""
-                if self.on_etegami_updated:
-                    self.on_etegami_updated(motif, msg)
+        # Note: Etegami updates are triggered cleanly and directly via resident speech (Whisper STT).
+        # Gemini does not trigger internal JSON updates from its own speech.
 
         if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
             print(f"[Gemini Live Session Filtered Thought]: {text_val}")

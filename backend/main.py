@@ -12,7 +12,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import urllib.parse
 import hashlib
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -1601,69 +1601,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             session.has_resident_requested_etegami = True
             asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
 
-        # Check if Gemini requested etegami JSON update in this turn (requires explicit JSON/file and update keywords)
-        # Ensure parenthesis is closed and motif isn't cut off if streamed partially
-        has_open_paren = ("（" in full_text and "）" not in full_text) or ("(" in full_text and ")" not in full_text)
-        is_cut_off = full_text.rstrip("。、 　\n").endswith("モチーフ:") or full_text.rstrip("。、 　\n").endswith("モチーフ：")
-        is_gemini_update_in_turn = (
-            not has_open_paren and
-            not is_cut_off and
-            ("みまもりさん" in full_text or "みまもり" in full_text) and
-            ("デジタル絵手紙" in full_text or "絵手紙" in full_text) and
-            ("json" in full_text.lower() or "ファイル" in full_text or "ファィル" in full_text) and
-            ("更新" in full_text or "下絵" in full_text)
-        )
-        if is_gemini_update_in_turn and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
-            if not getattr(session, "has_resident_spoken_in_session", False) or not getattr(session, "has_resident_requested_etegami", False):
-                print(f"[Gemini Live Session ({terminal_id})]: Blocked unsolicited Gemini Etegami update in turn text (resident has not requested etegami in this session).")
-            else:
-                motif_match = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', full_text)
-                msg_match = re.search(r'(?:文字|言葉|添え字|メッセージ)[：:は]\s*([^、,）\)\n。]+)', full_text)
-                motif = motif_match.group(1).strip() if motif_match else ""
-                msg = msg_match.group(1).strip() if msg_match else ""
-                if motif:
-                    motif = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', motif).strip()
-                    motif = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', motif).strip()
-                    motif = re.sub(r'(?:で|に|の|と)$', '', motif).strip()
-                    if motif in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ：", "none", "null"]:
-                        motif = ""
-                if msg:
-                    msg = re.sub(r'^(?:文字|言葉|添え字|メッセージ)[：:は]?\s*', '', msg).strip()
-                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-                    msg = re.sub(r'(?:で|に|と)?(?:お願|よろしく|頼む|にして).*$', '', msg).strip()
-                    msg = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', msg).strip()
-                    if msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
-                        msg = ""
-                if not motif:
-                    for kw in ["座敷を走り回る白い犬", "座敷と白い犬", "白い犬", "子犬", "座敷", "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲", "教室", "展覧会", "作品展", "一作展", "映画", "映画館", "夕焼け", "夕暮れ", "縁側", "お茶", "小鳥", "雀", "すずめ", "運動会", "お弁当", "桜", "さくら", "朝顔", "風鈴", "雪", "椿", "コスモス", "秋桜", "紅葉", "富士山", "猫"]:
-                        if kw in full_text:
-                            motif = kw
-                            break
-                if not motif:
-                    trigger_patterns = [
-                        r'みまもりさん[、,\s]*デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)',
-                        r'デジタル絵手紙(?:json|JSON)?(?:ファイル|ファィル)?更新お願い(?:します|致します)?[:：、。\s]*(.*)'
-                    ]
-                    for tp in trigger_patterns:
-                        m = re.search(tp, full_text, re.IGNORECASE)
-                        if m and m.group(1).strip():
-                            tail = m.group(1).strip().strip("（）()")
-                            sub_m = re.search(r'モチーフ[：:は]\s*([^、,）\)\n。]+)', tail)
-                            if sub_m:
-                                cand = sub_m.group(1).strip()
-                                cand = re.sub(r'^(?:モチーフ[：:は]?\s*)+', '', cand).strip()
-                                cand = re.sub(r'^[「"\'（\(]+|[」"\'）\)]+$', '', cand).strip()
-                                if cand and cand not in ["なし", "特になし", "無", "無し", "モチーフ", "モチーフ:", "モチーフ："]:
-                                    motif = cand
-                            elif tail and not tail.startswith("モチーフ"):
-                                motif = tail[:25]
-                            break
-
-                if motif or msg:
-                    print(f"[Gemini Live Session ({terminal_id})]: Detected Gemini Etegami JSON Update in turn text: '{full_text[:60]}...' -> motif='{motif}', msg='{msg}'")
-                    asyncio.create_task(on_live_etegami_update(motif, msg))
-                else:
-                    print(f"[Gemini Live Session ({terminal_id})]: Ignored Gemini Etegami JSON Update because motif is empty: '{full_text[:60]}...'")
+        # Note: Etegami updates are triggered cleanly and directly via resident Whisper STT (check_resident_etegami_trigger).
+        # Gemini does not and should not trigger internal commands from AI output.
 
         if ("デジタル絵手紙完成" in full_text or ("みまもりさん" in full_text and "絵手紙" in full_text and "完成" in full_text)) and (time.time() - getattr(session, "last_etegami_update_time", 0.0) >= 3.0):
             if getattr(session, "has_resident_requested_etegami", False):
@@ -1824,9 +1763,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     if curr_mode == "generate_new"
                     else f"🎨 みまもりさん：承知しました。{motif}の下絵を準備します"
                 )
-                asyncio.create_task(session.send_system_note(
-                    f"みまもりさんが利用者の希望したモチーフ『{motif}』で絵手紙の作成を開始しました。「{motif}ですね！とても温かい情景ですね。みまもりさんが今絵を描いていますよ」と自然にモチーフを受け止めて会話を続けてください。絶対に会話を終了したり、「ベースにしますか？」と聞き直したりしないでください。"
-                ))
+                # Mimamori-san acknowledges on screen/TTS without interrupting Gemini's natural listening.
                 await websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_update",
