@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
@@ -25,10 +26,10 @@ PROJECT_ROOT = os.path.dirname(BASE_DIR)
 CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, "credentials.json") if os.path.exists(os.path.join(PROJECT_ROOT, "credentials.json")) else os.path.join(BASE_DIR, "credentials.json")
 TOKEN_FILE = os.path.join(PROJECT_ROOT, "token.json") if os.path.exists(os.path.join(PROJECT_ROOT, "token.json")) else os.path.join(BASE_DIR, "token.json")
 
-def get_google_fit_credentials() -> Optional[Credentials]:
+def get_google_fit_credentials(allow_interactive: bool = False) -> Optional[Credentials]:
     """
     Loads, refreshes, or initiates OAuth 2.0 flow for Google Fit.
-    Returns Credentials or None if credentials.json is missing.
+    Returns Credentials or None if credentials.json is missing or re-auth is needed.
     """
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -49,11 +50,14 @@ def get_google_fit_credentials() -> Optional[Credentials]:
                 creds = None
         
         if not creds:
+            if not allow_interactive:
+                print("[Google Fit] Token expired or invalid. Interactive re-auth is disabled in server mode to prevent freezing the event loop.")
+                return None
             if not os.path.exists(CREDENTIALS_FILE):
                 print(f"[Google Fit] {CREDENTIALS_FILE} not found.")
                 return None
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            # Run local server on an available port
+            # Run local server on an available port (interactive CLI only)
             creds = flow.run_local_server(port=0, prompt="consent", access_type="offline")
             with open(TOKEN_FILE, "w") as token:
                 token.write(creds.to_json())
@@ -61,9 +65,9 @@ def get_google_fit_credentials() -> Optional[Credentials]:
 
     return creds
 
-def get_fitness_service():
+def get_fitness_service(allow_interactive: bool = False):
     """Builds and returns the Google Fitness API service resource."""
-    creds = get_google_fit_credentials()
+    creds = get_google_fit_credentials(allow_interactive=allow_interactive)
     if not creds:
         return None
     return build("fitness", "v1", credentials=creds, cache_discovery=False)
@@ -313,7 +317,7 @@ async def sync_user_google_fit(user_id: int, broadcast_callback=None) -> Dict[st
     if not user:
         return {"status": "error", "message": f"User {user_id} not found"}
 
-    fit_data = fetch_latest_fit_vitals(hours_back=12)
+    fit_data = await asyncio.to_thread(fetch_latest_fit_vitals, 12)
     if fit_data.get("status") != "success":
         return fit_data
 
