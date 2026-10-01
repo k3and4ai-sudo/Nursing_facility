@@ -570,6 +570,17 @@ def create_artistic_watercolor_image(
     print(f"[Artistic Watercolor SUCCESS]: Generated dedicated artwork for '{clean_motif}' -> {output_filename}")
     return f"/family/assets/{output_filename}"
 
+LAST_USED_IMAGE_ENGINE: Dict[str, Any] = {
+    "engine": "local_watercolor",
+    "name": "自立水彩画 (Local)",
+    "type": "local",
+    "desc": "ローカル水彩画エンジン（自前描画）"
+}
+
+def get_last_used_image_engine() -> Dict[str, Any]:
+    global LAST_USED_IMAGE_ENGINE
+    return dict(LAST_USED_IMAGE_ENGINE)
+
 def generate_new_etegami_artwork(
     motif: str,
     theme_title: str,
@@ -582,6 +593,7 @@ def generate_new_etegami_artwork(
     If unavailable or quota-limited (429), immediately generates an artistic procedural Japanese watercolor image.
     Always returns a functional relative image URL.
     """
+    global LAST_USED_IMAGE_ENGINE
     clean_motif = motif.replace("高校時代の", "").replace("昔の", "").replace("今日の", "").strip() or "心温まる情景"
     timestamp = int(time.time())
     output_filename = f"generated_custom_etegami_{user_id}_{timestamp}.jpg"
@@ -600,9 +612,21 @@ def generate_new_etegami_artwork(
         model_name="gemini-3.1-flash-image"
     )
     if generated_url:
+        LAST_USED_IMAGE_ENGINE = {
+            "engine": "gemini_imagen",
+            "name": "Google AI (Imagen)",
+            "type": "cloud",
+            "desc": "Google AI Studio クラウド画像生成 (Imagen)"
+        }
         return generated_url
 
     # 2. Resilient Fallback: Create dedicated procedural Japanese watercolor image
+    LAST_USED_IMAGE_ENGINE = {
+        "engine": "local_watercolor",
+        "name": "自立水彩画 (Local)",
+        "type": "local",
+        "desc": "ローカル水彩画エンジン（通信障害・429制限時も自立稼働）"
+    }
     return create_artistic_watercolor_image(
         motif=clean_motif,
         theme_title=theme_title,
@@ -1452,6 +1476,24 @@ def modify_or_create_etegami(
         }
     }
 
+    # Determine which engine generated/selected the image
+    if base_source == "ai_generated_novel":
+        engine_meta = get_last_used_image_engine()
+    elif "sample_postcard" in selected_image or "generated_" in selected_image:
+        engine_meta = {
+            "engine": "preset_archive",
+            "name": "季節アーカイブ",
+            "type": "preset",
+            "desc": "厳選された季節の絵手紙コレクション"
+        }
+    else:
+        engine_meta = get_last_used_image_engine()
+
+    payload["engine"] = engine_meta.get("engine", "local_watercolor")
+    payload["engine_name"] = engine_meta.get("name", "自立水彩画 (Local)")
+    payload["engine_type"] = engine_meta.get("type", "local")
+    payload["engine_desc"] = engine_meta.get("desc", "ローカル水彩画エンジン")
+
     # Save into DB for persistent access across user, family, and staff
     try:
         user_record = db.get_user_by_terminal(terminal_id)
@@ -1461,7 +1503,7 @@ def modify_or_create_etegami(
         payload["user_name"] = user_name
         payload["extracted_at"] = now.isoformat()
         db.save_image_prompt_payload(user_id, terminal_id, payload)
-        print(f"[Etegami Real-Time Update SUCCESS] terminal={terminal_id}, theme='{theme_title}', status='{status}', completed={is_completed}")
+        print(f"[Etegami Real-Time Update SUCCESS] terminal={terminal_id}, theme='{theme_title}', status='{status}', completed={is_completed}, engine='{engine_meta.get('name')}'")
     except Exception as e:
         print(f"[Etegami Real-Time Update DB Error]: {e}")
 
@@ -1483,6 +1525,10 @@ def modify_or_create_etegami(
         "status": status,
         "badge_text": badge_text,
         "base_source": base_source,
+        "engine": engine_meta.get("engine", "local_watercolor"),
+        "engine_name": engine_meta.get("name", "自立水彩画 (Local)"),
+        "engine_type": engine_meta.get("type", "local"),
+        "engine_desc": engine_meta.get("desc", "ローカル水彩画エンジン"),
         "postcard_metadata": payload["postcard_metadata"],
         "api_notice": api_notice_msg,
         "api_error": last_notice if (last_notice and mode == "generate_new") else None

@@ -649,6 +649,36 @@ body.family-theme {
 }
 
 /* POSTCARD */
+.etegami-engine-badge {
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.etegami-engine-badge.badge-engine-local {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #10b981;
+}
+
+.etegami-engine-badge.badge-engine-cloud {
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #6366f1;
+}
+
+.etegami-engine-badge.badge-engine-preset {
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid #f97316;
+}
+
 .postcard-season-bar {
     display: flex;
     flex-wrap: wrap;

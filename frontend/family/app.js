@@ -927,6 +927,7 @@ document.addEventListener("DOMContentLoaded", () => {
             currentSeason = multimedia.card_season;
             highlightActiveSeasonButton(currentSeason);
         }
+        updatePostcardEngineBadge(multimedia);
         updatePostcardDownloadLink();
 
         // Render Past Postcards & Moments Archive Chips
@@ -1033,7 +1034,31 @@ document.addEventListener("DOMContentLoaded", () => {
             postcardGreeting.textContent = card.calligraphy || card.title;
         }
         renderSummary3Lines(card.summary_text, card.summary_3lines);
+        updatePostcardEngineBadge(card);
         updatePostcardDownloadLink();
+    }
+
+    function updatePostcardEngineBadge(meta) {
+        const badge = document.getElementById("postcard-engine-badge");
+        if (!badge) return;
+        const imgUrl = (meta && (meta.card_image_url || meta.image_url)) || "";
+        let engineType = (meta && meta.engine_type) || "local";
+        let engineName = (meta && meta.engine_name) || "🖌️ 自立水彩画 (Local)";
+        let engineDesc = (meta && meta.engine_desc) || "ローカル水彩画エンジン";
+
+        if (imgUrl && (imgUrl.includes("sample_postcard") || imgUrl.includes("generated_relaxation") || imgUrl.includes("generated_healing") || imgUrl.includes("generated_classroom") || imgUrl.includes("generated_bunkasai") || imgUrl.includes("generated_kissaten") || imgUrl.includes("generated_undoukai"))) {
+            engineType = "preset";
+            engineName = "🍁 季節アーカイブ";
+            engineDesc = "施設選定アーカイブ絵手紙";
+        } else if (imgUrl.includes("generated_custom_etegami")) {
+            engineType = "local";
+            engineName = "🖌️ 自立水彩画 (Local)";
+            engineDesc = "ローカル水彩画エンジン（手元PCで自立描画）";
+        }
+
+        badge.className = `etegami-engine-badge badge-engine-${engineType}`;
+        badge.textContent = engineName;
+        badge.title = `描画エンジン: ${engineDesc}`;
     }
 
     // 3. Render Charts with Chart.js

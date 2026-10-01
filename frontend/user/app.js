@@ -384,15 +384,44 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (isCompleted) {
                 statusBadge.className = "etegami-status-badge badge-completed";
                 statusBadge.innerHTML = "<span>💮</span><span>ご本人様と完成</span>";
-            } else if (data.api_notice) {
-                statusBadge.className = "etegami-status-badge badge-drafting";
-                statusBadge.innerHTML = "<span>🎨</span><span>水彩画描画（Gemini画像API 429制限）</span>";
-                statusBadge.title = data.api_notice;
             } else {
                 statusBadge.className = "etegami-status-badge badge-drafting";
                 statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
             }
         }
+
+        // 🏷️ 絵手紙 描画エンジンバッジの更新 (Cloud vs Local vs Preset)
+        const engineBadge = document.getElementById("etegami-engine-badge");
+        const modalEngineBadge = document.getElementById("etegami-modal-engine-badge");
+
+        let engineType = data.engine_type || (data.engine === "gemini_imagen" ? "cloud" : (data.engine === "preset_archive" ? "preset" : "local"));
+        let engineName = data.engine_name || (engineType === "cloud" ? "☁️ Google AI (Imagen)" : (engineType === "preset" ? "🍁 季節アーカイブ" : "🖌️ 自立水彩画 (Local)"));
+        let engineDesc = data.engine_desc || (engineType === "cloud" ? "Google AI Studio クラウド画像生成" : (engineType === "preset" ? "厳選された季節の絵手紙" : "ローカル水彩画エンジン（自前描画）"));
+
+        if (data.image_url && (data.image_url.includes("sample_postcard") || data.image_url.includes("generated_relaxation") || data.image_url.includes("generated_healing") || data.image_url.includes("generated_classroom") || data.image_url.includes("generated_bunkasai") || data.image_url.includes("generated_kissaten") || data.image_url.includes("generated_undoukai"))) {
+            engineType = "preset";
+            engineName = "🍁 季節アーカイブ";
+            engineDesc = "施設選定アーカイブ絵手紙";
+        } else if (data.api_notice || data.engine === "local_watercolor" || (data.image_url && data.image_url.includes("generated_custom_etegami"))) {
+            if (data.api_notice || !data.engine || data.engine === "local_watercolor") {
+                engineType = "local";
+                engineName = "🖌️ 自立水彩画 (Local)";
+                engineDesc = data.api_notice ? `自立水彩画エンジン (${data.api_notice})` : "ローカル水彩画エンジン（通信障害やAPI制限時も手元PCで即時自立描画）";
+            } else if (data.engine === "gemini_imagen") {
+                engineType = "cloud";
+                engineName = "☁️ Google AI (Imagen)";
+                engineDesc = "Google AI Studio クラウド画像生成 (Imagen)";
+            }
+        }
+
+        const updateEngineBadgeEl = (el) => {
+            if (!el) return;
+            el.className = `etegami-engine-badge badge-engine-${engineType}`;
+            el.textContent = engineName;
+            el.title = `描画エンジン: ${engineDesc}`;
+        };
+        updateEngineBadgeEl(engineBadge);
+        updateEngineBadgeEl(modalEngineBadge);
 
         if (completeBtn) {
             if (isCompleted) {
