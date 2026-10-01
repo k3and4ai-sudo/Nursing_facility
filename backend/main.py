@@ -1510,8 +1510,11 @@ def check_etegami_visibility_intent(text: str):
         "デジタル絵手紙を閉", "デジタル絵手紙閉", "デジタル絵手紙終了", "デジタル絵手紙を終了", "デジタル絵手紙非表示",
         "絵手紙非表示", "絵非表示", "お絵描きをやめる", "お絵描き終了", "お絵描きをおしま", "お絵描きおしま"
     ]
+    motif_keywords = ["犬", "子犬", "座敷", "猫", "小鳥", "雀", "走っ", "走り", "桜", "花", "山", "海", "思い出"]
+    has_motif = any(m in norm for m in motif_keywords)
+
     if any(p in norm for p in general_hide) or any(p in norm for p in etegami_hide):
-        if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "見せて", "開いて", "更新して"]):
+        if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "見せて", "開いて", "更新して"]) and not has_motif:
             return False
 
     # 2. 制作・描画開始リクエスト（「描きたい」「かきたい」「作ろう」等）は
@@ -1811,10 +1814,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 
                 # 1. Notify user terminal that Mimamori-san acknowledged and started updating
                 loading_msg = (
-                    "🎨 みまもりさん：新しい絵手紙を描いています。少々お待ちください…"
+                    f"🎨 みまもりさん：{motif}の絵手紙を描いています。少々お待ちください…"
                     if curr_mode == "generate_new"
-                    else "🎨 みまもりさん：承知しました。絵手紙の下絵を準備します"
+                    else f"🎨 みまもりさん：承知しました。{motif}の下絵を準備します"
                 )
+                asyncio.create_task(session.send_system_note(
+                    f"みまもりさんが利用者の希望したモチーフ『{motif}』で絵手紙の作成を開始しました。「{motif}ですね！とても温かい情景ですね。みまもりさんが今絵を描いていますよ」と自然にモチーフを受け止めて会話を続けてください。絶対に会話を終了したり、「ベースにしますか？」と聞き直したりしないでください。"
+                ))
                 await websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_update",
@@ -2056,8 +2062,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
             # Check specific motif keywords first
             for motif_cand in [
-                "座敷を走り回る白い犬", "座敷を走る白い犬", "座敷と白い犬", "白い子犬", "白い犬", "走る子犬", "走る犬", "子犬", "柴犬", "わんこ", "犬",
-                "座敷の風景", "座敷",
+                "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
+                "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
+                "座敷と子犬", "座敷と白い犬", "座敷と犬", "座敷の風景", "座敷",
+                "白い子犬", "白い犬", "走る子犬", "走る犬", "子犬", "柴犬", "わんこ", "犬",
                 "三毛猫", "子猫", "猫", "黒板", "生徒の机", "机", "先生", "教室", "学校",
                 "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
                 "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",

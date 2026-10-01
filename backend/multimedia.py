@@ -237,6 +237,21 @@ def create_artistic_watercolor_image(
     # Check motif category
     if any(k in clean_motif for k in ["犬", "子犬", "いぬ", "イヌ", "ワンちゃん", "ポチ", "柴犬", "わんこ", "puppy", "dog"]):
         # 🐶 Cute Etegami Watercolor Puppy
+        has_zashiki = any(k in clean_motif for k in ["座敷", "和室", "畳", "縁側", "廊下", "部屋"])
+        if has_zashiki:
+            # 畳の敷かれた和室の床（穏やかな若草色・い草色の水彩ウォッシュ）
+            adraw.rectangle([60, 240, 740, 520], fill=(215, 230, 195, 120))
+            # 畳の縁（黒・濃紺のシックなライン）
+            adraw.line([60, 350, 740, 350], fill=(55, 65, 55, 160), width=6)
+            adraw.line([60, 470, 740, 470], fill=(55, 65, 55, 160), width=6)
+            adraw.line([300, 240, 300, 350], fill=(55, 65, 55, 140), width=5)
+            adraw.line([540, 350, 540, 470], fill=(55, 65, 55, 140), width=5)
+            # 障子からの柔らかな日差し（光の帯）
+            adraw.polygon([(100, 60), (280, 60), (450, 420), (200, 420)], fill=(255, 255, 235, 70))
+            # 駆け回る躍動感の風ライン
+            idraw.arc([cx - 180, cy + 80, cx - 120, cy + 140], start=180, end=270, fill=(90, 80, 70, 120), width=3)
+            idraw.arc([cx - 210, cy + 100, cx - 150, cy + 160], start=180, end=270, fill=(90, 80, 70, 100), width=2)
+
         is_white = ("白" in clean_motif or "しろ" in clean_motif)
         body_col = (255, 255, 252, 240) if is_white else (235, 195, 140, 230)
         ear_col = (242, 222, 202, 230) if is_white else (210, 160, 95, 240)
