@@ -272,66 +272,150 @@ def create_artistic_watercolor_image(
     if any(k in clean_motif for k in ["犬", "子犬", "いぬ", "イヌ", "ワンちゃん", "ポチ", "柴犬", "わんこ", "puppy", "dog"]):
         # 🐶 Cute Etegami Watercolor Puppy
         has_zashiki = any(k in clean_motif for k in ["座敷", "和室", "畳", "縁側", "廊下", "部屋"])
+        is_running = any(k in clean_motif for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回る", "回って"])
+        is_front = any(k in clean_motif for k in ["こちら", "こっち", "手前", "前", "向かって"])
+        is_white = ("白" in clean_motif or "しろ" in clean_motif)
+
         if has_zashiki:
             # 畳の敷かれた和室の床（穏やかな若草色・い草色の水彩ウォッシュ）
-            adraw.rectangle([60, 240, 740, 520], fill=(215, 230, 195, 120))
+            adraw.rectangle([60, 220, 740, 520], fill=(215, 232, 195, 130))
             # 畳の縁（黒・濃紺のシックなライン）
-            adraw.line([60, 350, 740, 350], fill=(55, 65, 55, 160), width=6)
-            adraw.line([60, 470, 740, 470], fill=(55, 65, 55, 160), width=6)
-            adraw.line([300, 240, 300, 350], fill=(55, 65, 55, 140), width=5)
-            adraw.line([540, 350, 540, 470], fill=(55, 65, 55, 140), width=5)
+            adraw.line([60, 340, 740, 340], fill=(55, 65, 55, 160), width=6)
+            adraw.line([60, 460, 740, 460], fill=(55, 65, 55, 160), width=6)
+            adraw.line([280, 220, 280, 340], fill=(55, 65, 55, 140), width=5)
+            adraw.line([520, 340, 520, 460], fill=(55, 65, 55, 140), width=5)
             # 障子からの柔らかな日差し（光の帯）
-            adraw.polygon([(100, 60), (280, 60), (450, 420), (200, 420)], fill=(255, 255, 235, 70))
-            # 駆け回る躍動感の風ライン
-            idraw.arc([cx - 180, cy + 80, cx - 120, cy + 140], start=180, end=270, fill=(90, 80, 70, 120), width=3)
-            idraw.arc([cx - 210, cy + 100, cx - 150, cy + 160], start=180, end=270, fill=(90, 80, 70, 100), width=2)
+            adraw.polygon([(90, 60), (270, 60), (460, 420), (210, 420)], fill=(255, 255, 230, 80))
 
-        is_white = ("白" in clean_motif or "しろ" in clean_motif)
-        body_col = (255, 255, 252, 240) if is_white else (235, 195, 140, 230)
-        ear_col = (242, 222, 202, 230) if is_white else (210, 160, 95, 240)
-        
-        # Soft shadow under puppy
-        adraw.ellipse([cx - 130, cy + 130, cx + 130, cy + 175], fill=(210, 200, 190, 80))
-        # Body
-        adraw.ellipse([cx - 105, cy - 25, cx + 105, cy + 150], fill=body_col)
-        # Tail (wagging upward)
-        adraw.ellipse([cx + 75, cy + 30, cx + 135, cy + 90], fill=body_col)
-        # Head
-        adraw.ellipse([cx - 90, cy - 135, cx + 90, cy + 45], fill=body_col)
-        # Ears (floppy soft ears)
-        adraw.ellipse([cx - 115, cy - 110, cx - 55, cy - 15], fill=ear_col)
-        adraw.ellipse([cx + 55, cy - 110, cx + 115, cy - 15], fill=ear_col)
-        # Cute front paws
-        adraw.ellipse([cx - 70, cy + 120, cx - 18, cy + 160], fill=body_col)
-        adraw.ellipse([cx + 18, cy + 120, cx + 70, cy + 160], fill=body_col)
+        body_col = (255, 255, 252, 245) if is_white else (238, 198, 140, 235)
+        ear_col = (242, 222, 202, 235) if is_white else (210, 160, 95, 245)
 
-        # Blur art for watercolor bleed
-        art = art.filter(ImageFilter.GaussianBlur(radius=3))
+        if is_front and is_running:
+            # 🐕 1. 正面からこちらへ元気に駆けてくる躍動ポーズ！
+            # 畳の奥から手前へ続く足跡（遠近感のある肉球スタンプ）
+            steps = [(cx - 20, cy - 40, 6), (cx + 25, cy + 10, 9), (cx - 35, cy + 60, 13), (cx + 30, cy + 110, 16)]
+            for sx, sy, sr in steps:
+                adraw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(195, 145, 135, 140))
+                for ox, oy in [(-sr*0.6, -sr*0.9), (0, -sr*1.1), (sr*0.6, -sr*0.9)]:
+                    adraw.ellipse([sx + ox - sr*0.25, sy + oy - sr*0.25, sx + ox + sr*0.25, sy + oy + sr*0.25], fill=(195, 145, 135, 140))
 
-        # Ink layer: Collar, Face, and Sumi-e accents
-        # Red ribbon collar
-        idraw.arc([cx - 68, cy + 15, cx + 68, cy + 48], start=10, end=170, fill=(215, 45, 45, 240), width=7)
-        idraw.ellipse([cx - 9, cy + 40, cx + 9, cy + 58], fill=(240, 190, 45, 245))  # Gold bell
+            # 疾走のスピード風ライン
+            idraw.line([(cx - 160, cy + 50), (cx - 90, cy + 65)], fill=(120, 110, 100, 120), width=3)
+            idraw.line([(cx - 180, cy + 80), (cx - 100, cy + 95)], fill=(120, 110, 100, 100), width=2)
+            idraw.line([(cx + 90, cy + 65), (cx + 160, cy + 50)], fill=(120, 110, 100, 120), width=3)
+            idraw.line([(cx + 100, cy + 95), (cx + 180, cy + 80)], fill=(120, 110, 100, 100), width=2)
 
-        # Eyes (soft shining puppy eyes)
-        idraw.ellipse([cx - 44, cy - 52, cx - 24, cy - 30], fill=(38, 28, 24, 245))
-        idraw.ellipse([cx - 40, cy - 49, cx - 33, cy - 42], fill=(255, 255, 255, 255))  # Highlight
-        idraw.ellipse([cx + 24, cy - 52, cx + 44, cy - 30], fill=(38, 28, 24, 245))
-        idraw.ellipse([cx + 27, cy - 49, cx + 34, cy - 42], fill=(255, 255, 255, 255))
+            # 後ろ足（後ろに蹴り出し中）
+            adraw.ellipse([cx - 110, cy + 70, cx - 60, cy + 115], fill=body_col)
+            adraw.ellipse([cx + 60, cy + 70, cx + 110, cy + 115], fill=body_col)
+            # 胴体（正面で少し弾んでいる）
+            adraw.ellipse([cx - 85, cy - 10, cx + 85, cy + 130], fill=body_col)
+            # しっぽ（嬉しそうに上へピコピコ）
+            adraw.ellipse([cx + 60, cy - 35, cx + 110, cy + 25], fill=body_col)
+            # 頭（手前で大きく愛らしく）
+            adraw.ellipse([cx - 95, cy - 120, cx + 95, cy + 55], fill=body_col)
+            # 耳（走る風で横後ろになびく）
+            adraw.ellipse([cx - 135, cy - 90, cx - 65, cy - 20], fill=ear_col)
+            adraw.ellipse([cx + 65, cy - 90, cx + 135, cy - 20], fill=ear_col)
+            # 手前に大きく出された元気な前足
+            adraw.ellipse([cx - 75, cy + 90, cx - 15, cy + 145], fill=body_col)
+            adraw.ellipse([cx + 15, cy + 80, cx + 75, cy + 135], fill=body_col)
 
-        # Nose & smiling mouth
-        idraw.ellipse([cx - 15, cy - 25, cx + 15, cy - 4], fill=(42, 32, 28, 245))
-        idraw.arc([cx - 18, cy - 10, cx, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
-        idraw.arc([cx, cy - 10, cx + 18, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+            art = art.filter(ImageFilter.GaussianBlur(radius=3))
 
-        # Soft sumi-e outline contours (Etegami style rough brushwork)
-        idraw.arc([cx - 90, cy - 135, cx + 90, cy + 45], start=130, end=210, fill=(65, 55, 48, 110), width=2)
-        idraw.arc([cx - 90, cy - 135, cx + 90, cy + 45], start=330, end=50, fill=(65, 55, 48, 110), width=2)
-        # Cute paw prints in corner
-        idraw.ellipse([cx - 240, cy + 120, cx - 215, cy + 140], fill=(215, 140, 130, 140))
-        idraw.ellipse([cx - 245, cy + 105, cx - 235, cy + 117], fill=(215, 140, 130, 140))
-        idraw.ellipse([cx - 230, cy + 100, cx - 220, cy + 112], fill=(215, 140, 130, 140))
-        idraw.ellipse([cx - 215, cy + 105, cx - 205, cy + 117], fill=(215, 140, 130, 140))
+            # 顔・表情（大喜びで走ってくるキラキラ笑顔）
+            idraw.arc([cx - 65, cy + 25, cx + 65, cy + 55], start=10, end=170, fill=(215, 45, 45, 240), width=7)
+            idraw.ellipse([cx - 9, cy + 48, cx + 9, cy + 66], fill=(240, 190, 45, 245))  # 鈴
+            # 目
+            idraw.ellipse([cx - 45, cy - 42, cx - 23, cy - 18], fill=(38, 28, 24, 245))
+            idraw.ellipse([cx - 40, cy - 38, cx - 31, cy - 28], fill=(255, 255, 255, 255))
+            idraw.ellipse([cx + 23, cy - 42, cx + 45, cy - 18], fill=(38, 28, 24, 245))
+            idraw.ellipse([cx + 27, cy - 38, cx + 36, cy - 28], fill=(255, 255, 255, 255))
+            # 鼻
+            idraw.ellipse([cx - 15, cy - 15, cx + 15, cy + 6], fill=(42, 32, 28, 245))
+            # 舌を出して楽しそうな口
+            idraw.arc([cx - 18, cy + 2, cx, cy + 18], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+            idraw.arc([cx, cy + 2, cx + 18, cy + 18], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+            adraw.ellipse([cx - 8, cy + 12, cx + 8, cy + 28], fill=(245, 120, 130, 220))  # ピンクの舌
+
+        elif is_running:
+            # 🐕 2. 横向きで座敷を軽快に駆け回る疾走ポーズ！
+            # 畳の上の疾走足跡
+            for i, (px, py) in enumerate([(140, cy + 130), (220, cy + 115), (310, cy + 135), (420, cy + 120)]):
+                adraw.ellipse([px - 10, py - 8, px + 10, py + 8], fill=(195, 145, 135, 130))
+                adraw.ellipse([px - 8, py - 13, px - 3, py - 8], fill=(195, 145, 135, 130))
+                adraw.ellipse([px - 1, py - 15, px + 4, py - 10], fill=(195, 145, 135, 130))
+                adraw.ellipse([px + 5, py - 13, px + 10, py - 8], fill=(195, 145, 135, 130))
+
+            # 駆け回る風ライン
+            idraw.line([(cx - 240, cy + 20), (cx - 150, cy + 30)], fill=(120, 110, 100, 130), width=3)
+            idraw.line([(cx - 260, cy + 50), (cx - 160, cy + 60)], fill=(120, 110, 100, 110), width=2)
+            idraw.line([(cx - 230, cy + 80), (cx - 140, cy + 90)], fill=(120, 110, 100, 90), width=2)
+
+            # 後ろ足を後ろへグッと蹴り上げ
+            adraw.ellipse([cx - 160, cy + 40, cx - 80, cy + 85], fill=body_col)
+            adraw.ellipse([cx - 180, cy + 70, cx - 110, cy + 105], fill=body_col)
+            # 胴体（前傾姿勢で水平に伸びる）
+            adraw.ellipse([cx - 110, cy - 10, cx + 80, cy + 95], fill=body_col)
+            # しっぽ（後ろ斜め上にピンと立つ）
+            adraw.ellipse([cx - 155, cy - 25, cx - 95, cy + 30], fill=body_col)
+            # 頭（前方をしっかり見据える）
+            adraw.ellipse([cx + 35, cy - 75, cx + 165, cy + 40], fill=body_col)
+            # 耳（風になびいて後ろへ流れる）
+            adraw.ellipse([cx - 25, cy - 65, cx + 45, cy - 10], fill=ear_col)
+            adraw.ellipse([cx + 30, cy - 75, cx + 90, cy - 20], fill=ear_col)
+            # 前足を前方へ力強く伸ばす
+            adraw.ellipse([cx + 60, cy + 60, cx + 145, cy + 105], fill=body_col)
+            adraw.ellipse([cx + 120, cy + 85, cx + 175, cy + 120], fill=body_col)
+
+            art = art.filter(ImageFilter.GaussianBlur(radius=3))
+
+            # 首輪
+            idraw.line([(cx + 45, cy + 5), (cx + 55, cy + 45)], fill=(215, 45, 45, 240), width=7)
+            idraw.ellipse([cx + 50, cy + 42, cx + 66, cy + 58], fill=(240, 190, 45, 245))
+            # 目（いきいきと前を向く）
+            idraw.ellipse([cx + 100, cy - 35, cx + 122, cy - 15], fill=(38, 28, 24, 245))
+            idraw.ellipse([cx + 106, cy - 31, cx + 114, cy - 23], fill=(255, 255, 255, 255))
+            # 鼻・口
+            idraw.ellipse([cx + 145, cy - 15, cx + 168, cy + 4], fill=(42, 32, 28, 245))
+            idraw.arc([cx + 130, cy - 5, cx + 155, cy + 18], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+
+        else:
+            # 🐕 3. お座りポーズ（穏やかにくつろぐ子犬）
+            # 足元の影
+            adraw.ellipse([cx - 130, cy + 130, cx + 130, cy + 175], fill=(210, 200, 190, 80))
+            # 胴体
+            adraw.ellipse([cx - 105, cy - 25, cx + 105, cy + 150], fill=body_col)
+            # しっぽ
+            adraw.ellipse([cx + 75, cy + 30, cx + 135, cy + 90], fill=body_col)
+            # 頭
+            adraw.ellipse([cx - 90, cy - 135, cx + 90, cy + 45], fill=body_col)
+            # 耳
+            adraw.ellipse([cx - 115, cy - 110, cx - 55, cy - 15], fill=ear_col)
+            adraw.ellipse([cx + 55, cy - 110, cx + 115, cy - 15], fill=ear_col)
+            # 前足
+            adraw.ellipse([cx - 70, cy + 120, cx - 18, cy + 160], fill=body_col)
+            adraw.ellipse([cx + 18, cy + 120, cx + 70, cy + 160], fill=body_col)
+
+            art = art.filter(ImageFilter.GaussianBlur(radius=3))
+
+            # 首輪
+            idraw.arc([cx - 68, cy + 15, cx + 68, cy + 48], start=10, end=170, fill=(215, 45, 45, 240), width=7)
+            idraw.ellipse([cx - 9, cy + 40, cx + 9, cy + 58], fill=(240, 190, 45, 245))
+            # 目
+            idraw.ellipse([cx - 44, cy - 52, cx - 24, cy - 30], fill=(38, 28, 24, 245))
+            idraw.ellipse([cx - 40, cy - 49, cx - 33, cy - 42], fill=(255, 255, 255, 255))
+            idraw.ellipse([cx + 24, cy - 52, cx + 44, cy - 30], fill=(38, 28, 24, 245))
+            idraw.ellipse([cx + 27, cy - 49, cx + 34, cy - 42], fill=(255, 255, 255, 255))
+            # 鼻・口
+            idraw.ellipse([cx - 15, cy - 25, cx + 15, cy - 4], fill=(42, 32, 28, 245))
+            idraw.arc([cx - 18, cy - 10, cx, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+            idraw.arc([cx, cy - 10, cx + 18, cy + 9], start=20, end=160, fill=(45, 35, 30, 210), width=3)
+            # 足跡
+            idraw.ellipse([cx - 240, cy + 120, cx - 215, cy + 140], fill=(215, 140, 130, 140))
+            idraw.ellipse([cx - 245, cy + 105, cx - 235, cy + 117], fill=(215, 140, 130, 140))
+            idraw.ellipse([cx - 230, cy + 100, cx - 220, cy + 112], fill=(215, 140, 130, 140))
+            idraw.ellipse([cx - 215, cy + 105, cx - 205, cy + 117], fill=(215, 140, 130, 140))
 
     elif any(k in clean_motif for k in ["猫", "ねこ", "ネコ", "子猫", "三毛猫", "cat"]):
         # 🐱 Cozy Etegami Cat
@@ -416,6 +500,43 @@ def create_artistic_watercolor_image(
     for i in range(3):
         color_val = (p["accent"][0], p["accent"][1], p["accent"][2])
         draw.rectangle([inset + i, inset + i, w - inset - i, h - inset - i], outline=color_val, width=1)
+
+    # 4-2. Poetic Calligraphic Caption (絵手紙の毛筆添え書き)
+    font_path = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+    if not os.path.exists(font_path):
+        font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+
+    caption_text = ""
+    if any(k in clean_motif for k in ["こちら", "こっち", "手前", "前"]):
+        caption_text = "こちらへおいで\n元気な足音"
+    elif any(k in clean_motif for k in ["走", "駆", "かけっこ", "トコトコ", "回り", "回る"]):
+        caption_text = "元気に駆ける\n座敷のぬくもり" if any(k in clean_motif for k in ["座敷", "和室", "畳"]) else "トコトコ元気に\n走る足音"
+    elif any(k in clean_motif for k in ["座敷", "和室", "畳"]):
+        caption_text = "畳のぬくもり\nほっと一息"
+    elif any(k in clean_motif for k in ["犬", "子犬", "わんこ", "柴犬"]):
+        caption_text = "いつもそばに\nあたたかな温もり"
+    elif any(k in clean_motif for k in ["猫", "ねこ"]):
+        caption_text = "日だまりの中で\nのんびりと"
+    elif any(k in clean_motif for k in ["鳥", "小鳥", "雀"]):
+        caption_text = "寄り添う心\n優しい歌声"
+    elif any(k in clean_motif for k in ["富士", "山"]):
+        caption_text = "夕日に映える\n雄大な峰"
+    elif any(k in clean_motif for k in ["茶", "カフェ", "コーヒー"]):
+        caption_text = "心やすらぐ\n一服の温もり"
+    else:
+        caption_text = "季節の彩り\n心からありがとう"
+
+    if caption_text:
+        try:
+            caption_font = ImageFont.truetype(font_path, 28) if os.path.exists(font_path) else ImageFont.load_default()
+            lines = caption_text.split("\n")
+            cur_y = 65
+            for line in lines:
+                draw.text((67, cur_y + 1), line, fill=(180, 170, 160, 120), font=caption_font)
+                draw.text((66, cur_y), line, fill=(45, 40, 36, 235), font=caption_font)
+                cur_y += 38
+        except Exception as e_txt:
+            print(f"[Artistic Caption Notice]: {e_txt}")
 
     # 5. Hanko stamp mark (bottom right, traditional Japanese red seal)
     font_path = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"

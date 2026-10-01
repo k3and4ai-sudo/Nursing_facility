@@ -1683,7 +1683,16 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // Client-side Failsafe: Suppress false-positive emergency/alert if text does not contain genuine distress words
+        const distressEmergencyKeywords = ["胸が痛", "息ができない", "息が苦し", "苦しい", "助けて", "倒れた", "転んだ", "激痛", "血が出た", "死にそう", "誰か来て", "救急"];
+        const distressAlertKeywords = ["熱がある", "頭痛がひどい", "頭が痛い", "吐き気", "めまいがひど", "スタッフを呼", "スタッフさん呼", "看護師さん呼", "看護師呼", "先生呼"];
+        const combinedText = ((data.summary || "") + " " + (data.detail || "") + " " + (currentUtteranceText || "")).trim();
+
         if (status === "EMERGENCY" || stage === 3) {
+            if (!distressEmergencyKeywords.some(kw => combinedText.includes(kw))) {
+                console.warn("[Guardrail Failsafe]: Suppressed false-positive EMERGENCY modal for non-distress text:", combinedText);
+                return;
+            }
             // 第三段階: 重度・緊急事態（即時自動通報＋全画面通知＋音声案内）
             if (alertLockTimer) clearTimeout(alertLockTimer);
             isAlertLocked = true;
@@ -1708,6 +1717,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 isAlertLocked = false;
             }, 30000);
         } else if (status === "ALERT" || stage === 2) {
+            if (!distressAlertKeywords.some(kw => combinedText.includes(kw)) && !isPII) {
+                console.warn("[Guardrail Failsafe]: Suppressed false-positive ALERT modal for non-distress text:", combinedText);
+                return;
+            }
             // 第二段階: 中度・要確認（警告表示 ＋ 音声「スタッフに連絡しますか？」＋ 特大ボタン確認）
             if (alertLockTimer) clearTimeout(alertLockTimer);
             isAlertLocked = true;

@@ -669,13 +669,14 @@ def inspect_safety_with_llm(text: str) -> dict:
     system_prompt = """あなたは介護施設内の発話安全監視AIです。
 利用者の発話内容を客観的・論理的に分析し、以下の基準で厳格に判定してJSON形式で回答してください。
 
-【重要方針】
+【最重要方針：過剰検知の厳禁】
 - 発話内容に直接・具体的に生命の危機や激痛、体調不良、個人情報が含まれていない限り、勝手な想像や過剰な拡大解釈をしてはいけません。
-- 「テスト」「確認」「おはよう」「こんにちは」「操作」などのシステム発話や日常雑談は、絶対に EMERGENCY や ALERT にしてはいけません。必ず NORMAL です。
+- 「走って」「急いで」「来て」「動いて」「こちら」「座って」「立って」などの単語単体や、絵の描写・日常会話・物・動物への呼びかけ（例：「こっちに走って」「こちらの方に走ってください」「早く来て」等）を救助要請や緊急事態と曲解することは【絶対厳禁】です。必ず NORMAL にしてください。
+- 「テスト」「確認」「おはよう」「こんにちは」「操作」「絵を描く」などのシステム発話や日常雑談は、絶対に EMERGENCY や ALERT にしてはいけません。必ず NORMAL です。
 
 【判定基準】
 1. EMERGENCY (生命の危機・急変・重篤):
-明確に「胸が痛い」「息ができない」「倒れた」「血が出た」「助けて」などの強い身体的苦痛や急変を発話している場合のみ。
+明確に「胸が痛い」「息ができない」「息が苦しい」「倒れた」「血が出た」「助けて」などの強い身体的苦痛や急変を発話している場合のみ。
 {"status": "EMERGENCY", "stage": 3, "action": "AUTO_EMERGENCY_CALL", "summary": "緊急事態要約", "detail": "理由"}
 
 2. ALERT (中度の体調不良・スタッフ呼出・個人情報漏洩):
@@ -689,7 +690,7 @@ def inspect_safety_with_llm(text: str) -> dict:
 {"status": "CAUTION", "stage": 1, "action": "WARN_ONLY", "summary": "注意要約", "detail": "理由"}
 
 4. NORMAL (日常会話・雑談・テスト発話・無害な発話):
-上記に当てはまらない全ての日常会話、テスト発話、挨拶、世間話。
+上記に当てはまらない全ての日常会話、テスト発話、挨拶、世間話、絵の描写、動物への声掛け。
 {"status": "NORMAL", "stage": 0, "action": "CONTINUE", "summary": "日常会話", "detail": "健康・安全上の問題なし"}
 
 必ず有効なJSONのみを出力してください。"""
@@ -732,10 +733,25 @@ def inspect_safety_with_llm(text: str) -> dict:
         verdict = json.loads(clean_json)
         status = verdict.get("status", "NORMAL").upper()
         stage = verdict.get("stage", 0)
+
+        # Failsafe verification to suppress LLM hallucinations and over-interpretation
+        genuine_emergency_kw = ["胸が痛", "息ができない", "息が苦し", "苦しい", "助けて", "倒れた", "転んだ", "激痛", "血が出た", "死にそう", "誰か来て"]
+        genuine_alert_kw = ["熱がある", "頭痛がひどい", "頭が痛い", "吐き気", "めまいがひど", "スタッフを呼", "スタッフさん呼", "看護師さん呼", "看護師呼", "先生呼", "暗証番号", "口座番号", "電話番号"]
+        
         if status == "EMERGENCY":
-            stage = 3
+            if not any(k in text for k in genuine_emergency_kw):
+                print(f"[Guardrail Failsafe]: Suppressed false EMERGENCY for '{text}' -> downgraded to NORMAL")
+                status = "NORMAL"
+                stage = 0
+            else:
+                stage = 3
         elif status == "ALERT":
-            stage = 2
+            if not any(k in text for k in genuine_alert_kw):
+                print(f"[Guardrail Failsafe]: Suppressed false ALERT for '{text}' -> downgraded to NORMAL")
+                status = "NORMAL"
+                stage = 0
+            else:
+                stage = 2
         elif status == "CAUTION":
             stage = 1
         elif status == "NORMAL":
@@ -744,11 +760,11 @@ def inspect_safety_with_llm(text: str) -> dict:
         res = {
             "status": status,
             "stage": stage,
-            "action": verdict.get("action", "CONTINUE"),
+            "action": "CONTINUE" if status == "NORMAL" else verdict.get("action", "CONTINUE"),
             "model": config.OLLAMA_MODEL,
             "latency": round(elapsed, 2),
-            "summary": verdict.get("summary", "安全確認済み"),
-            "detail": verdict.get("detail", "特段の異常や危険は検知されませんでした。")
+            "summary": "日常会話" if status == "NORMAL" else verdict.get("summary", "日常会話"),
+            "detail": "健康・安全上の問題なし" if status == "NORMAL" else verdict.get("detail", "通常の発話内容です。")
         }
         print(f"[inspect_safety_with_llm SUCCESS]: text='{text}', status={res['status']}, stage={res['stage']}, latency={res['latency']}s, summary='{res['summary']}'")
         return res
@@ -1912,6 +1928,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             .replace("人事たる", "デジタル")
             .replace("手紙を更新", "絵手紙を更新")
             .replace("手紙更新", "絵手紙更新")
+            .replace("座席", "座敷")
+            .replace("ざせき", "ざしき")
+            .replace("走りまー", "走り回る")
         )
 
         is_busy = getattr(session, "is_etegami_updating", False)
@@ -1930,39 +1949,33 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             "別の絵にして", "違う絵にして", "絵を変えて", "絵を変え", "直して"
         ])
 
-        # 状態問い合わせ、または更新要求が来たときの分岐
+        # 状態問い合わせ、または更新要求が来たときの分岐（みまもりさんは声を出さずトーストのみで静かに補助）
         if is_querying_status or is_explicit_update_req:
             if is_busy:
-                # 更新中であれば「今絵を描いているところです。」と言ってなにもしない
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident queried/requested update while busy - responding with busy notice.")
                 busy_msg = "🎨 みまもりさん：今、絵を描いているところです。少々お待ちくださいね。"
                 asyncio.create_task(websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_busy",
-                    "message": busy_msg,
-                    "speak_text": "今、絵を描いているところです。少々お待ちくださいね。"
+                    "message": busy_msg
                 }))
                 return
             elif is_querying_status:
-                # 更新中でない場合の問い合わせ
                 idle_msg = "🎨 みまもりさん：今、絵は描いていません。「更新してください」とお話しいただければ新しく描きますね。"
                 asyncio.create_task(websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_idle",
-                    "message": idle_msg,
-                    "speak_text": "今、絵は描いていません。絵の更新をご希望でしたら、更新してくださいとお知らせくださいね。"
+                    "message": idle_msg
                 }))
                 return
             elif is_explicit_update_req:
-                # 更新中でない場合の「更新してください」→ みまもりさんから更新する！
                 session.has_resident_requested_etegami = True
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested update while idle - executing update.")
                 ack_msg = "🎨 みまもりさん：承知しました。絵手紙を更新しますね。"
                 asyncio.create_task(websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_update_start",
-                    "message": ack_msg,
-                    "speak_text": "承知しました。絵手紙を更新しますね。"
+                    "message": ack_msg
                 }))
                 eff_motif = getattr(session, "current_etegami_motif", "") or "心温まる思い出"
                 asyncio.create_task(on_live_etegami_update(eff_motif, ""))
@@ -2010,22 +2023,46 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             session.has_resident_requested_etegami = True
             detected_motif = ""
 
-            # Check specific motif keywords first
-            for motif_cand in [
-                "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
-                "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
-                "座敷と子犬", "座敷と白い犬", "座敷と犬", "座敷の風景", "座敷",
-                "白い子犬", "白い犬", "走る子犬", "走る犬", "子犬", "柴犬", "わんこ", "犬",
-                "三毛猫", "子猫", "猫", "黒板", "生徒の机", "机", "先生", "教室", "学校",
-                "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
-                "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
-                "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
-                "桜", "さくら", "花見", "お花見", "朝顔", "風鈴", "向日葵", "ひまわり",
-                "雪景色", "雪", "椿", "つばき", "コスモス", "秋桜", "紅葉", "もみじ", "富士山", "海", "山"
-            ]:
-                if motif_cand in clean:
-                    detected_motif = motif_cand
-                    break
+            # 1. Intelligent Composite Motif Extraction (Zashiki, Running dog, Direction, etc.)
+            has_dog = any(k in clean for k in ["犬", "子犬", "わんこ", "ワンちゃん", "柴犬", "ポチ"]) or ("犬" in getattr(session, "current_etegami_motif", ""))
+            has_zashiki = any(k in clean for k in ["座敷", "和室", "畳", "座席", "ざせき", "ざしき"]) or ("座敷" in getattr(session, "current_etegami_motif", ""))
+            has_run = any(k in clean for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回って", "回る"])
+            has_front = any(k in clean for k in ["こちら", "こっち", "手前", "前", "ほうに", "方に"])
+            has_white = any(k in clean for k in ["白", "しろ", "ホワイト"])
+
+            if has_dog and (has_zashiki or has_run or has_front):
+                if has_front and has_run:
+                    detected_motif = "座敷の中をこちらへ走ってくる犬" if has_zashiki else "こちらに向かって走る犬"
+                elif has_zashiki and has_run:
+                    detected_motif = "座敷を走り回る白い犬" if has_white else "座敷の中を走り回る犬"
+                elif has_zashiki:
+                    detected_motif = "座敷と白い犬" if has_white else "座敷と犬"
+                elif has_run:
+                    detected_motif = "元気に走る犬"
+                elif has_white:
+                    detected_motif = "白い子犬"
+                else:
+                    detected_motif = "子犬"
+
+            # 2. Check specific motif phrase candidates if not already matched
+            if not detected_motif:
+                for motif_cand in [
+                    "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
+                    "座敷の中を走り回る犬", "座敷を走り回る犬", "座敷で走り回る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
+                    "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬",
+                    "こちらに向かって走る犬", "こちらに走る犬", "走ってくる犬", "走る白い犬", "走る子犬", "走る犬",
+                    "座敷と子犬", "座敷と白い犬", "座敷と犬", "座敷の風景", "座敷",
+                    "白い子犬", "白い犬", "子犬", "柴犬", "わんこ", "犬",
+                    "三毛猫", "子猫", "猫", "黒板", "生徒の机", "机", "先生", "教室", "学校",
+                    "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
+                    "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
+                    "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
+                    "桜", "さくら", "花見", "お花見", "朝顔", "風鈴", "向日葵", "ひまわり",
+                    "雪景色", "雪", "椿", "つばき", "コスモス", "秋桜", "紅葉", "もみじ", "富士山", "海", "山"
+                ]:
+                    if motif_cand in clean:
+                        detected_motif = motif_cand
+                        break
             
             # Excluded keywords for motif detection (e.g. mode answering keywords, generic words)
             def is_invalid_motif(cand_text: str) -> bool:
@@ -2084,8 +2121,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 asyncio.create_task(websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_update_start",
-                    "message": ack_msg,
-                    "speak_text": f"承知しました。{eff_motif}の絵手紙を描きますね。"
+                    "message": ack_msg
                 }))
                 asyncio.create_task(on_live_etegami_update(eff_motif, ""))
             else:
