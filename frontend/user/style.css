@@ -2036,33 +2036,125 @@ body.simple-mode .speech-box.user-box {
     transform: rotate(-4deg);
 }
 
-/* リアルタイム制作中アニメーションバッジ */
+/* リアルタイム制作中アニメーションオーバーレイ（色紙中央全域） */
 .etegami-updating-badge {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(6px);
-    color: #fef08a;
-    font-size: 0.85rem;
-    font-weight: 800;
-    padding: 6px 14px;
-    border-radius: 20px;
-    z-index: 20;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 12px;
+    z-index: 30;
     display: flex;
     align-items: center;
-    gap: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-    animation: pulseBorder 1.5s infinite;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeInOverlay 0.3s ease-out;
 }
 
-.spin-icon {
-    display: inline-block;
-    animation: spin 3s linear infinite;
+@keyframes fadeInOverlay {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
 }
 
-@keyframes spin {
+.updating-content-box {
+    background: rgba(30, 41, 59, 0.95);
+    border: 2px solid rgba(245, 158, 11, 0.7);
+    border-radius: 16px;
+    padding: 24px 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.35);
+    max-width: 90%;
+}
+
+.updating-spin-ring {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 4px solid rgba(245, 158, 11, 0.25);
+    border-top-color: #f59e0b;
+    border-right-color: #fbbf24;
+    animation: spinRing 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes spinRing {
+    0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.updating-palette-icon {
+    font-size: 2rem;
+    animation: bounceIcon 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes bounceIcon {
+    from { transform: scale(0.9); }
+    to { transform: scale(1.15); }
+}
+
+.updating-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #fef08a;
+    letter-spacing: 0.03em;
+}
+
+.updating-desc {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.updating-progress-track {
+    width: 220px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    margin-top: 4px;
+}
+
+.updating-progress-bar {
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    border-radius: 4px;
+    animation: indeterminateProgress 1.6s ease-in-out infinite;
+}
+
+@keyframes indeterminateProgress {
+    0% { transform: translateX(-100%); width: 30%; }
+    50% { width: 60%; }
+    100% { transform: translateX(250%); width: 30%; }
+}
+
+.updating-time-hint {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+/* ヘッダーの点滅ステータスバッジ */
+.etegami-status-badge.badge-updating {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #ffffff;
+    font-weight: 800;
+    border: 1px solid #fbbf24;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+    animation: pulseBadge 1.2s infinite alternate;
+}
+
+@keyframes pulseBadge {
+    0% { transform: scale(1); box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+    100% { transform: scale(1.05); box-shadow: 0 0 18px rgba(245, 158, 11, 0.8); }
 }
 
 /* カードフッター */

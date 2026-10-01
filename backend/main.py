@@ -1851,12 +1851,19 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "action": "etegami_update",
                     "message": loading_msg
                 })
-                # If card is already open, show updating spinner. If not open yet, wait until prepared before opening.
-                if getattr(session, "is_etegami_visible", False):
-                    await websocket.send_json({
-                        "type": "etegami_updating",
-                        "updating": True
-                    })
+                # Immediately show etegami card and display prominent drawing spinner/progress badge
+                session.is_etegami_visible = True
+                await websocket.send_json({
+                    "type": "etegami_visibility",
+                    "visible": True,
+                    "force_open": True
+                })
+                await websocket.send_json({
+                    "type": "etegami_updating",
+                    "updating": True,
+                    "motif": motif,
+                    "engine_label": engine_label
+                })
 
                 card_info = await asyncio.to_thread(
                     multimedia.modify_or_create_etegami,
@@ -1995,9 +2002,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             .replace("人事たる", "デジタル")
             .replace("手紙を更新", "絵手紙を更新")
             .replace("手紙更新", "絵手紙更新")
+            .replace("雑式の", "座敷の")
+            .replace("雑式", "座敷")
+            .replace("雑色の", "座敷の")
+            .replace("雑色", "座敷")
             .replace("座席", "座敷")
-            .replace("ざせき", "ざしき")
+            .replace("ざしき", "座敷")
+            .replace("ざせき", "座敷")
             .replace("走りまー", "走り回る")
+            .replace("揉えて", "見せて")
+            .replace("もえて", "見せて")
         )
 
         is_busy = getattr(session, "is_etegami_updating", False)
@@ -2070,7 +2084,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # モチーフ指定の描画要求（「〇〇を描いて」「〇〇にして」「〇〇の風景も」など）
         has_draw_verb = any(v in clean for v in [
-            "描いて", "かいて", "書いて", "描く", "かく", "にして", "変えて", "直して", "作って", "出して", "見せて"
+            "描いて", "かいて", "書いて", "描く", "かく", "にして", "変えて", "直して", "作って", "出して", "見せて",
+            "風景も", "風景を", "情景も", "情景を", "入れて", "加えて", "取り入れ", "取り入れて", "反映して"
         ])
 
         is_create_or_update = (

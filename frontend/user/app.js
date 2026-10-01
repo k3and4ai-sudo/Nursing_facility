@@ -358,6 +358,8 @@ document.addEventListener("DOMContentLoaded", () => {
             imgLoader.src = newUrl;
         } else if (cardImg) {
             cardImg.src = newUrl;
+            if (updatingBadge) updatingBadge.classList.add("hidden");
+            isEtegamiUpdating = false;
         }
 
         if (calligraphyEl) calligraphyEl.textContent = newCalligraphy;
@@ -1355,9 +1357,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     handleRecordingStatus(data.active, data.message);
                 }
             } else if (data.type === "etegami_updating") {
-                console.log("[LiveWS]: Received etegami_updating ->", data.updating);
+                console.log("[LiveWS]: Received etegami_updating ->", data.updating, data);
                 isEtegamiUpdating = !!data.updating;
                 const updatingBadge = document.getElementById("etegami-updating-badge");
+                const updatingTextMain = document.getElementById("updating-text-main");
+                const updatingTextSub = document.getElementById("updating-text-sub");
                 const lampEtegami = document.getElementById("lamp-etegami");
                 const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
                 const voiceHint = document.getElementById("etegami-voice-hint");
@@ -1365,18 +1369,31 @@ document.addEventListener("DOMContentLoaded", () => {
                 const completeBtn = document.getElementById("btn-complete-etegami");
 
                 if (data.updating) {
-                    if (updatingBadge) updatingBadge.classList.remove("hidden");
+                    if (typeof showEtegamiCard === "function") {
+                        showEtegamiCard(true);
+                    }
+                    if (updatingBadge) {
+                        updatingBadge.classList.remove("hidden");
+                    }
+                    if (updatingTextMain) {
+                        updatingTextMain.textContent = "AIが新しい絵手紙を描いています…";
+                    }
+                    if (updatingTextSub) {
+                        const motifText = data.motif || "心温まる思い出の風景";
+                        const engineText = data.engine_label || "無料AI Pollinations";
+                        updatingTextSub.textContent = `「${motifText}」（${engineText}）`;
+                    }
                     if (voiceHint) voiceHint.classList.remove("hidden");
                     if (statusBadge) {
                         statusBadge.classList.remove("hidden");
                         statusBadge.className = "etegami-status-badge badge-updating";
-                        statusBadge.innerHTML = "<span class='spin-icon'>✨</span><span>絵手紙を描いています…</span>";
+                        statusBadge.innerHTML = "<span class='spin-icon'>🎨</span><span>⏳ AI描画中...</span>";
                     }
-                    if (completeBtn) completeBtn.classList.remove("hidden");
+                    if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("hidden", "lamp-completed");
                         lampEtegami.classList.add("lamp-updating");
-                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = "🎨 みまもりさん：絵を描いているところです";
+                        if (lampEtegamiLabel) lampEtegamiLabel.textContent = `🎨 みまもりさん：${data.motif || '絵'}を描いているところです`;
                     }
                 } else {
                     if (updatingBadge) updatingBadge.classList.add("hidden");
@@ -1386,7 +1403,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         statusBadge.className = "etegami-status-badge badge-drafting";
                         statusBadge.innerHTML = "<span>🎨</span><span>下絵表示中</span>";
                     }
-                    if (completeBtn) completeBtn.classList.add("hidden");
                     if (lampEtegami) {
                         lampEtegami.classList.remove("lamp-updating");
                         lampEtegami.classList.add("lamp-completed");

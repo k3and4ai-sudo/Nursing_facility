@@ -194,10 +194,19 @@
                             <div id="etegami-calligraphy" class="etegami-calligraphy-text">おだやかな 秋の日に… お元気で</div>
                             <div id="etegami-stamp" class="etegami-stamp-seal">🌸</div>
                         </div>
-                        <!-- リアルタイム更新インジケータ -->
+                        <!-- リアルタイムAI描画中オーバーレイ（色紙中央に美しく表示） -->
                         <div id="etegami-updating-badge" class="etegami-updating-badge hidden">
-                            <span class="spin-icon">✨</span>
-                            <span>絵手紙を新しく描いています...</span>
+                            <div class="updating-content-box">
+                                <div class="updating-spin-ring">
+                                    <span class="updating-palette-icon">🎨</span>
+                                </div>
+                                <div id="updating-text-main" class="updating-title">AIが新しい絵手紙を描いています…</div>
+                                <div id="updating-text-sub" class="updating-desc">座敷の風景（無料AI Pollinations）</div>
+                                <div class="updating-progress-track">
+                                    <div class="updating-progress-bar"></div>
+                                </div>
+                                <div class="updating-time-hint">✨ 約10〜15秒で自動的に仕上がります</div>
+                            </div>
                         </div>
                     </div>
 

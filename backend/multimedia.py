@@ -633,8 +633,36 @@ def get_last_used_image_engine() -> Dict[str, Any]:
 def translate_motif_for_etegami_art(motif: str) -> str:
     """Translates resident motif keywords to expressive English descriptions for watercolor painting."""
     m = motif.lower()
+
+    # 1. 複合パターンの優先判定（座敷・和室・畳 × 犬・走る・風景）
+    is_room = any(z in m for z in ["座敷", "雑式", "雑色", "和室", "畳", "部屋"])
+    is_dog = any(d in m for d in ["犬", "子犬", "わんこ", "柴犬"])
+    is_run = any(r in m for r in ["走", "駆", "かけっこ", "回り", "回る"])
+    is_white = any(w in m for w in ["白", "しろ", "ホワイト"])
+
+    if is_room and is_dog:
+        dog_desc = "white playful puppy dog" if is_white else "cute friendly puppy dog"
+        if is_run:
+            return f"{dog_desc} running cheerfully across a traditional Japanese tatami zashiki room with shoji paper sliding doors and warm wooden architecture"
+        else:
+            return f"{dog_desc} sitting peacefully inside a traditional Japanese tatami zashiki room with sliding shoji doors and garden view"
+    elif is_room and is_run:
+        return "cheerful playful footsteps and warmth inside a traditional Japanese tatami zashiki room with sliding shoji doors"
+    elif is_room:
+        return "traditional Japanese tatami zashiki room with fragrant green tatami mats, shoji paper sliding doors, wooden veranda engawa, and serene garden view"
+
+    # 2. 単独キーワードの翻訳テーブル
     translations = [
+        ("座敷の風景", "scenic traditional Japanese tatami zashiki room with sliding shoji paper screens, tatami mats, and wooden architecture"),
+        ("座敷", "traditional Japanese tatami zashiki room with shoji screens and tatami mats"),
+        ("雑式", "traditional Japanese tatami zashiki room with shoji screens and tatami mats"),
+        ("雑色", "traditional Japanese tatami zashiki room with shoji screens and tatami mats"),
+        ("和室", "traditional Japanese tatami room with shoji paper doors"),
+        ("畳", "traditional green Japanese tatami mats with soft sunlight"),
+        ("縁側", "traditional Japanese engawa wooden porch with peaceful garden view"),
+        ("庭", "serene Japanese garden with green plants"),
         ("白", "white"), ("黒", "black"), ("柴犬", "shiba inu puppy dog"),
+        ("子犬", "cute little puppy"),
         ("犬", "cute friendly puppy dog"), ("わんこ", "cute puppy"),
         ("猫", "gentle cozy Japanese cat"), ("ねこ", "gentle cozy cat"),
         ("インコ", "cute colorful parakeet bird"), ("小鳥", "gentle Japanese sparrow bird"),
@@ -646,7 +674,6 @@ def translate_motif_for_etegami_art(motif: str) -> str:
         ("朝顔", "fresh morning glory flowers with dew drops"),
         ("富士山", "majestic Mount Fuji with soft morning clouds"),
         ("お茶", "traditional Japanese green tea cup with gentle steam"),
-        ("縁側", "traditional Japanese engawa wooden porch with garden view"),
         ("喫茶店", "cozy retro Japanese kissaten coffee shop with coffee cup"),
         ("椿", "red camellia flower on fresh winter snow"),
         ("雪", "quiet peaceful winter snow garden")
