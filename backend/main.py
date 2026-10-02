@@ -2089,27 +2089,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         is_busy = getattr(session, "is_etegami_updating", False)
 
-        # 0. 「聞き取り内容の確認待ち (pending_motif_confirm)」がある場合、音声での肯定・否定を判定
+        # 0. 「聞き取り内容の確認待ち (pending_motif_confirm)」がある場合
+        # 音声での回答判定は画面との不一致を防ぐため廃止し、画面タッチ（ボタン操作）のみで受け付ける
         pending_confirm = getattr(session, "pending_motif_confirm", None)
         if pending_confirm:
-            is_yes = any(y in clean for y in [
-                "はい", "これでいい", "これでいいよ", "これで描いて", "これで描く", "描いて", "かいて", "オッケー", "おっけー",
-                "いいよ", "おねがい", "お願い", "よろしく", "決定", "そうして", "そうですね", "そうです", "うん", "良い", "いいね", "ええ"
-            ])
-            is_no = any(n in clean for n in [
-                "いいえ", "直して", "なおして", "違う", "ちがう", "変更", "へんこう", "やり直して", "やりなおして",
-                "もう一回", "もういちど", "違います", "ちがいます", "ダメ", "だめ", "直したい", "変えたい"
-            ])
-            # 「犬じゃなくて猫にして」などの修正発話でない純粋な肯定/否定
-            has_replacement = any(kw in clean for kw in ["にして", "に変えて", "にしてほしい", "を描いて", "をかいて"])
-            if is_yes and not is_no and not has_replacement:
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident confirmed motif via voice '{speech_text}'")
-                await on_live_etegami_motif_confirm_decision(True)
-                return
-            elif is_no and not has_replacement:
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident rejected motif via voice '{speech_text}'")
-                await on_live_etegami_motif_confirm_decision(False)
-                return
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Motif confirmation is pending on screen - awaiting screen touch only (voice answer ignored).")
+            return
 
         # 1. 「更新中ですか？」「今更新中？」「絵を描いてる？」等の状態問い合わせ判定
         is_querying_status = any(q in clean for q in [
@@ -2313,17 +2298,17 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             })
 
             # みまもりさんからの確認表示（テキストのみ・音声なし）
-            confirm_msg = f"🎨 みまもりさん：聞き取った内容：『{eff_motif}』でよろしいですか？「これでいいよ」とお返事いただくか、画面のボタンをタッチしてくださいね。"
+            confirm_msg = f"🎨 みまもりさん：聞き取った内容：『{eff_motif}』でよろしいですか？画面のボタンをタッチしてくださいね。"
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_motif_confirm",
                 "message": confirm_msg
             })
 
-            # 🎙️ ジェミナイ（Gemini Live）へ音声案内を指示
+            # 🎙️ ジェミナイ（Gemini Live）へ音声案内を指示（画面タッチのみを案内）
             try:
                 asyncio.create_task(session.send_system_note(
-                    f"画面に聞き取り内容の確認（『{eff_motif}』）が表示されました。利用者に優しく『聞き取り内容の確認が表示されています。これでよろしければ画面の「はい」をタッチするか、「これでいいよ」と伝えてくださいね』と音声で案内してください。"
+                    f"画面に聞き取り内容の確認（『{eff_motif}』）が表示されました。利用者に優しく『聞き取り内容の確認が表示されています。よろしければ画面の「はい」をタッチしてくださいね。描き直すときは「いいえ」をタッチしてくださいね』と音声で案内してください。画面タッチでのみ受け付けるため、声での返事は求めないでください。"
                 ))
             except Exception as e:
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Error sending system note to Gemini Live: {e}")
