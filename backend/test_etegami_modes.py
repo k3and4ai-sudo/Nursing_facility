@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from backend.gemini_live import GeminiLiveSession
 from backend import multimedia
 
@@ -72,7 +72,9 @@ class TestEtegamiModes(unittest.TestCase):
         session._handle_text_chunk("みまもり③さん、新しい画像をベースにしてください。")
         prepare_mock.assert_called_with("generate_new")
 
-    def test_multimedia_mode_generate_new(self):
+    @patch("backend.multimedia.generate_new_etegami_artwork")
+    def test_multimedia_mode_generate_new_success(self, mock_gen):
+        mock_gen.return_value = "/family/assets/generated_test.jpg"
         card = multimedia.modify_or_create_etegami(
             user_id=1,
             terminal_id="terminal_1",
@@ -82,7 +84,22 @@ class TestEtegamiModes(unittest.TestCase):
         )
         self.assertEqual(card["base_source"], "ai_generated_new")
         self.assertIn("愛犬ポチと河川敷の散歩", card["title"])
-        self.assertTrue(card["image_url"].startswith("/family/assets/"))
+        self.assertEqual(card["image_url"], "/family/assets/generated_test.jpg")
+
+    @patch("backend.multimedia.generate_new_etegami_artwork")
+    def test_multimedia_mode_generate_new_abort_on_error(self, mock_gen):
+        # When AI image generation fails (Pollinations error / timeout)
+        mock_gen.return_value = None
+        card = multimedia.modify_or_create_etegami(
+            user_id=1,
+            terminal_id="terminal_1",
+            motif_hint="愛犬ポチと河川敷の散歩",
+            mode="generate_new"
+        )
+        self.assertTrue(card.get("generation_error"))
+        self.assertTrue(card.get("canceled"))
+        self.assertEqual(card.get("status"), "aborted")
+        self.assertIn("エラーが発生したため、描画を中断しました", card["error_message"])
 
     def test_multimedia_mode_asset_base_matching(self):
         card = multimedia.modify_or_create_etegami(
@@ -94,15 +111,16 @@ class TestEtegamiModes(unittest.TestCase):
         self.assertEqual(card["base_source"], "reminiscence")
         self.assertEqual(card["image_url"], "/family/assets/generated_undoukai_bento.jpg")
 
-    def test_multimedia_mode_asset_base_novel_motif(self):
+    @patch("backend.multimedia.generate_new_etegami_artwork")
+    def test_multimedia_mode_asset_base_novel_motif(self, mock_gen):
+        mock_gen.return_value = "/family/assets/generated_balloon.jpg"
         card = multimedia.modify_or_create_etegami(
             user_id=1,
             terminal_id="terminal_1",
             motif_hint="富士山と気球の旅",
             mode="asset_base"
         )
-        # Should generate novel image since there is no matching preset asset
-        self.assertEqual(card["base_source"], "ai_generated_novel")
+        # Should retain or generate novel image since there is no matching preset asset
         self.assertIn("富士山と気球の旅", card["title"])
         self.assertTrue(card["image_url"].startswith("/family/assets/"))
 

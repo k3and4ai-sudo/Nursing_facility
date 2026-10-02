@@ -1876,6 +1876,26 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     custom_title=custom_title,
                     custom_calligraphy=custom_calligraphy
                 )
+                if card_info.get("generation_error") or card_info.get("canceled"):
+                    err_msg = card_info.get("error_message") or "画像生成AIでエラーが発生したため、描画を中断しました。"
+                    print(f"[Gemini Live Session ({terminal_id})]: Etegami generation aborted: {err_msg}")
+                    # 描画中スピナーとバッジを解除して描画を中断
+                    await websocket.send_json({
+                        "type": "etegami_updating",
+                        "updating": False
+                    })
+                    await websocket.send_json({
+                        "type": "mimamori_acknowledgement",
+                        "action": "etegami_generation_failed",
+                        "message": f"⚠️ みまもりさん：{err_msg}"
+                    })
+                    await websocket.send_json({
+                        "type": "api_error_notice",
+                        "title": "絵手紙の描画中断",
+                        "message": err_msg
+                    })
+                    return
+
                 # 2. Artwork is now prepared: show Etegami card with the new draft artwork
                 session.is_etegami_visible = True
                 await websocket.send_json({

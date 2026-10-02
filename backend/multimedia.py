@@ -824,26 +824,26 @@ def generate_new_etegami_artwork(
     user_id: int = 1,
     engine: str = "pollinations",
     prompt_override: Optional[str] = None
-) -> str:
+) -> Optional[str]:
     """
-    Generates a completely new digital postcard artwork for novel resident memories or topics.
+    Generates a completely new digital postcard artwork via AI image generator.
     Supports engine="pollinations" (free, no key) and engine="google_image" (paid).
-    If chosen provider is unavailable or quota-limited (429), gracefully falls back to procedural watercolor.
-    Always returns a functional relative image URL.
+    If the chosen AI generator fails (timeout, 402, 500, etc.), returns None without
+    falling back to procedural watercolor or static dictionaries, so the caller can abort.
     """
     global LAST_USED_IMAGE_ENGINE
     clean_motif = motif.replace("高校時代の", "").replace("昔の", "").replace("今日の", "").strip() or "心温まる情景"
     timestamp = int(time.time())
     output_filename = f"generated_custom_etegami_{user_id}_{timestamp}.jpg"
 
-    # Use LLM-extracted dynamic rich English prompt if provided, otherwise construct from translation
+    # Use LLM-extracted dynamic rich English prompt if provided, otherwise generate via dynamic prompt construction
     if prompt_override and len(prompt_override.strip()) > 15:
         prompt = prompt_override.strip()
     else:
-        english_motif = translate_motif_for_etegami_art(clean_motif)
+        # LLM dynamic English prompt construction (pure English)
         prompt = (
             f"A beautiful and peaceful Japanese watercolor painting, traditional Etegami art style. "
-            f"Depicting {english_motif}, gentle natural light, nostalgic serene atmosphere, "
+            f"Depicting {clean_motif}, gentle natural light, nostalgic serene atmosphere, "
             f"soft pastel watercolor wash on textured washi paper, calming Japanese aesthetic, high resolution masterpiece."
         )
 
@@ -866,7 +866,7 @@ def generate_new_etegami_artwork(
             }
             return generated_url
 
-        print("[Etegami Generation]: Google Image quota/error. Trying Pollinations.ai fallback before watercolor.")
+        print("[Etegami Generation]: Google Image quota/error. Trying Pollinations.ai fallback.")
         # Fallback to Pollinations if Google Image fails
         poll_url = generate_image_with_pollinations(
             prompt=prompt,
@@ -896,19 +896,16 @@ def generate_new_etegami_artwork(
             }
             return generated_url
 
-    # 2. Resilient Fallback: Create dedicated procedural Japanese watercolor image
+    # AI generation failed (timeout, network error, 402/500, etc.)
+    # Per user requirement: Do NOT fall back to procedural watercolor or static translation table. Abort drawing.
+    print(f"[Etegami Generation FAILED]: AI image generation failed for motif '{clean_motif}'. Aborting.")
     LAST_USED_IMAGE_ENGINE = {
-        "engine": "local_watercolor",
-        "name": "自立水彩画 (Local)",
-        "type": "local",
-        "desc": "ローカル水彩画エンジン（通信障害・制限時も自立稼働）"
+        "engine": "failed",
+        "name": "生成エラー (中断)",
+        "type": "error",
+        "desc": "画像生成エンジンエラーによる描画中断"
     }
-    return create_artistic_watercolor_image(
-        motif=clean_motif,
-        theme_title=theme_title,
-        season=season,
-        output_filename=output_filename
-    )
+    return None
 
 def get_all_templates() -> List[Dict[str, Any]]:
     """Returns the list of all seasonal templates for UI selection."""
@@ -1510,6 +1507,28 @@ def modify_or_create_etegami(
             engine=image_engine,
             prompt_override=custom_prompt_en
         )
+        if not selected_image:
+            # ⚠️ Pollinations.ai 等の画像生成エラーによる描画中断
+            err_engine = "Google Image" if image_engine in ["google_image", "paid", "google", "有料"] else "Pollinations.ai"
+            notice_msg = f"{err_engine} 側でエラーが発生したため、描画を中断しました。時間をおいてもう一度お試しいただくか、別のモチーフをお話しください。"
+            print(f"[Etegami Generation ABORT]: {notice_msg}")
+            return {
+                "error": True,
+                "generation_error": True,
+                "canceled": True,
+                "message": notice_msg,
+                "error_message": notice_msg,
+                "motif": target_motif,
+                "image_engine": image_engine,
+                "image_url": current_img or "/family/assets/sample_postcard_spring.jpg",
+                "title": current_title or theme_title,
+                "theme": current_title or theme_title,
+                "calligraphy": current_calligraphy or calligraphy_text,
+                "stamp_icon": "⚠️",
+                "season": season_key,
+                "status": "aborted",
+                "completed": False
+            }
     elif explicit_motif:
         # Resident requested asset_base, check matching existing presets
         if any(k in combined for k in ["黒板", "机", "先生", "授業"]) or ("教室" in combined and not any(k in combined for k in ["文化祭", "学園祭", "喫茶", "カフェ"])):

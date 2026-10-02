@@ -1504,6 +1504,20 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                         }, 4000);
                     }
+                } else if (data.action === "etegami_generation_failed" || data.action === "etegami_generation_aborted") {
+                    const updatingBadge = document.getElementById("etegami-updating-badge");
+                    if (updatingBadge) updatingBadge.classList.add("hidden");
+                    if (voiceHint) voiceHint.classList.add("hidden");
+                    isEtegamiUpdating = false;
+                    if (lampEtegami) {
+                        lampEtegami.classList.remove("lamp-updating", "lamp-completed");
+                        lampEtegami.classList.add("hidden");
+                    }
+                    if (statusBadge) {
+                        statusBadge.classList.remove("hidden");
+                        statusBadge.className = "etegami-status-badge badge-drafting";
+                        statusBadge.innerHTML = "<span>⚠️</span><span>描画中断</span>";
+                    }
                 } else if (data.action === "etegami_complete") {
                     if (voiceHint) voiceHint.classList.add("hidden");
                     if (statusBadge) statusBadge.classList.add("hidden");
@@ -1570,6 +1584,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     showTemporaryToast(bannerText, 7000);
                 } else if (typeof showUIToast === "function") {
                     showUIToast(bannerText, "warning");
+                }
+                const updatingBadge = document.getElementById("etegami-updating-badge");
+                if (updatingBadge) updatingBadge.classList.add("hidden");
+                const voiceHint = document.getElementById("etegami-voice-hint");
+                if (voiceHint) voiceHint.classList.add("hidden");
+                isEtegamiUpdating = false;
+                const lampEtegami = document.getElementById("lamp-etegami");
+                if (lampEtegami) {
+                    lampEtegami.classList.remove("lamp-updating");
+                    lampEtegami.classList.add("hidden");
                 }
                 const debugBadge = document.getElementById("debug-badge");
                 if (debugBadge) {
