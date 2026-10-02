@@ -1452,13 +1452,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (data.message) {
                     showTemporaryToast(data.message, 4500);
                 }
-                if (data.speak_text) {
-                    if (!isPlayingPCM24 && !isAISpeaking && (!liveAudioCtx || nextAudioStartTime <= liveAudioCtx.currentTime + 0.1)) {
-                        playTTSVoice(data.speak_text);
-                    } else {
-                        console.log("[LiveWS]: Suppressed Mimamori TTS speak to prevent overlap with active Gemini speech:", data.speak_text);
-                    }
-                }
+                // 🔇 みまもりさんは音声を停止してテキスト表示のみ（ジェミナイとの自然な音声対話に専念）
                 const lampEtegami = document.getElementById("lamp-etegami");
                 const lampEtegamiLabel = document.getElementById("lamp-etegami-label");
                 const voiceHint = document.getElementById("etegami-voice-hint");

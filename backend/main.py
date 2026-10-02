@@ -1729,19 +1729,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             engine_name = "Google Image (有料)" if is_paid else "Pollinations.ai (無料)"
             print(f"[Gemini Live Session ({terminal_id})]: Etegami image engine set to '{eff_engine}' ({engine_name})")
 
-            # Acknowledge to resident
+            # Acknowledge to resident via text only
             if is_paid:
                 msg = "🎨 みまもりさん：承知しました。Google Image（有料版）で作成します"
-                speak = "承知しました。Google Imageで下絵を作成しますね。"
             else:
                 msg = "🎨 みまもりさん：承知しました。無料AI（Pollinations）で作成します"
-                speak = "承知しました。無料のAIで下絵を作成しますね。"
 
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_engine_decided",
-                "message": msg,
-                "speak_text": speak
+                "message": msg
             })
             await websocket.send_json({
                 "type": "etegami_engine_updated",
@@ -1777,12 +1774,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 })
             else:
                 msg = "🎨 みまもりさん：承知しました。絵手紙をベースにする準備をします"
-                speak = "承知しました。以前の絵手紙をベースにしますね。どんな絵を描きましょうか？"
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_prepared",
-                "message": msg,
-                "speak_text": speak
+                "message": msg
             })
         except Exception as e:
             print(f"Error handling etegami prepare mode ({terminal_id}): {e}")
@@ -1820,12 +1815,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Gemini Live Session ({terminal_id})]: Awaiting image engine confirmation before generating artwork for motif='{motif}'")
             session.pending_motif_for_engine_confirm = motif
             confirm_msg = "🎨 みまもりさん：下絵の作成には、無料のAI（Pollinations）と有料のGoogle Imageのどちらを使いますか？"
-            confirm_speak = "下絵の作成には、無料のAIと、有料のGoogle Imageのどちらを使いますか？"
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_engine_confirm",
-                "message": confirm_msg,
-                "speak_text": confirm_speak
+                "message": confirm_msg
             })
             await websocket.send_json({
                 "type": "etegami_engine_confirm_prompt",
@@ -1959,8 +1952,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_retry_prompt",
-                "message": retry_msg,
-                "speak_text": "どのように描き直しましょうか？もう一度教えてくださいね。"
+                "message": retry_msg
             })
 
     async def on_live_etegami_complete():
@@ -2285,13 +2277,12 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "message": f"『{eff_motif}』で絵手紙を描きますか？"
             })
 
-            # みまもりさんからの確認アナウンス
+            # みまもりさんからの確認表示（テキストのみ・音声なし）
             confirm_msg = f"🎨 みまもりさん：聞き取った内容：『{eff_motif}』でよろしいですか？「これでいいよ」とお返事いただくか、画面のボタンをタッチしてくださいね。"
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_motif_confirm",
-                "message": confirm_msg,
-                "speak_text": f"聞き取った内容、『{eff_motif}』でよろしいですか？"
+                "message": confirm_msg
             })
             return
         else:
@@ -2515,8 +2506,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     asyncio.create_task(websocket.send_json({
                         "type": "mimamori_acknowledgement",
                         "action": "etegami_update_start",
-                        "message": ack_msg,
-                        "speak_text": f"承知しました。{stashed}の絵手紙を描きますね。"
+                        "message": ack_msg
                     }))
                     asyncio.create_task(on_live_etegami_update(stashed, ""))
 
@@ -2738,8 +2728,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                                 asyncio.create_task(websocket.send_json({
                                     "type": "mimamori_acknowledgement",
                                     "action": "etegami_update_start",
-                                    "message": ack_msg,
-                                    "speak_text": f"承知しました。{stashed}の絵手紙を描きますね。"
+                                    "message": ack_msg
                                 }))
                                 asyncio.create_task(on_live_etegami_update(stashed, ""))
 

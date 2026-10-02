@@ -1455,8 +1455,22 @@ def modify_or_create_etegami(
     if clean_msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
         clean_msg = ""
 
-    if mode == "generate_new" or (custom_prompt_en and len(custom_prompt_en.strip()) > 10):
-        # Resident chose to create a completely new artwork, or dynamic LLM prompt was extracted
+    # Fetch existing latest artwork for this terminal/user
+    current_img = ""
+    current_title = ""
+    current_calligraphy = ""
+    try:
+        latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
+        if latest_row and latest_row.get("payload"):
+            p_data = latest_row["payload"]
+            current_img = p_data.get("generated_image_url") or p_data.get("image_url") or ""
+            current_title = p_data.get("theme") or p_data.get("title") or ""
+            current_calligraphy = p_data.get("calligraphy") or ""
+    except Exception:
+        pass
+
+    if mode == "generate_new":
+        # 🎨 【新しく描くモード】：新規にAIで下絵を描画する
         target_motif = clean_motif or "心温まるひととき"
         theme_title = custom_title or f"【手作り絵手紙】{target_motif}"
         calligraphy_text = custom_calligraphy or clean_msg or f"心温まる {target_motif}に 思いを添えて"
@@ -1649,29 +1663,23 @@ def modify_or_create_etegami(
                 base_source = "healing"
                 break
 
-        # 3. If no chat topic matched either, cycle to next distinct preset based on currently displayed artwork
+        # 3. If no chat topic matched, retain current artwork if available, otherwise pick default preset
         if not selected_image:
-            current_img = ""
-            try:
-                latest_row = db.get_latest_image_prompt_payload(terminal_id=terminal_id, user_id=user_id)
-                if latest_row and latest_row.get("payload"):
-                    current_img = latest_row["payload"].get("generated_image_url") or ""
-            except Exception:
-                pass
-
-            curr_idx = -1
-            for idx, p in enumerate(ROTATING_PRESETS):
-                if p["image_url"] == current_img:
-                    curr_idx = idx
-                    break
-            
-            next_preset = ROTATING_PRESETS[(curr_idx + 1) % len(ROTATING_PRESETS)]
-            selected_image = next_preset["image_url"]
-            theme_title = next_preset["theme"]
-            calligraphy_text = message_hint or next_preset["calligraphy"]
-            stamp_icon = next_preset["stamp_icon"]
-            season_key = next_preset["season"]
-            base_source = next_preset["source"]
+            if current_img:
+                selected_image = current_img
+                theme_title = custom_title or current_title or "【手作り絵手紙】心温まるひととき"
+                calligraphy_text = custom_calligraphy or clean_msg or current_calligraphy or "心穏やかに 寄り添う日々"
+                stamp_icon = "💮" if is_completed else "和"
+                base_source = "retained_base"
+                print(f"[Etegami Asset Base]: Keeping current displayed image '{selected_image}' without rotating preset.")
+            else:
+                preset = ROTATING_PRESETS[0]
+                selected_image = preset["image_url"]
+                theme_title = custom_title or preset["theme"]
+                calligraphy_text = custom_calligraphy or message_hint or preset["calligraphy"]
+                stamp_icon = preset["stamp_icon"]
+                season_key = preset["season"]
+                base_source = preset["source"]
 
     # Failsafe for unassigned image
     if not selected_image:
