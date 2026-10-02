@@ -2036,6 +2036,66 @@ body.simple-mode .speech-box.user-box {
     transform: rotate(-4deg);
 }
 
+/* 👂 描画内容聞き取り中バッジ */
+.etegami-listening-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.96) 100%);
+    border: 2.5px solid #38bdf8;
+    color: #f0f9ff;
+    padding: 10px 22px;
+    border-radius: 9999px;
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45), 0 0 14px rgba(56, 189, 248, 0.3);
+    margin: 0 auto 12px auto;
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    animation: listeningPulse 2s infinite ease-in-out;
+    width: fit-content;
+}
+
+@keyframes listeningPulse {
+    0%, 100% {
+        box-shadow: 0 4px 18px rgba(56, 189, 248, 0.4), 0 0 10px rgba(56, 189, 248, 0.25);
+        transform: translateY(0);
+    }
+    50% {
+        box-shadow: 0 8px 28px rgba(56, 189, 248, 0.7), 0 0 20px rgba(56, 189, 248, 0.5);
+        transform: translateY(-2px);
+    }
+}
+
+.listening-pulse-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 12px #38bdf8;
+    animation: listeningDotBlink 1s infinite alternate ease-in-out;
+    flex-shrink: 0;
+}
+
+@keyframes listeningDotBlink {
+    from { opacity: 0.35; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1.25); }
+}
+
+.listening-badge-icon {
+    font-size: 1.35rem;
+}
+
+.listening-badge-text {
+    color: #ffffff;
+    font-weight: 900;
+}
+
+.listening-badge-sub {
+    font-size: 0.9rem;
+    color: #bae6fd;
+    font-weight: 600;
+}
+
 /* リアルタイム制作中アニメーションオーバーレイ（色紙中央全域） */
 .etegami-updating-badge {
     position: absolute;

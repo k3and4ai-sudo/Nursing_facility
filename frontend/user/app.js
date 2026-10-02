@@ -290,6 +290,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.force_open === true) {
             showEtegamiCard();
         }
+        const motifConfirmModal = document.getElementById("etegami-motif-confirm-modal");
+        if (motifConfirmModal) motifConfirmModal.classList.add("hidden");
+        const listeningBadgeEl = document.getElementById("etegami-listening-badge");
+        if (listeningBadgeEl) listeningBadgeEl.classList.add("hidden");
+
         const cardImg = document.getElementById("etegami-card-img");
         const cardImgNext = document.getElementById("etegami-card-img-next");
         const calligraphyEl = document.getElementById("etegami-calligraphy");
@@ -1053,6 +1058,32 @@ document.addEventListener("DOMContentLoaded", () => {
                     handleStaffOverride(data.text, data.audio);
                     break;
 
+                case "etegami_listening":
+                    const lBadge = document.getElementById("etegami-listening-badge");
+                    if (lBadge) {
+                        if (data.listening) lBadge.classList.remove("hidden");
+                        else lBadge.classList.add("hidden");
+                    }
+                    break;
+
+                case "etegami_motif_confirm_prompt":
+                    const lBadge2 = document.getElementById("etegami-listening-badge");
+                    if (lBadge2) lBadge2.classList.add("hidden");
+                    const confModal = document.getElementById("etegami-motif-confirm-modal");
+                    const mTarget = document.getElementById("motif-confirm-target");
+                    const cTarget = document.getElementById("motif-confirm-calligraphy");
+                    if (mTarget) mTarget.textContent = data.motif || "心温まる思い出";
+                    if (cTarget) cTarget.textContent = data.calligraphy || "心穏やかに 寄り添う日々";
+                    if (confModal) confModal.classList.remove("hidden");
+                    break;
+
+                case "etegami_motif_confirm_dismiss":
+                    const confModal2 = document.getElementById("etegami-motif-confirm-modal");
+                    if (confModal2) confModal2.classList.add("hidden");
+                    const lBadge3 = document.getElementById("etegami-listening-badge");
+                    if (lBadge3) lBadge3.classList.add("hidden");
+                    break;
+
                 case "guardrail_result":
                     handleGuardrailResult(data);
                     break;
@@ -1499,6 +1530,34 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);
                 updateEtegamiDisplay(data);
+            } else if (data.type === "etegami_listening") {
+                console.log("[LiveWS]: Received etegami_listening ->", data.listening);
+                const listeningBadge = document.getElementById("etegami-listening-badge");
+                if (listeningBadge) {
+                    if (data.listening) {
+                        listeningBadge.classList.remove("hidden");
+                    } else {
+                        listeningBadge.classList.add("hidden");
+                    }
+                }
+            } else if (data.type === "etegami_motif_confirm_prompt") {
+                console.log("[LiveWS]: Received etegami_motif_confirm_prompt ->", data);
+                const listeningBadge = document.getElementById("etegami-listening-badge");
+                if (listeningBadge) listeningBadge.classList.add("hidden");
+
+                const confirmModal = document.getElementById("etegami-motif-confirm-modal");
+                const motifTarget = document.getElementById("motif-confirm-target");
+                const calligraphyTarget = document.getElementById("motif-confirm-calligraphy");
+
+                if (motifTarget) motifTarget.textContent = data.motif || "心温まる思い出";
+                if (calligraphyTarget) calligraphyTarget.textContent = data.calligraphy || "心穏やかに 寄り添う日々";
+                if (confirmModal) confirmModal.classList.remove("hidden");
+            } else if (data.type === "etegami_motif_confirm_dismiss") {
+                console.log("[LiveWS]: Received etegami_motif_confirm_dismiss");
+                const confirmModal = document.getElementById("etegami-motif-confirm-modal");
+                if (confirmModal) confirmModal.classList.add("hidden");
+                const listeningBadge = document.getElementById("etegami-listening-badge");
+                if (listeningBadge) listeningBadge.classList.add("hidden");
             } else if (data.type === "etegami_engine_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_engine_confirm_prompt ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
@@ -3780,6 +3839,38 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // 👂 聞き取った絵手紙内容確認モーダルの制御
+    function initEtegamiMotifConfirm() {
+        const confirmModal = document.getElementById("etegami-motif-confirm-modal");
+        const btnOk = document.getElementById("btn-motif-confirm-ok");
+        const btnRetry = document.getElementById("btn-motif-confirm-retry");
+        const listeningBadge = document.getElementById("etegami-listening-badge");
+
+        const sendMotifDecision = (confirmed) => {
+            if (confirmModal) confirmModal.classList.add("hidden");
+            if (listeningBadge) listeningBadge.classList.add("hidden");
+
+            const payload = {
+                type: "etegami_motif_confirm_response",
+                confirmed: confirmed
+            };
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                console.log("[Etegami Motif Confirm]: Sending decision via liveWs ->", payload);
+                liveWs.send(JSON.stringify(payload));
+            } else if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log("[Etegami Motif Confirm]: Sending decision via ws ->", payload);
+                ws.send(JSON.stringify(payload));
+            }
+        };
+
+        if (btnOk) {
+            btnOk.addEventListener("click", () => sendMotifDecision(true));
+        }
+        if (btnRetry) {
+            btnRetry.addEventListener("click", () => sendMotifDecision(false));
+        }
+    }
+
     // Initialize application connection
     async function initApp() {
         try {
@@ -3789,6 +3880,7 @@ document.addEventListener("DOMContentLoaded", () => {
             connectWS();
             initSmartwatchModule();
             initEtegamiEngineSelector();
+            initEtegamiMotifConfirm();
             if (isDebugMode) {
                 connectLiveWS();
             }

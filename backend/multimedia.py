@@ -188,41 +188,56 @@ def generate_image_with_pollinations(
     global LAST_IMAGE_GEN_NOTICE
     import urllib.parse
     import requests
-    try:
-        encoded_prompt = urllib.parse.quote(prompt)
-        # Using model=turbo for fast, reliable, rate-limit-friendly free generation
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=turbo&nologo=true"
-        resp = requests.get(
-            url,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-            timeout=25.0
-        )
-        if resp.status_code == 200 and len(resp.content) > 1000:
-            img_bytes = resp.content
-            assets_dir = os.path.join(os.path.dirname(config.BASE_DIR), "frontend/family/assets")
-            docs_dir = os.path.join(os.path.dirname(config.BASE_DIR), "docs/assets")
-            os.makedirs(assets_dir, exist_ok=True)
-            os.makedirs(docs_dir, exist_ok=True)
+    import random
+    import time
 
-            target_file = os.path.join(assets_dir, output_filename)
-            with open(target_file, "wb") as f_out:
-                f_out.write(img_bytes)
-            docs_target = os.path.join(docs_dir, output_filename)
-            with open(docs_target, "wb") as f_out2:
-                f_out2.write(img_bytes)
-            print(f"[Pollinations Image Gen SUCCESS]: Saved free AI image to {output_filename} ({len(img_bytes)} bytes)")
-            LAST_IMAGE_GEN_NOTICE = None
-            return f"/family/assets/{output_filename}"
-        else:
-            print(f"[Pollinations Image Gen Notice]: Received HTTP {resp.status_code} ({len(resp.content)} bytes). Falling back to watercolor.")
-    except Exception as e:
-        print(f"[Pollinations Image Gen Notice]: Free generation failed: {e}. Falling back to watercolor.")
-        LAST_IMAGE_GEN_NOTICE = {
-            "has_error": True,
-            "code": "POLLINATIONS_ERROR",
-            "model": "pollinations.ai (無料)",
-            "message": f"Pollinations無料画像AIの通信でエラーが発生しました ({e})。水彩画エンジンで生成しました。"
-        }
+    encoded_prompt = urllib.parse.quote(prompt)
+    seed = random.randint(1000, 999999)
+
+    # Strategy: Try default, flux, then turbo with random seed
+    candidate_urls = [
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&seed={seed}&nologo=true",
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=flux&seed={seed}&nologo=true",
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=turbo&seed={seed}&nologo=true"
+    ]
+
+    for attempt_idx, url in enumerate(candidate_urls):
+        try:
+            resp = requests.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                timeout=30.0
+            )
+            if resp.status_code == 200 and len(resp.content) > 1000:
+                img_bytes = resp.content
+                assets_dir = os.path.join(os.path.dirname(config.BASE_DIR), "frontend/family/assets")
+                docs_dir = os.path.join(os.path.dirname(config.BASE_DIR), "docs/assets")
+                os.makedirs(assets_dir, exist_ok=True)
+                os.makedirs(docs_dir, exist_ok=True)
+
+                target_file = os.path.join(assets_dir, output_filename)
+                with open(target_file, "wb") as f_out:
+                    f_out.write(img_bytes)
+                docs_target = os.path.join(docs_dir, output_filename)
+                with open(docs_target, "wb") as f_out2:
+                    f_out2.write(img_bytes)
+                print(f"[Pollinations Image Gen SUCCESS]: Saved free AI image to {output_filename} ({len(img_bytes)} bytes, attempt {attempt_idx+1})")
+                LAST_IMAGE_GEN_NOTICE = None
+                return f"/family/assets/{output_filename}"
+            else:
+                print(f"[Pollinations Image Gen Notice]: Attempt {attempt_idx+1} received HTTP {resp.status_code}. Retrying...")
+                time.sleep(1.0)
+        except Exception as e:
+            print(f"[Pollinations Image Gen Notice]: Attempt {attempt_idx+1} failed: {e}. Retrying...")
+            time.sleep(1.0)
+
+    print("[Pollinations Image Gen Notice]: All Pollinations attempts failed. Falling back to procedural watercolor.")
+    LAST_IMAGE_GEN_NOTICE = {
+        "has_error": True,
+        "code": "POLLINATIONS_ERROR",
+        "model": "pollinations.ai (無料)",
+        "message": "Pollinations無料画像AIの通信で一時制限が発生しました。水彩画エンジンで絵手紙を生成しました。"
+    }
     return None
 
 def create_artistic_watercolor_image(
@@ -705,11 +720,12 @@ def extract_etegami_motif_from_speech(
         "居住者（高齢者）の自然な発話や会話文脈の中から、絵手紙として描くべき具体的な情景・題材・モチーフを抽出してください。\n\n"
         "【重要方針：登録単語リストに依存しない自由な抽出】\n"
         "1. 固定の単語リストに囚われず、居住者が語った思い出・情景・風景・生き物・場所・色・動作を自然に汲み取ってください。\n"
+        "   ・居住者が具体的な新しい動物や題材（例: 「マルチーズ」「白い犬」「走る姿」等）を話した時は、直前の古いモチーフに縛られず、新しく話された対象を主役に据えたモチーフ（例: 「元気に走る白いマルチーズ」「座敷の中の白いマルチーズ」等）を柔軟に構成してください。\n"
         "   例:\n"
+        "   - 「白いマルチーズでした」 -> motif_ja: \"白いマルチーズ\", prompt_en: \"A beautiful Japanese watercolor painting of a cute fluffy white Maltese puppy dog, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「座敷の周りの風景を描いてください」 -> motif_ja: \"座敷の周りの風景\", prompt_en: \"A beautiful Japanese watercolor painting of the scenery around the traditional tatami zashiki room with shoji screens, serene garden view, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「昔、縁側でおばあちゃんと冷たいスイカを食べたんだよ」 -> motif_ja: \"縁側でおばあちゃんと食べたスイカ\", prompt_en: \"A warm nostalgic Japanese watercolor painting of enjoying cold watermelon slices on a wooden engawa porch with grandmother, summer sunlight, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
-        "   - 「座敷の中を走る白い犬」 -> motif_ja: \"座敷を走る白い犬\", prompt_en: \"A cute playful white puppy running across a traditional Japanese tatami room with shoji doors, traditional Etegami style, washi paper, masterpiece\"\n"
-        "   - 「座敷の絵が取り入れられてないです」 -> 前のモチーフ（犬等）があれば結合して: motif_ja: \"座敷と犬の風景\", prompt_en: \"A peaceful Japanese watercolor painting of a friendly puppy dog in a traditional tatami zashiki room with shoji paper screens, traditional Etegami style, masterpiece\"\n\n"
+        "   - 「座敷の中を走る白い犬」 -> motif_ja: \"座敷を走る白い犬\", prompt_en: \"A cute playful white puppy running across a traditional Japanese tatami room with shoji doors, traditional Etegami style, washi paper, masterpiece\"\n\n"
         "2. 単なる挨拶（「こんにちは」「おはよう」）、接続確認（「聞こえますか」）、予定の質問（「今日の予定は？」）、秘密の指示（「内緒にして」）等の日常会話は必ず is_motif: false としてください。\n\n"
         "3. 出力形式 (必ず以下の有効なJSONのみを出力してください):\n"
         "{\n"
@@ -1439,8 +1455,8 @@ def modify_or_create_etegami(
     if clean_msg in ["なし", "特になし", "無", "無し", "なし）", "なし)", "none", "null"]:
         clean_msg = ""
 
-    if mode == "generate_new":
-        # Resident chose to create a completely new artwork without using existing base
+    if mode == "generate_new" or (custom_prompt_en and len(custom_prompt_en.strip()) > 10):
+        # Resident chose to create a completely new artwork, or dynamic LLM prompt was extracted
         target_motif = clean_motif or "心温まるひととき"
         theme_title = custom_title or f"【手作り絵手紙】{target_motif}"
         calligraphy_text = custom_calligraphy or clean_msg or f"心温まる {target_motif}に 思いを添えて"
@@ -1548,8 +1564,8 @@ def modify_or_create_etegami(
         else:
             # Appropriate asset not found for novel motif -> generate dedicated artwork
             target_motif = clean_motif or "心温まるひととき"
-            theme_title = f"【手作り絵手紙】{target_motif}の温もり"
-            calligraphy_text = clean_msg or f"懐かしい {target_motif}に 思いを馳せて"
+            theme_title = custom_title or f"【手作り絵手紙】{target_motif}の温もり"
+            calligraphy_text = custom_calligraphy or clean_msg or f"懐かしい {target_motif}に 思いを馳せて"
             stamp_icon = "🍂"
             base_source = "ai_generated_novel"
             selected_image = generate_new_etegami_artwork(
@@ -1557,7 +1573,8 @@ def modify_or_create_etegami(
                 theme_title=theme_title,
                 season=season_key,
                 user_id=user_id,
-                engine=image_engine
+                engine=image_engine,
+                prompt_override=custom_prompt_en
             )
     else:
         # Check recent chat history turns from newest to oldest first

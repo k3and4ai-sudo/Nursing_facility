@@ -1926,6 +1926,43 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             finally:
                 session.is_etegami_updating = False
 
+    async def on_live_etegami_motif_confirm_decision(confirmed: bool):
+        await websocket.send_json({"type": "etegami_motif_confirm_dismiss"})
+        await websocket.send_json({"type": "etegami_listening", "listening": False})
+
+        pending = getattr(session, "pending_motif_confirm", None)
+        if not pending:
+            print(f"[Etegami Motif Confirm Decision ({terminal_id})]: No pending motif confirm found.")
+            return
+
+        session.pending_motif_confirm = None
+
+        if confirmed:
+            eff_motif = pending.get("motif", "") or getattr(session, "current_etegami_motif", "") or "思い出の情景"
+            print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Confirmed motif '{eff_motif}' - starting artwork update!")
+            ack_msg = f"🎨 みまもりさん：承知しました。{eff_motif}の絵手紙を描きますね。"
+            await websocket.send_json({
+                "type": "mimamori_acknowledgement",
+                "action": "etegami_update_start",
+                "message": ack_msg
+            })
+            await on_live_etegami_update(
+                motif=eff_motif,
+                msg="",
+                custom_prompt_en=pending.get("prompt_en", ""),
+                custom_title=pending.get("title", ""),
+                custom_calligraphy=pending.get("calligraphy", "")
+            )
+        else:
+            print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Resident requested retry/alteration.")
+            retry_msg = "🎨 みまもりさん：承知しました。どのように描き直しましょうか？もう一度教えてくださいね。"
+            await websocket.send_json({
+                "type": "mimamori_acknowledgement",
+                "action": "etegami_retry_prompt",
+                "message": retry_msg,
+                "speak_text": "どのように描き直しましょうか？もう一度教えてくださいね。"
+            })
+
     async def on_live_etegami_complete():
         # Prevent duplicate update if already updating
         if getattr(session, "is_etegami_updating", False):
@@ -2025,6 +2062,28 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         is_busy = getattr(session, "is_etegami_updating", False)
 
+        # 0. 「聞き取り内容の確認待ち (pending_motif_confirm)」がある場合、音声での肯定・否定を判定
+        pending_confirm = getattr(session, "pending_motif_confirm", None)
+        if pending_confirm:
+            is_yes = any(y in clean for y in [
+                "はい", "これでいい", "これでいいよ", "これで描いて", "これで描く", "描いて", "かいて", "オッケー", "おっけー",
+                "いいよ", "おねがい", "お願い", "よろしく", "決定", "そうして", "そうですね", "そうです", "うん", "良い", "いいね", "ええ"
+            ])
+            is_no = any(n in clean for n in [
+                "いいえ", "直して", "なおして", "違う", "ちがう", "変更", "へんこう", "やり直して", "やりなおして",
+                "もう一回", "もういちど", "違います", "ちがいます", "ダメ", "だめ", "直したい", "変えたい"
+            ])
+            # 「犬じゃなくて猫にして」などの修正発話でない純粋な肯定/否定
+            has_replacement = any(kw in clean for kw in ["にして", "に変えて", "にしてほしい", "を描いて", "をかいて"])
+            if is_yes and not is_no and not has_replacement:
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident confirmed motif via voice '{speech_text}'")
+                await on_live_etegami_motif_confirm_decision(True)
+                return
+            elif is_no and not has_replacement:
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident rejected motif via voice '{speech_text}'")
+                await on_live_etegami_motif_confirm_decision(False)
+                return
+
         # 1. 「更新中ですか？」「今更新中？」「絵を描いてる？」等の状態問い合わせ判定
         is_querying_status = any(q in clean for q in [
             "更新中ですか", "今更新中", "更新中なの", "更新中でしょうか", "更新中かい",
@@ -2036,10 +2095,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             "更新してください", "更新してほしい", "更新して欲しい", "更新お願い", "更新おねがい",
             "絵を更新して", "絵更新して", "絵を更新", "絵手紙を更新", "絵手紙更新",
             "描き直して", "描きなおして", "描き直し", "描きなおし",
-            "別の絵にして", "違う絵にして", "絵を変えて", "絵を変え", "直して"
+            "別の絵にして", "違う絵にして", "絵を変えて", "絵を変え"
         ])
 
-        # 状態問い合わせ、または更新要求が来たときの分岐（みまもりさんは声を出さずトーストのみで静かに補助）
+        # 状態問い合わせ、または更新要求が来たときの分岐
         if is_querying_status or is_explicit_update_req:
             if is_busy:
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident queried/requested update while busy - responding with busy notice.")
@@ -2058,18 +2117,6 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "message": idle_msg
                 }))
                 return
-            elif is_explicit_update_req:
-                session.has_resident_requested_etegami = True
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested update while idle - executing update.")
-                ack_msg = "🎨 みまもりさん：承知しました。絵手紙を更新しますね。"
-                asyncio.create_task(websocket.send_json({
-                    "type": "mimamori_acknowledgement",
-                    "action": "etegami_update_start",
-                    "message": ack_msg
-                }))
-                eff_motif = getattr(session, "current_etegami_motif", "") or "心温まる思い出"
-                asyncio.create_task(on_live_etegami_update(eff_motif, ""))
-                return
 
         # Check completion keywords
         if any(kw in clean for kw in etegami_complete_keywords):
@@ -2083,6 +2130,17 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 3.0):
             return
+
+        # 絵手紙が表示されている、または更新要求がある場合、聞き取り中バッジを表示
+        is_etegami_active = getattr(session, "is_etegami_visible", False) or getattr(session, "has_resident_requested_etegami", False) or any(k in clean for k in etegami_resident_keywords)
+        if is_etegami_active:
+            try:
+                await websocket.send_json({
+                    "type": "etegami_listening",
+                    "listening": True
+                })
+            except Exception:
+                pass
 
         # 3. 居住者の自然な会話・文字起こしからLLMでモチーフを動的抽出
         custom_prompt_en = ""
@@ -2191,26 +2249,58 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without mode decision - waiting for resident to answer base question.")
                 return
 
-            # Trigger update if a valid motif was specified or explicit redraw command was given
-            is_explicit_redraw = any(act in clean for act in ["描き直", "描きなお", "新しくして", "別の絵", "違う絵", "絵を変え", "更新して", "更新"])
-            if detected_motif or is_explicit_redraw or (getattr(session, "is_etegami_visible", False) and is_scene_description):
-                eff_motif = detected_motif or getattr(session, "current_etegami_motif", "") or "思い出の情景"
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident update request in '{speech_text}' (motif='{eff_motif}')")
-                ack_msg = f"🎨 みまもりさん：承知しました。{eff_motif}の絵手紙を描きますね。"
-                asyncio.create_task(websocket.send_json({
-                    "type": "mimamori_acknowledgement",
-                    "action": "etegami_update_start",
-                    "message": ack_msg
-                }))
-                asyncio.create_task(on_live_etegami_update(
-                    motif=eff_motif,
-                    msg="",
-                    custom_prompt_en=custom_prompt_en,
-                    custom_title=custom_title,
-                    custom_calligraphy=custom_calligraphy
-                ))
-            else:
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without motif in '{speech_text}' - waiting for Gemini base-confirmation question.")
+            # 聞き取り完了：聞き取り中バッジをOFFにする
+            await websocket.send_json({
+                "type": "etegami_listening",
+                "listening": False
+            })
+
+            eff_motif = detected_motif or getattr(session, "current_etegami_motif", "") or "思い出の情景"
+            eff_title = custom_title or f"【手作り絵手紙】{eff_motif}"
+            eff_calligraphy = custom_calligraphy or "心穏やかに 寄り添う日々"
+
+            # 💡 【居住者への確認ステップ】：すぐ描かず、聞き取り内容確認画面を表示して保留する
+            session.pending_motif_confirm = {
+                "motif": eff_motif,
+                "prompt_en": custom_prompt_en,
+                "title": eff_title,
+                "calligraphy": eff_calligraphy
+            }
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Presenting motif confirmation to resident for '{eff_motif}'")
+            
+            # 色紙カードを表示（まだ開いていない場合）
+            session.is_etegami_visible = True
+            await websocket.send_json({
+                "type": "etegami_visibility",
+                "visible": True,
+                "force_open": True
+            })
+
+            # 確認プロンプトモーダル送信
+            await websocket.send_json({
+                "type": "etegami_motif_confirm_prompt",
+                "motif": eff_motif,
+                "title": eff_title,
+                "calligraphy": eff_calligraphy,
+                "message": f"『{eff_motif}』で絵手紙を描きますか？"
+            })
+
+            # みまもりさんからの確認アナウンス
+            confirm_msg = f"🎨 みまもりさん：聞き取った内容：『{eff_motif}』でよろしいですか？「これでいいよ」とお返事いただくか、画面のボタンをタッチしてくださいね。"
+            await websocket.send_json({
+                "type": "mimamori_acknowledgement",
+                "action": "etegami_motif_confirm",
+                "message": confirm_msg,
+                "speak_text": f"聞き取った内容、『{eff_motif}』でよろしいですか？"
+            })
+            return
+        else:
+            # モチーフ判定に至らなかった場合は聞き取り中バッジをOFF
+            if is_etegami_active:
+                await websocket.send_json({
+                    "type": "etegami_listening",
+                    "listening": False
+                })
 
     # Initialize Gemini Live Session
     def on_gemini_thought(thought: str):
@@ -2746,6 +2836,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 target_engine = data.get("engine", "pollinations")
                 print(f"[Client Message ({terminal_id})]: UI requested set_image_engine -> {target_engine}")
                 asyncio.create_task(on_live_etegami_engine_decision(target_engine))
+
+            elif msg_type == "etegami_motif_confirm_response":
+                confirmed = data.get("confirmed", True)
+                print(f"[Client Message ({terminal_id})]: UI requested etegami_motif_confirm_response -> confirmed={confirmed}")
+                asyncio.create_task(on_live_etegami_motif_confirm_decision(confirmed))
 
             elif msg_type == "client_ui_mode":
                 new_mode = data.get("mode", "simple")
