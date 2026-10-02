@@ -290,8 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.force_open === true) {
             showEtegamiCard();
         }
-        const motifConfirmModal = document.getElementById("etegami-motif-confirm-modal");
-        if (motifConfirmModal) motifConfirmModal.classList.add("hidden");
+        // Note: Do NOT hide motifConfirmModal here to prevent premature modal dismissal while user is confirming
         const listeningBadgeEl = document.getElementById("etegami-listening-badge");
         if (listeningBadgeEl) listeningBadgeEl.classList.add("hidden");
 
@@ -1084,6 +1083,29 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (lBadge3) lBadge3.classList.add("hidden");
                     break;
 
+                case "etegami_mode_confirm_prompt":
+                    const modeModalMain = document.getElementById("etegami-mode-confirm-modal");
+                    if (modeModalMain) modeModalMain.classList.remove("hidden");
+                    break;
+
+                case "etegami_mode_confirm_dismiss":
+                    const modeModalMain2 = document.getElementById("etegami-mode-confirm-modal");
+                    if (modeModalMain2) modeModalMain2.classList.add("hidden");
+                    break;
+
+                case "etegami_engine_confirm_prompt":
+                    const engModalMain = document.getElementById("etegami-engine-confirm-modal");
+                    if (engModalMain) engModalMain.classList.remove("hidden");
+                    break;
+
+                case "etegami_engine_updated":
+                    const engModalMain2 = document.getElementById("etegami-engine-confirm-modal");
+                    if (engModalMain2) engModalMain2.classList.add("hidden");
+                    if (typeof updateEngineToggleUI === "function") {
+                        updateEngineToggleUI(data.engine);
+                    }
+                    break;
+
                 case "guardrail_result":
                     handleGuardrailResult(data);
                     break;
@@ -1566,6 +1588,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (confirmModal) confirmModal.classList.add("hidden");
                 const listeningBadge = document.getElementById("etegami-listening-badge");
                 if (listeningBadge) listeningBadge.classList.add("hidden");
+            } else if (data.type === "etegami_mode_confirm_prompt") {
+                console.log("[LiveWS]: Received etegami_mode_confirm_prompt ->", data);
+                const modeModal = document.getElementById("etegami-mode-confirm-modal");
+                if (modeModal) modeModal.classList.remove("hidden");
+            } else if (data.type === "etegami_mode_confirm_dismiss") {
+                console.log("[LiveWS]: Received etegami_mode_confirm_dismiss");
+                const modeModal = document.getElementById("etegami-mode-confirm-modal");
+                if (modeModal) modeModal.classList.add("hidden");
             } else if (data.type === "etegami_engine_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_engine_confirm_prompt ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
@@ -3857,6 +3887,35 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // 🖌️ 絵手紙モード選択モーダル（昔の絵か新規か）の制御
+    function initEtegamiModeConfirm() {
+        const modeModal = document.getElementById("etegami-mode-confirm-modal");
+        const btnBase = document.getElementById("btn-modal-choose-base");
+        const btnNew = document.getElementById("btn-modal-choose-new");
+
+        const sendModeChoice = (mode) => {
+            if (modeModal) modeModal.classList.add("hidden");
+            const payload = {
+                type: "set_prepare_mode",
+                mode: mode
+            };
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                console.log("[Etegami Mode]: Sending set_prepare_mode via liveWs ->", payload);
+                liveWs.send(JSON.stringify(payload));
+            } else if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log("[Etegami Mode]: Sending set_prepare_mode via ws ->", payload);
+                ws.send(JSON.stringify(payload));
+            }
+        };
+
+        if (btnBase) {
+            btnBase.addEventListener("click", () => sendModeChoice("asset_base"));
+        }
+        if (btnNew) {
+            btnNew.addEventListener("click", () => sendModeChoice("generate_new"));
+        }
+    }
+
     // 👂 聞き取った絵手紙内容確認モーダルの制御
     function initEtegamiMotifConfirm() {
         const confirmModal = document.getElementById("etegami-motif-confirm-modal");
@@ -3898,6 +3957,7 @@ document.addEventListener("DOMContentLoaded", () => {
             connectWS();
             initSmartwatchModule();
             initEtegamiEngineSelector();
+            initEtegamiModeConfirm();
             initEtegamiMotifConfirm();
             if (isDebugMode) {
                 connectLiveWS();

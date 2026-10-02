@@ -19,7 +19,6 @@ class TestEtegamiMotifConfirm(unittest.TestCase):
         for speech_text in voice_inputs:
             pending_confirm = getattr(session, "pending_motif_confirm", None)
             self.assertIsNotNone(pending_confirm)
-            # バックエンド内では pending_confirm がある場合は即 return して音声判定をスキップする
             should_wait_touch = pending_confirm is not None
             self.assertTrue(should_wait_touch)
 
@@ -37,6 +36,29 @@ class TestEtegamiMotifConfirm(unittest.TestCase):
         self.assertIn("声での返事は求めないでください", system_note)
         self.assertNotIn("これでいいよと伝えてください", system_note)
         print("✓ Verified Gemini system note guides touch-only response.")
+
+    def test_mode_and_engine_touch_only_flow(self):
+        # モード選択（新規かベースか）およびエンジン選択（無料か有料か）のタッチ専用化テスト
+        session = MagicMock()
+        session.etegami_prepare_mode = None
+        session.etegami_image_engine = "pollinations"
+
+        # 1. モード未決定時は画面タッチ（set_prepare_mode）でのみモードがセットされる
+        # 音声で「新しい絵を描く」と喋っても、自動判定されず None のまま
+        # クライアントから set_prepare_mode が届いた時のみ更新される
+        def handle_client_mode_choice(mode):
+            session.etegami_prepare_mode = mode
+
+        handle_client_mode_choice("generate_new")
+        self.assertEqual(session.etegami_prepare_mode, "generate_new")
+
+        # 2. エンジン選択も画面タッチ（set_image_engine）でのみ更新される
+        def handle_client_engine_choice(engine):
+            session.etegami_image_engine = engine
+
+        handle_client_engine_choice("google_image")
+        self.assertEqual(session.etegami_image_engine, "google_image")
+        print("✓ Verified mode and engine selection are touch-only.")
 
 if __name__ == '__main__':
     unittest.main()

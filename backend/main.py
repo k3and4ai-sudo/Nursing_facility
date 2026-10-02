@@ -1607,15 +1607,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             db.add_chat_message(user["id"], "ai", clean_text)
             print(f"[Gemini Live Session ({terminal_id})]: Saved complete turn AI text to DB ({len(clean_text)} chars): '{clean_text[:35]}...'")
 
-        # Check if Gemini requested base or new mode in turn text
-        if bool(re.search(r'みまもり[3③]?さん[、,\s]*絵手紙をベースにして', full_text)) or ("絵手紙をベースにして" in full_text):
-            session.etegami_prepare_mode = "asset_base"
-            session.has_resident_requested_etegami = True
-            asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
-        elif bool(re.search(r'みまもり[3③]?さん[、,\s]*新しい画像をベースにして', full_text)) or ("新しい画像をベースにして" in full_text):
-            session.etegami_prepare_mode = "generate_new"
-            session.has_resident_requested_etegami = True
-            asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
+        # Mode decision is strictly handled via user screen touch (set_prepare_mode)
+        # to ensure user intentions and screen display are 100% synchronized.
 
         # Note: Etegami updates are triggered cleanly and directly via resident Whisper STT (check_resident_etegami_trigger).
         # Gemini does not and should not trigger internal commands from AI output.
@@ -1747,11 +1740,33 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             })
 
             # Check if there is a pending motif waiting for engine decision
-            pending = getattr(session, "pending_motif_for_engine_confirm", None)
+            pending = getattr(session, "pending_motif_for_engine_confirm", None) or getattr(session, "pending_motif", None)
             session.pending_motif_for_engine_confirm = None
+            session.pending_motif = None
             if pending:
-                print(f"[Gemini Live Session ({terminal_id})]: Executing pending motif '{pending}' with chosen engine '{eff_engine}'")
-                asyncio.create_task(on_live_etegami_update(pending, ""))
+                print(f"[Gemini Live Session ({terminal_id})]: Presenting motif confirmation for '{pending}' after engine choice")
+                eff_title = f"【手作り絵手紙】{pending}"
+                eff_calligraphy = "心穏やかに 寄り添う日々"
+                session.pending_motif_confirm = {
+                    "motif": pending,
+                    "prompt_en": "",
+                    "title": eff_title,
+                    "calligraphy": eff_calligraphy
+                }
+                await websocket.send_json({
+                    "type": "etegami_motif_confirm_prompt",
+                    "motif": pending,
+                    "title": eff_title,
+                    "calligraphy": eff_calligraphy,
+                    "message": f"『{pending}』で絵手紙を描きますか？"
+                })
+                asyncio.create_task(session.send_system_note(
+                    f"画面に聞き取り内容の確認（『{pending}』）が表示されました。利用者に優しく『聞き取り内容の確認が表示されています。よろしければ画面の「はい」をタッチしてくださいね。描き直すときは「いいえ」をタッチしてくださいね』と音声で案内してください。画面タッチでのみ受け付けるため、声での返事は求めないでください。"
+                ))
+            else:
+                asyncio.create_task(session.send_system_note(
+                    "画像AIの選択が完了しました。利用者に優しく『どんな絵手紙を描きましょうか？』とモチーフを尋ねてください。"
+                ))
         except Exception as e:
             print(f"Error handling etegami engine decision ({terminal_id}): {e}")
 
@@ -1760,20 +1775,27 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             session.etegami_prepare_mode = mode
             print(f"[Gemini Live Session ({terminal_id})]: Etegami prepare mode set to '{mode}'")
             mode_label = "新しい絵を描く" if mode == "generate_new" else "今までの絵をベースにする"
-            asyncio.create_task(session.send_system_note(
-                f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
-            ))
+            
+            # モード選択モーダルを非表示に
+            await websocket.send_json({"type": "etegami_mode_confirm_dismiss"})
+
             if mode == "generate_new":
                 msg = "🎨 みまもりさん：承知しました。新しい絵手紙の作成を準備します"
-                speak = "承知しました。新しい絵手紙ですね。画像の作成には、無料のAIと有料のGoogle Imageのどちらを使いますか？どんな絵を描きましょうか？"
                 # Send engine prompt to client UI
                 await websocket.send_json({
                     "type": "etegami_engine_confirm_prompt",
                     "message": "下絵の作成に有料版（Google Image）を使用しますか？それとも無料AI（Pollinations）にしますか？",
                     "current_engine": getattr(session, "etegami_image_engine", "pollinations")
                 })
+                asyncio.create_task(session.send_system_note(
+                    f"利用者は『{mode_label}』を選択しました。画面に画像AIの選択（無料AI または 有料Google Image）が表示されています。利用者に優しく『無料のAIと有料のGoogle Imageのどちらを使いますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                ))
             else:
                 msg = "🎨 みまもりさん：承知しました。絵手紙をベースにする準備をします"
+                asyncio.create_task(session.send_system_note(
+                    f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者に優しく『どんな絵手紙にしましょうか？』とモチーフを聞き取ってください。"
+                ))
+
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
                 "action": "etegami_prepared",
@@ -2253,12 +2275,19 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             elif getattr(session, "is_etegami_visible", False) and getattr(session, "current_etegami_motif", ""):
                 detected_motif = session.current_etegami_motif
 
-            # Guard: If mode is not yet decided, stash detected motif and wait for resident's mode decision
+            # Guard: If mode is not yet decided, stash detected motif and prompt resident for touch mode decision
             if not getattr(session, "etegami_prepare_mode", None):
                 if detected_motif:
                     print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Stashed motif '{detected_motif}' pending base-mode decision.")
                     session.pending_motif = detected_motif
-                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without mode decision - waiting for resident to answer base question.")
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without mode decision - presenting mode modal.")
+                await websocket.send_json({"type": "etegami_mode_confirm_prompt"})
+                try:
+                    asyncio.create_task(session.send_system_note(
+                        "利用者が絵手紙作成を希望しました。画面にモード確認画面（『今までの絵をベースにする』『新しく描く』）が表示されています。利用者に優しく『今までの絵をベースにしますか？それとも新しく描きますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                    ))
+                except Exception as e:
+                    pass
                 return
 
             # 聞き取り完了：聞き取り中バッジをOFFにする
@@ -2492,6 +2521,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         if etegami_stt_intent == "creation_request":
             session.has_resident_requested_etegami = True
             print(f"[Whisper STT ({terminal_id})]: Resident requested etegami creation (session flag set): '{transcribed_text}'")
+            if not getattr(session, "etegami_prepare_mode", None):
+                asyncio.create_task(websocket.send_json({"type": "etegami_mode_confirm_prompt"}))
+                try:
+                    asyncio.create_task(session.send_system_note(
+                        "利用者が絵手紙の作成を希望しました。画面にモード確認画面（『今までの絵をベースにする』『新しく描く』）が表示されています。利用者に優しく『今までの絵をベースにしますか？それとも新しく描きますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                    ))
+                except Exception as e:
+                    pass
         elif etegami_stt_intent is True:
             print(f"[Whisper STT ({terminal_id})]: Voice triggered Show Etegami Card: '{transcribed_text}'")
             asyncio.create_task(on_live_etegami_visibility(True))
@@ -2499,66 +2536,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Whisper STT ({terminal_id})]: Voice triggered Hide Etegami Card: '{transcribed_text}'")
             asyncio.create_task(on_live_etegami_visibility(False))
 
-        # Check for resident's answer to "今まで作った絵手紙をベースにしますか？それとも新しく描きますか？" directly from Whisper STT
-        clean_ans = transcribed_text.replace(" ", "").replace("、", "").replace("。", "")
-        mode_just_decided = False
-        if getattr(session, "has_resident_requested_etegami", False) and not getattr(session, "etegami_prepare_mode", None):
-            is_new_choice = any(w in clean_ans for w in [
-                "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵", "新規", "新柄",
-                "新しいの", "新しい絵", "新しく描く", "新しく描きたい", "新しい絵を描く", "いいえ"
-            ])
-            is_base_choice = any(w in clean_ans for w in [
-                "はい", "うん", "そうして", "そう", "ベースに", "ベースで", "ベース", "前ので", "前のでいい",
-                "今までの", "今までので", "前回の絵", "前の絵", "今までの絵", "ベースの絵"
-            ])
-            if is_new_choice:
-                print(f"[Whisper STT ({terminal_id})]: Detected resident chose NEW etegami mode ('{transcribed_text}')")
-                session.etegami_prepare_mode = "generate_new"
-                mode_just_decided = True
-                asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
-            elif is_base_choice:
-                print(f"[Whisper STT ({terminal_id})]: Detected resident chose BASE etegami mode ('{transcribed_text}')")
-                session.etegami_prepare_mode = "asset_base"
-                mode_just_decided = True
-                asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
-
-            if mode_just_decided:
-                mode_label = "新しい絵を描く" if session.etegami_prepare_mode == "generate_new" else "今までの絵をベースにする"
-                asyncio.create_task(session.send_system_note(
-                    f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
-                ))
-                stashed = getattr(session, "pending_motif", "")
-                session.pending_motif = None
-                if stashed:
-                    print(f"[Whisper STT ({terminal_id})]: Executing stashed motif '{stashed}' after mode decision")
-                    ack_msg = f"🎨 みまもりさん：承知しました。{stashed}の絵手紙を描きますね。"
-                    asyncio.create_task(websocket.send_json({
-                        "type": "mimamori_acknowledgement",
-                        "action": "etegami_update_start",
-                        "message": ack_msg
-                    }))
-                    asyncio.create_task(on_live_etegami_update(stashed, ""))
-
-        # Check for free vs paid image engine selection directly from Whisper STT
-        engine_just_decided = False
-        is_free_choice = any(w in clean_ans for w in [
-            "無料", "タダ", "ただ", "フリー", "ポリネーション", "無料の", "無料版", "お金かからない", "お金のかからない", "無料がいい", "無料で"
-        ])
-        is_paid_choice = any(w in clean_ans for w in [
-            "有料", "google", "グーグル", "有料で", "有料版", "有料の", "有料がいい", "お金払って", "綺麗な方", "きれいに", "グーグルの"
-        ])
-        if is_free_choice and not is_paid_choice:
-            print(f"[Whisper STT ({terminal_id})]: Detected resident chose FREE engine ('{transcribed_text}')")
-            engine_just_decided = True
-            asyncio.create_task(on_live_etegami_engine_decision("pollinations"))
-        elif is_paid_choice:
-            print(f"[Whisper STT ({terminal_id})]: Detected resident chose PAID engine ('{transcribed_text}')")
-            engine_just_decided = True
-            asyncio.create_task(on_live_etegami_engine_decision("google_image"))
-
-        # Check for resident etegami update trigger from STT text (only if not handling mode or engine decision)
-        if not mode_just_decided and not engine_just_decided:
-            asyncio.create_task(check_resident_etegami_trigger(transcribed_text))
+        # モード選択・エンジン選択は画面タッチのみで決定するため音声判定は廃止
+        asyncio.create_task(check_resident_etegami_trigger(transcribed_text))
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [
@@ -2721,72 +2700,22 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 if user_text:
                     print(f"[Live Session EOS]: Received user text: '{user_text}' (audio chunks: {current_chunks})")
 
-                    # Check for resident's answer to "今まで作った絵手紙をベースにしますか？それとも新しく描きますか？"
-                    clean_ans = user_text.replace(" ", "").replace("、", "").replace("。", "")
-                    mode_just_decided = False
-                    if getattr(session, "has_resident_requested_etegami", False) and not getattr(session, "etegami_prepare_mode", None):
-                        is_new_choice = any(w in clean_ans for w in [
-                            "新しく", "新しい", "ちがう", "違う", "いや", "最初から", "別のに", "別の絵", "新規", "新柄",
-                            "新しいの", "新しい絵", "新しく描く", "新しく描きたい", "新しい絵を描く", "いいえ"
-                        ])
-                        is_base_choice = any(w in clean_ans for w in [
-                            "はい", "うん", "そうして", "そう", "ベースに", "ベースで", "ベース", "前ので", "前のでいい",
-                            "今までの", "今までので", "前回の絵", "前の絵", "今までの絵", "ベースの絵"
-                        ])
-                        if is_new_choice:
-                            print(f"[Live Session EOS ({terminal_id})]: Detected resident chose NEW etegami mode ('{user_text}')")
-                            session.etegami_prepare_mode = "generate_new"
-                            mode_just_decided = True
-                            asyncio.create_task(on_live_etegami_prepare_mode("generate_new"))
-                        elif is_base_choice:
-                            print(f"[Live Session EOS ({terminal_id})]: Detected resident chose BASE etegami mode ('{user_text}')")
-                            session.etegami_prepare_mode = "asset_base"
-                            mode_just_decided = True
-                            asyncio.create_task(on_live_etegami_prepare_mode("asset_base"))
-
-                        if mode_just_decided:
-                            mode_label = "新しい絵を描く" if session.etegami_prepare_mode == "generate_new" else "今までの絵をベースにする"
-                            asyncio.create_task(session.send_system_note(
-                                f"利用者は『{mode_label}』を選択しました。ベース確認は完了しています。「今までの絵をベースにしますか？」の質問を絶対に繰り返さず、利用者が話すモチーフ（犬、花、昔の思い出など）で絵手紙作成を進めてください。"
-                            ))
-                            stashed = getattr(session, "pending_motif", "")
-                            session.pending_motif = None
-                            if stashed:
-                                print(f"[Live Session EOS ({terminal_id})]: Executing stashed motif '{stashed}' after mode decision")
-                                ack_msg = f"🎨 みまもりさん：承知しました。{stashed}の絵手紙を描きますね。"
-                                asyncio.create_task(websocket.send_json({
-                                    "type": "mimamori_acknowledgement",
-                                    "action": "etegami_update_start",
-                                    "message": ack_msg
-                                }))
-                                asyncio.create_task(on_live_etegami_update(stashed, ""))
-
-                    # Check for free vs paid image engine selection directly from user text at EOS
-                    engine_just_decided = False
-                    is_free_choice = any(w in clean_ans for w in [
-                        "無料", "タダ", "ただ", "フリー", "ポリネーション", "無料の", "無料版", "お金かからない", "お金のかからない", "無料がいい", "無料で"
-                    ])
-                    is_paid_choice = any(w in clean_ans for w in [
-                        "有料", "google", "グーグル", "有料で", "有料版", "有料の", "有料がいい", "お金払って", "綺麗な方", "きれいに", "グーグルの"
-                    ])
-                    if is_free_choice and not is_paid_choice:
-                        print(f"[Live Session EOS ({terminal_id})]: Detected resident chose FREE engine ('{user_text}')")
-                        engine_just_decided = True
-                        asyncio.create_task(on_live_etegami_engine_decision("pollinations"))
-                    elif is_paid_choice:
-                        print(f"[Live Session EOS ({terminal_id})]: Detected resident chose PAID engine ('{user_text}')")
-                        engine_just_decided = True
-                        asyncio.create_task(on_live_etegami_engine_decision("google_image"))
-
-                    # Check for resident etegami update trigger from user text (only if not handling mode or engine decision)
-                    if not mode_just_decided and not engine_just_decided:
-                        asyncio.create_task(check_resident_etegami_trigger(user_text))
+                    # モード選択・エンジン選択は画面タッチのみで決定するため音声判定は廃止
+                    asyncio.create_task(check_resident_etegami_trigger(user_text))
 
                     # Check for resident etegami visibility trigger (開く・起動・かきたい / 閉じる) from EOS user text
                     etegami_eos_intent = check_etegami_visibility_intent(user_text)
                     if etegami_eos_intent == "creation_request":
                         session.has_resident_requested_etegami = True
                         print(f"[Live Session EOS ({terminal_id})]: Resident requested etegami creation (session flag set): '{user_text}'")
+                        if not getattr(session, "etegami_prepare_mode", None):
+                            asyncio.create_task(websocket.send_json({"type": "etegami_mode_confirm_prompt"}))
+                            try:
+                                asyncio.create_task(session.send_system_note(
+                                    "利用者が絵手紙の作成を希望しました。画面にモード確認画面（『今までの絵をベースにする』『新しく描く』）が表示されています。利用者に優しく『今までの絵をベースにしますか？それとも新しく描きますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                                ))
+                            except Exception as e:
+                                pass
                     elif etegami_eos_intent is True:
                         print(f"[Live Session EOS ({terminal_id})]: Voice triggered Show Etegami Card: '{user_text}'")
                         asyncio.create_task(on_live_etegami_visibility(True))
@@ -2849,6 +2778,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "active": False,
                     "message": "会話記録停止"
                 })
+
+            elif msg_type == "set_prepare_mode":
+                target_mode = data.get("mode", "generate_new")
+                print(f"[Client Message ({terminal_id})]: UI requested set_prepare_mode -> {target_mode}")
+                asyncio.create_task(on_live_etegami_prepare_mode(target_mode))
 
             elif msg_type == "set_image_engine":
                 target_engine = data.get("engine", "pollinations")

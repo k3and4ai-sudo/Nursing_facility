@@ -370,6 +370,34 @@
             </div>
         </div>
 
+        <!-- 🖌️ 絵手紙モード選択（今までの絵をベースにするか、新しく描くか）確認モーダル -->
+        <div id="etegami-mode-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 20px;">
+            <div class="modal-card" style="text-align: center; padding: 32px 24px; max-width: 580px; width: 95%; border: 4px solid #f59e0b; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(245, 158, 11, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div style="font-size: 3.8rem; margin-bottom: 8px; line-height: 1;">🖼️✨</div>
+                <div style="display: inline-block; background: #fef3c7; color: #b45309; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; margin-bottom: 10px;">絵手紙の描き方</div>
+                <h2 style="color: #92400e; margin-bottom: 10px; font-size: 1.8rem; font-weight: 900;">どちらの絵にしますか？</h2>
+                <p style="font-size: 1.15rem; line-height: 1.6; color: #374151; margin-bottom: 24px; font-weight: 600;">
+                    下のボタンをタッチして選んでください。
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 14px; width: 100%;">
+                    <button id="btn-modal-choose-base" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); display: flex; align-items: center; justify-content: space-between;">
+                        <div style="text-align: left;">
+                            <div style="font-size: 1.25rem;">🖼️ 今までの絵をベースにする</div>
+                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">直前の絵手紙の構図を受け継いで描きます</div>
+                        </div>
+                        <span style="font-size: 1.6rem;">👉</span>
+                    </button>
+                    <button id="btn-modal-choose-new" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
+                        <div style="text-align: left;">
+                            <div style="font-size: 1.25rem;">✨ 新しい絵を描く</div>
+                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">真っ白な色紙から新しい絵を手作りします</div>
+                        </div>
+                        <span style="font-size: 1.6rem;">👉</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- 🎨 画像生成AI エンジン選択（無料 vs 有料）事前確認モーダル -->
         <div id="etegami-engine-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 20px;">
             <div class="modal-card" style="text-align: center; padding: 32px 24px; max-width: 580px; width: 95%; border: 4px solid #10b981; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(16, 185, 129, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
@@ -377,7 +405,7 @@
                 <div style="display: inline-block; background: #ecfdf5; color: #059669; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; margin-bottom: 10px;">画像作成前の有料版確認</div>
                 <h2 style="color: #065f46; margin-bottom: 10px; font-size: 1.8rem; font-weight: 900;">画像生成AIを選んでください</h2>
                 <p style="font-size: 1.15rem; line-height: 1.6; color: #374151; margin-bottom: 24px; font-weight: 600;">
-                    声で「無料」「有料」とお話しいただくか、<br>下のボタンを直接タッチしてください。
+                    下のボタンをタッチして選んでください。
                 </p>
                 <div style="display: flex; flex-direction: column; gap: 14px; width: 100%;">
                     <button id="btn-modal-choose-free" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: space-between;">
@@ -395,6 +423,7 @@
                         <span style="font-size: 1.6rem;">👉</span>
                     </button>
                 </div>
+            </div>
         </div>
 
         <!-- 🖼️ 聞き取り内容確認モーダル（居住者にこれでよいか確認する） -->
