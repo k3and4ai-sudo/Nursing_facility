@@ -686,12 +686,102 @@ def translate_motif_for_etegami_art(motif: str) -> str:
         return " and ".join(english_elements)
     return motif
 
+def extract_etegami_motif_from_speech(
+    speech_text: str,
+    current_motif: str = "",
+    history_texts: Optional[List[str]] = None,
+    api_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    LLM (Ollama Qwen 2.5:7b or Gemini) を用いて、居住者の文字起こし発話および会話文脈から
+    絵手紙の題材・モチーフとなる部分を自然言語で動的に抽出する。
+    固定の単語辞書に依存せず、居住者が語った思い出・風景・情景を柔軟に汲み取る。
+    """
+    if not speech_text or len(speech_text.strip()) < 2:
+        return {"is_motif": False, "motif_ja": "", "prompt_en": "", "title": "", "calligraphy": ""}
+
+    system_instruction = (
+        "あなたは介護施設の高齢者向け「デジタル絵手紙・水彩画作成システム」の専任プロデューサーです。\n"
+        "居住者（高齢者）の自然な発話や会話文脈の中から、絵手紙として描くべき具体的な情景・題材・モチーフを抽出してください。\n\n"
+        "【重要方針：登録単語リストに依存しない自由な抽出】\n"
+        "1. 固定の単語リストに囚われず、居住者が語った思い出・情景・風景・生き物・場所・色・動作を自然に汲み取ってください。\n"
+        "   例:\n"
+        "   - 「座敷の周りの風景を描いてください」 -> motif_ja: \"座敷の周りの風景\", prompt_en: \"A beautiful Japanese watercolor painting of the scenery around the traditional tatami zashiki room with shoji screens, serene garden view, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
+        "   - 「昔、縁側でおばあちゃんと冷たいスイカを食べたんだよ」 -> motif_ja: \"縁側でおばあちゃんと食べたスイカ\", prompt_en: \"A warm nostalgic Japanese watercolor painting of enjoying cold watermelon slices on a wooden engawa porch with grandmother, summer sunlight, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
+        "   - 「座敷の中を走る白い犬」 -> motif_ja: \"座敷を走る白い犬\", prompt_en: \"A cute playful white puppy running across a traditional Japanese tatami room with shoji doors, traditional Etegami style, washi paper, masterpiece\"\n"
+        "   - 「座敷の絵が取り入れられてないです」 -> 前のモチーフ（犬等）があれば結合して: motif_ja: \"座敷と犬の風景\", prompt_en: \"A peaceful Japanese watercolor painting of a friendly puppy dog in a traditional tatami zashiki room with shoji paper screens, traditional Etegami style, masterpiece\"\n\n"
+        "2. 単なる挨拶（「こんにちは」「おはよう」）、接続確認（「聞こえますか」）、予定の質問（「今日の予定は？」）、秘密の指示（「内緒にして」）等の日常会話は必ず is_motif: false としてください。\n\n"
+        "3. 出力形式 (必ず以下の有効なJSONのみを出力してください):\n"
+        "{\n"
+        '  "is_motif": true,\n'
+        '  "motif_ja": "抽出した日本語のモチーフ（3〜20文字程度）",\n'
+        '  "prompt_en": "画像生成AI用の美麗な水彩画英語プロンプト（A beautiful Japanese watercolor painting of ..., traditional Etegami style, pastel wash on washi paper, masterpiece）",\n'
+        '  "title": "【手作り絵手紙】〇〇",\n'
+        '  "calligraphy": "絵手紙に添える温かい筆文字メッセージ（10〜18文字）"\n'
+        "}"
+    )
+
+    ctx_prompt = ""
+    if current_motif:
+        ctx_prompt += f"直前に描かれていたモチーフ: 「{current_motif}」\n"
+    if history_texts:
+        recent = " / ".join(history_texts[-3:])
+        ctx_prompt += f"直近の会話の流れ: 「{recent}」\n"
+
+    user_prompt = f"{ctx_prompt}居住者の発話:\n「{speech_text}」\n\n上記から抽出したJSON:"
+
+    import json
+    import urllib.request
+    try:
+        ollama_payload = {
+            "model": getattr(config, "OLLAMA_MODEL", "qwen2.5:7b"),
+            "prompt": user_prompt,
+            "system": system_instruction,
+            "stream": False,
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 220
+            }
+        }
+        req = urllib.request.Request(
+            f"{config.OLLAMA_URL}/api/generate",
+            data=json.dumps(ollama_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=8.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            raw = data.get("response", "").strip()
+
+        clean_json = raw
+        if "```json" in clean_json:
+            clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in clean_json:
+            clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+        parsed = json.loads(clean_json)
+        if isinstance(parsed, dict) and "is_motif" in parsed:
+            print(f"[LLM Motif Extraction SUCCESS]: speech='{speech_text}' -> motif='{parsed.get('motif_ja')}', is_motif={parsed.get('is_motif')}")
+            return parsed
+    except Exception as e_ollama:
+        print(f"[LLM Motif Extraction Notice]: Ollama inference fallback ({e_ollama}).")
+
+    # Fallback heuristic
+    is_motif = any(k in speech_text for k in ["描いて", "かいて", "絵", "風景", "座敷", "犬", "猫", "花", "山", "庭", "部屋", "思い出", "情景"])
+    return {
+        "is_motif": is_motif,
+        "motif_ja": speech_text[:15],
+        "prompt_en": f"A beautiful Japanese watercolor painting of {speech_text[:20]}, traditional Etegami art style, pastel colors, washi paper",
+        "title": f"【手作り絵手紙】{speech_text[:12]}",
+        "calligraphy": "心あたたまる 日々をあなたへ"
+    }
+
 def generate_new_etegami_artwork(
     motif: str,
     theme_title: str,
     season: str = "autumn",
     user_id: int = 1,
-    engine: str = "pollinations"
+    engine: str = "pollinations",
+    prompt_override: Optional[str] = None
 ) -> str:
     """
     Generates a completely new digital postcard artwork for novel resident memories or topics.
@@ -704,14 +794,16 @@ def generate_new_etegami_artwork(
     timestamp = int(time.time())
     output_filename = f"generated_custom_etegami_{user_id}_{timestamp}.jpg"
 
-    english_motif = translate_motif_for_etegami_art(clean_motif)
-
-    # Construct rich English prompt for Japanese watercolor / Etegami style
-    prompt = (
-        f"A beautiful and peaceful Japanese watercolor painting, traditional Etegami art style. "
-        f"Depicting {english_motif}, gentle natural light, nostalgic serene atmosphere, "
-        f"soft pastel watercolor wash on textured washi paper, calming Japanese aesthetic, high resolution masterpiece."
-    )
+    # Use LLM-extracted dynamic rich English prompt if provided, otherwise construct from translation
+    if prompt_override and len(prompt_override.strip()) > 15:
+        prompt = prompt_override.strip()
+    else:
+        english_motif = translate_motif_for_etegami_art(clean_motif)
+        prompt = (
+            f"A beautiful and peaceful Japanese watercolor painting, traditional Etegami art style. "
+            f"Depicting {english_motif}, gentle natural light, nostalgic serene atmosphere, "
+            f"soft pastel watercolor wash on textured washi paper, calming Japanese aesthetic, high resolution masterpiece."
+        )
 
     is_paid_requested = engine in ["google_image", "paid", "google", "有料"]
 
@@ -1233,7 +1325,10 @@ def modify_or_create_etegami(
     season_hint: Optional[str] = None,
     is_completed: bool = False,
     mode: str = "asset_base",
-    image_engine: str = "pollinations"
+    image_engine: str = "pollinations",
+    custom_prompt_en: Optional[str] = None,
+    custom_title: Optional[str] = None,
+    custom_calligraphy: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Modifies or generates an Etegami card based on resident's conversational requests
@@ -1268,8 +1363,8 @@ def modify_or_create_etegami(
 
     base_source = "custom"
     selected_image = None
-    theme_title = "【手作り絵手紙】心温まるひととき"
-    calligraphy_text = message_hint or "心あたたまる 日々をあなたへ"
+    theme_title = custom_title or "【手作り絵手紙】心温まるひととき"
+    calligraphy_text = custom_calligraphy or message_hint or "心あたたまる 日々をあなたへ"
     stamp_icon = "和"
     season_key = season_hint or get_current_season()
 
@@ -1347,8 +1442,8 @@ def modify_or_create_etegami(
     if mode == "generate_new":
         # Resident chose to create a completely new artwork without using existing base
         target_motif = clean_motif or "心温まるひととき"
-        theme_title = f"【手作り絵手紙】{target_motif}の温もり"
-        calligraphy_text = clean_msg or f"心温まる {target_motif}に 思いを添えて"
+        theme_title = custom_title or f"【手作り絵手紙】{target_motif}"
+        calligraphy_text = custom_calligraphy or clean_msg or f"心温まる {target_motif}に 思いを添えて"
         stamp_icon = "🎨"
         base_source = "ai_generated_new"
         selected_image = generate_new_etegami_artwork(
@@ -1356,7 +1451,8 @@ def modify_or_create_etegami(
             theme_title=theme_title,
             season=season_key,
             user_id=user_id,
-            engine=image_engine
+            engine=image_engine,
+            prompt_override=custom_prompt_en
         )
     elif explicit_motif:
         # Resident requested asset_base, check matching existing presets

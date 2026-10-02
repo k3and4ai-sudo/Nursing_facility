@@ -1787,7 +1787,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         except Exception as e:
             print(f"Error handling etegami prepare mode ({terminal_id}): {e}")
 
-    async def on_live_etegami_update(motif: str, msg: str):
+    async def on_live_etegami_update(
+        motif: str,
+        msg: str = "",
+        custom_prompt_en: str = "",
+        custom_title: str = "",
+        custom_calligraphy: str = ""
+    ):
         # Guard: Resident must have requested etegami in this session
         if not getattr(session, "has_resident_requested_etegami", False):
             print(f"[Gemini Live Session ({terminal_id})]: Blocked on_live_etegami_update - resident has not requested etegami in this session.")
@@ -1872,7 +1878,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     motif_hint=motif,
                     message_hint=msg,
                     mode=curr_mode,
-                    image_engine=curr_engine
+                    image_engine=curr_engine,
+                    custom_prompt_en=custom_prompt_en,
+                    custom_title=custom_title,
+                    custom_calligraphy=custom_calligraphy
                 )
                 # 2. Artwork is now prepared: show Etegami card with the new draft artwork
                 session.is_etegami_visible = True
@@ -1991,7 +2000,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         "直して", "別の絵", "違う絵"
     ]
 
-    def check_resident_etegami_trigger(speech_text: str):
+    async def check_resident_etegami_trigger(speech_text: str):
         if not speech_text:
             return
         
@@ -2022,7 +2031,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             "絵を描いているところ", "絵を描いてるの", "絵描いてる", "描いている途中", "描いてる途中", "描いてますか"
         ])
 
-        # 2. 「更新してください」「絵を更新して」「描き直して」「更新して」「直して」「変えて」等の更新リクエスト
+        # 2. 「更新してください」「絵を更新して」「描き直して」「更新して」「直して」「変えて」等の明示的更新リクエスト
         is_explicit_update_req = any(req in clean for req in [
             "更新してください", "更新してほしい", "更新して欲しい", "更新お願い", "更新おねがい",
             "絵を更新して", "絵更新して", "絵を更新", "絵手紙を更新", "絵手紙更新",
@@ -2075,20 +2084,44 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
         if (time.time() - getattr(session, "last_etegami_update_time", 0.0) < 3.0):
             return
 
-        # 3. 絵についての会話の継続（犬、座敷、小鳥、風景など）の検知
+        # 3. 居住者の自然な会話・文字起こしからLLMでモチーフを動的抽出
+        custom_prompt_en = ""
+        custom_title = ""
+        custom_calligraphy = ""
+        detected_motif = ""
+
+        try:
+            history_turns = [h.get("message", "") for h in getattr(session, "history", [])][-4:]
+            extracted_llm = await asyncio.to_thread(
+                multimedia.extract_etegami_motif_from_speech,
+                speech_text=clean,
+                current_motif=getattr(session, "current_etegami_motif", ""),
+                history_texts=history_turns,
+                api_key=getattr(session, "api_key", None)
+            )
+            if extracted_llm and extracted_llm.get("is_motif") and extracted_llm.get("motif_ja"):
+                detected_motif = extracted_llm.get("motif_ja")
+                custom_prompt_en = extracted_llm.get("prompt_en", "")
+                custom_title = extracted_llm.get("title", "")
+                custom_calligraphy = extracted_llm.get("calligraphy", "")
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: LLM dynamically extracted motif '{detected_motif}' from speech '{speech_text}'")
+        except Exception as e_ext:
+            print(f"[LLM Motif Extraction Error]: {e_ext}")
+
+        # 4. フォールバック：LLMで抽出できなかった場合のルールベース判定
         is_scene_description = (
             getattr(session, "is_etegami_visible", False) or getattr(session, "has_resident_requested_etegami", False)
         ) and any(kw in clean for kw in [
             "犬", "子犬", "座敷", "走り回", "走って", "散歩", "黒板", "机", "先生", "教室", "生徒", "学校", "縁側", "庭", "小鳥", "猫"
         ])
 
-        # モチーフ指定の描画要求（「〇〇を描いて」「〇〇にして」「〇〇の風景も」など）
         has_draw_verb = any(v in clean for v in [
             "描いて", "かいて", "書いて", "描く", "かく", "にして", "変えて", "直して", "作って", "出して", "見せて",
             "風景も", "風景を", "情景も", "情景を", "入れて", "加えて", "取り入れ", "取り入れて", "反映して"
         ])
 
         is_create_or_update = (
+            bool(detected_motif) or
             any(kw in clean for kw in etegami_resident_keywords) or
             ("絵" in clean and any(act in clean for act in [
                 "描きたい", "かきたい", "書きたい", "描く", "かく", "更新", "直して", "変えて", "出して", "作って",
@@ -2103,87 +2136,51 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         if is_create_or_update:
             session.has_resident_requested_etegami = True
-            detected_motif = ""
 
-            # 1. Intelligent Composite Motif Extraction (Zashiki, Running dog, Direction, etc.)
-            has_dog = any(k in clean for k in ["犬", "子犬", "わんこ", "ワンちゃん", "柴犬", "ポチ"]) or ("犬" in getattr(session, "current_etegami_motif", ""))
-            has_zashiki = any(k in clean for k in ["座敷", "和室", "畳", "座席", "ざせき", "ざしき"]) or ("座敷" in getattr(session, "current_etegami_motif", ""))
-            has_run = any(k in clean for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回って", "回る"])
-            has_front = any(k in clean for k in ["こちら", "こっち", "手前", "前", "ほうに", "方に"])
-            has_white = any(k in clean for k in ["白", "しろ", "ホワイト"])
-
-            if has_dog and (has_zashiki or has_run or has_front):
-                if has_front and has_run:
-                    detected_motif = "座敷の中をこちらへ走ってくる犬" if has_zashiki else "こちらに向かって走る犬"
-                elif has_zashiki and has_run:
-                    detected_motif = "座敷を走り回る白い犬" if has_white else "座敷の中を走り回る犬"
-                elif has_zashiki:
-                    detected_motif = "座敷と白い犬" if has_white else "座敷と犬"
-                elif has_run:
-                    detected_motif = "元気に走る犬"
-                elif has_white:
-                    detected_motif = "白い子犬"
-                else:
-                    detected_motif = "子犬"
-
-            # 2. Check specific motif phrase candidates if not already matched
+            # If LLM didn't catch a motif, use keyword heuristic fallback
             if not detected_motif:
-                for motif_cand in [
-                    "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
-                    "座敷の中を走り回る犬", "座敷を走り回る犬", "座敷で走り回る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
-                    "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬",
-                    "こちらに向かって走る犬", "こちらに走る犬", "走ってくる犬", "走る白い犬", "走る子犬", "走る犬",
-                    "座敷と子犬", "座敷と白い犬", "座敷と犬", "座敷の風景", "座敷",
-                    "白い子犬", "白い犬", "子犬", "柴犬", "わんこ", "犬",
-                    "三毛猫", "子猫", "猫", "黒板", "生徒の机", "机", "先生", "教室", "学校",
-                    "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
-                    "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
-                    "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
-                    "桜", "さくら", "花見", "お花見", "朝顔", "風鈴", "向日葵", "ひまわり",
-                    "雪景色", "雪", "椿", "つばき", "コスモス", "秋桜", "紅葉", "もみじ", "富士山", "海", "山"
-                ]:
-                    if motif_cand in clean:
-                        detected_motif = motif_cand
-                        break
-            
-            # Excluded keywords for motif detection (e.g. mode answering keywords, generic words)
-            def is_invalid_motif(cand_text: str) -> bool:
-                if not cand_text or len(cand_text) < 1:
-                    return True
-                exact_banned = [
-                    "絵", "え", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "何か", "なに",
-                    "新しい", "新しく", "新しい絵", "新しいの", "最初から", "別のに",
-                    "前のでいい", "前の絵", "今までの絵", "ベースの絵", "ベース", "画像", "新しい画像"
-                ]
-                if cand_text in exact_banned:
-                    return True
-                contains_banned = [
-                    "新しい", "新しく", "ベース", "前ので", "今まで", "最初から", "聞こえ", "ますか", "です", "たい", "さん"
-                ]
-                return any(b in cand_text for b in contains_banned)
+                has_dog = any(k in clean for k in ["犬", "子犬", "わんこ", "ワンちゃん", "柴犬", "ポチ"]) or ("犬" in getattr(session, "current_etegami_motif", ""))
+                has_zashiki = any(k in clean for k in ["座敷", "和室", "畳", "座席", "ざせき", "ざしき"]) or ("座敷" in getattr(session, "current_etegami_motif", ""))
+                has_run = any(k in clean for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回って", "回る"])
+                has_front = any(k in clean for k in ["こちら", "こっち", "手前", "前", "ほうに", "方に"])
+                has_white = any(k in clean for k in ["白", "しろ", "ホワイト"])
 
-            # Dynamic regex extraction: e.g. "〇〇の風景も描いて" -> "〇〇の風景", "〇〇の絵を描きたい" -> "〇〇"
-            if not detected_motif:
-                m_scene = re.search(r'([^\s、。]{2,10}?(?:の風景|の情景|の絵))', clean)
-                if m_scene:
-                    cand = m_scene.group(1).replace("も", "").replace("今日の", "").replace("昔の", "")
-                    if cand.endswith("の絵"):
-                        cand = cand[:-2]
-                    if not is_invalid_motif(cand):
-                        detected_motif = cand
-                else:
-                    m_draw = re.search(r'([^\s、。]{2,10}?)を(?:描|か|書)', clean)
-                    if m_draw:
-                        cand = m_draw.group(1).replace("も", "").replace("今日の", "").replace("昔の", "")
-                        if cand.endswith("の絵") or cand.endswith("の絵手紙"):
-                            cand = cand[:-2] if cand.endswith("の絵") else cand[:-4]
-                        if not is_invalid_motif(cand):
-                            detected_motif = cand
+                if has_dog and (has_zashiki or has_run or has_front):
+                    if has_front and has_run:
+                        detected_motif = "座敷の中をこちらへ走ってくる犬" if has_zashiki else "こちらに向かって走る犬"
+                    elif has_zashiki and has_run:
+                        detected_motif = "座敷を走り回る白い犬" if has_white else "座敷の中を走り回る犬"
+                    elif has_zashiki:
+                        detected_motif = "座敷と白い犬" if has_white else "座敷と犬"
+                    elif has_run:
+                        detected_motif = "元気に走る犬"
+                    elif has_white:
+                        detected_motif = "白い子犬"
+                    else:
+                        detected_motif = "子犬"
+
+                if not detected_motif:
+                    for motif_cand in [
+                        "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
+                        "座敷の中を走り回る犬", "座敷を走り回る犬", "座敷で走り回る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
+                        "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬",
+                        "こちらに向かって走る犬", "こちらに走る犬", "走ってくる犬", "走る白い犬", "走る子犬", "走る犬",
+                        "座敷と子犬", "座敷と白い犬", "座敷と犬", "座敷の風景", "座敷",
+                        "白い子犬", "白い犬", "子犬", "柴犬", "わんこ", "犬",
+                        "三毛猫", "子猫", "猫", "黒板", "生徒の机", "机", "先生", "教室", "学校",
+                        "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー", "珈琲",
+                        "夕焼け", "夕暮れ", "夕日", "夕陽", "縁側", "お茶",
+                        "小鳥", "雀", "すずめ", "ことり", "運動会", "お弁当", "煮物", "昭和",
+                        "桜", "さくら", "花見", "お花見", "朝顔", "風鈴", "向日葵", "ひまわり",
+                        "雪景色", "雪", "椿", "つばき", "コスモス", "秋桜", "紅葉", "もみじ", "富士山", "海", "山"
+                    ]:
+                        if motif_cand in clean:
+                            detected_motif = motif_cand
+                            break
 
             if detected_motif:
                 session.current_etegami_motif = detected_motif
             elif getattr(session, "is_etegami_visible", False) and getattr(session, "current_etegami_motif", ""):
-                # Inherit previous motif only if card is already visible and open
                 detected_motif = session.current_etegami_motif
 
             # Guard: If mode is not yet decided, stash detected motif and wait for resident's mode decision
@@ -2205,7 +2202,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "action": "etegami_update_start",
                     "message": ack_msg
                 }))
-                asyncio.create_task(on_live_etegami_update(eff_motif, ""))
+                asyncio.create_task(on_live_etegami_update(
+                    motif=eff_motif,
+                    msg="",
+                    custom_prompt_en=custom_prompt_en,
+                    custom_title=custom_title,
+                    custom_calligraphy=custom_calligraphy
+                ))
             else:
                 print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Resident requested etegami start without motif in '{speech_text}' - waiting for Gemini base-confirmation question.")
 
@@ -2446,7 +2449,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         # Check for resident etegami update trigger from STT text (only if not handling mode or engine decision)
         if not mode_just_decided and not engine_just_decided:
-            check_resident_etegami_trigger(transcribed_text)
+            asyncio.create_task(check_resident_etegami_trigger(transcribed_text))
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [
@@ -2669,7 +2672,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
                     # Check for resident etegami update trigger from user text (only if not handling mode or engine decision)
                     if not mode_just_decided and not engine_just_decided:
-                        check_resident_etegami_trigger(user_text)
+                        asyncio.create_task(check_resident_etegami_trigger(user_text))
 
                     # Check for resident etegami visibility trigger (開く・起動・かきたい / 閉じる) from EOS user text
                     etegami_eos_intent = check_etegami_visibility_intent(user_text)
