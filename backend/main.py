@@ -1959,6 +1959,14 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "action": "etegami_update_start",
                 "message": ack_msg
             })
+            # 🎙️ ジェミナイへも絵手紙作成開始を優しく案内するよう通知
+            try:
+                asyncio.create_task(session.send_system_note(
+                    f"利用者が絵手紙（『{eff_motif}』）の作成を決定しました。現在AIが絵を描いています。『{eff_motif}ですね、心を込めて描きますね』や『少しお待ちくださいね』と優しく短く伝えてください。"
+                ))
+            except Exception as e:
+                print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Error sending system note: {e}")
+
             await on_live_etegami_update(
                 motif=eff_motif,
                 msg="",
@@ -1974,6 +1982,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "action": "etegami_retry_prompt",
                 "message": retry_msg
             })
+            # 🎙️ ジェミナイへ描き直し受付の案内を通知
+            try:
+                asyncio.create_task(session.send_system_note(
+                    "利用者が絵手紙の内容を変更・描き直したいと希望しました。優しく『わかりました、どんな絵を描きましょうか？』と問いかけてください。"
+                ))
+            except Exception as e:
+                print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Error sending system note: {e}")
 
     async def on_live_etegami_complete():
         # Prevent duplicate update if already updating
@@ -2304,6 +2319,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 "action": "etegami_motif_confirm",
                 "message": confirm_msg
             })
+
+            # 🎙️ ジェミナイ（Gemini Live）へ音声案内を指示
+            try:
+                asyncio.create_task(session.send_system_note(
+                    f"画面に聞き取り内容の確認（『{eff_motif}』）が表示されました。利用者に優しく『聞き取り内容の確認が表示されています。これでよろしければ画面の「はい」をタッチするか、「これでいいよ」と伝えてくださいね』と音声で案内してください。"
+                ))
+            except Exception as e:
+                print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Error sending system note to Gemini Live: {e}")
+
             return
         else:
             # モチーフ判定に至らなかった場合は聞き取り中バッジをOFF
