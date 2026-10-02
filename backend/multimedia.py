@@ -191,14 +191,19 @@ def generate_image_with_pollinations(
     import random
     import time
 
-    encoded_prompt = urllib.parse.quote(prompt)
+    # Ensure prompt is pure clean ASCII English without non-ASCII characters to avoid Pollinations 402/500 errors
+    clean_ascii_prompt = "".join([c for c in prompt if ord(c) < 128]).strip()
+    if len(clean_ascii_prompt) < 10:
+        clean_ascii_prompt = "cute fluffy white maltese puppy dog running in tatami room, Japanese watercolor painting"
+    
+    encoded_prompt = urllib.parse.quote(clean_ascii_prompt)
     seed = random.randint(1000, 999999)
 
-    # Strategy: Try default, flux, then turbo with random seed
+    # Strategy: Simple robust parameters first, then width/height, then flux
     candidate_urls = [
-        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&seed={seed}&nologo=true",
-        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=flux&seed={seed}&nologo=true",
-        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&model=turbo&seed={seed}&nologo=true"
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?nologo=true&seed={seed}",
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=600&nologo=true&seed={seed}",
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=flux&nologo=true&seed={seed}"
     ]
 
     for attempt_idx, url in enumerate(candidate_urls):
@@ -206,7 +211,7 @@ def generate_image_with_pollinations(
             resp = requests.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                timeout=30.0
+                timeout=12.0
             )
             if resp.status_code == 200 and len(resp.content) > 1000:
                 img_bytes = resp.content
@@ -226,10 +231,10 @@ def generate_image_with_pollinations(
                 return f"/family/assets/{output_filename}"
             else:
                 print(f"[Pollinations Image Gen Notice]: Attempt {attempt_idx+1} received HTTP {resp.status_code}. Retrying...")
-                time.sleep(1.0)
+                time.sleep(0.5)
         except Exception as e:
             print(f"[Pollinations Image Gen Notice]: Attempt {attempt_idx+1} failed: {e}. Retrying...")
-            time.sleep(1.0)
+            time.sleep(0.5)
 
     print("[Pollinations Image Gen Notice]: All Pollinations attempts failed. Falling back to procedural watercolor.")
     LAST_IMAGE_GEN_NOTICE = {
@@ -333,12 +338,17 @@ def create_artistic_watercolor_image(
     cx, cy = 400, 290  # center for illustration
 
     # Check motif category
-    if any(k in clean_motif for k in ["犬", "子犬", "いぬ", "イヌ", "ワンちゃん", "ポチ", "柴犬", "わんこ", "puppy", "dog"]):
+    is_dog_motif = any(k in clean_motif for k in [
+        "犬", "子犬", "いぬ", "イヌ", "ワンちゃん", "ポチ", "柴犬", "わんこ", "puppy", "dog",
+        "マルチーズ", "まるちーず", "プードル", "チワワ", "ポメラニアン", "ダックス", "パグ", "テリア", "レトリーバー"
+    ])
+    if is_dog_motif:
         # 🐶 Cute Etegami Watercolor Puppy
-        has_zashiki = any(k in clean_motif for k in ["座敷", "和室", "畳", "縁側", "廊下", "部屋"])
-        is_running = any(k in clean_motif for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回る", "回って"])
+        is_maltese = any(k in clean_motif for k in ["マルチーズ", "まるちーず"])
+        has_zashiki = any(k in clean_motif for k in ["座敷", "和室", "畳", "縁側", "廊下", "部屋"]) or is_maltese
+        is_running = any(k in clean_motif for k in ["走", "駆", "かけっこ", "トコトコ", "ダッシュ", "回り", "回る", "回って"]) or is_maltese
         is_front = any(k in clean_motif for k in ["こちら", "こっち", "手前", "前", "向かって"])
-        is_white = ("白" in clean_motif or "しろ" in clean_motif)
+        is_white = ("白" in clean_motif or "しろ" in clean_motif) or is_maltese
 
         if has_zashiki:
             # 畳の敷かれた和室の床（穏やかな若草色・い草色の水彩ウォッシュ）
@@ -352,7 +362,7 @@ def create_artistic_watercolor_image(
             adraw.polygon([(90, 60), (270, 60), (460, 420), (210, 420)], fill=(255, 255, 230, 80))
 
         body_col = (255, 255, 252, 245) if is_white else (238, 198, 140, 235)
-        ear_col = (242, 222, 202, 235) if is_white else (210, 160, 95, 245)
+        ear_col = (248, 246, 240, 240) if is_maltese else ((242, 222, 202, 235) if is_white else (210, 160, 95, 245))
 
         if is_front and is_running:
             # 🐕 1. 正面からこちらへ元気に駆けてくる躍動ポーズ！
@@ -651,9 +661,20 @@ def translate_motif_for_etegami_art(motif: str) -> str:
 
     # 1. 複合パターンの優先判定（座敷・和室・畳 × 犬・走る・風景）
     is_room = any(z in m for z in ["座敷", "雑式", "雑色", "和室", "畳", "部屋"])
-    is_dog = any(d in m for d in ["犬", "子犬", "わんこ", "柴犬"])
-    is_run = any(r in m for r in ["走", "駆", "かけっこ", "回り", "回る"])
-    is_white = any(w in m for w in ["白", "しろ", "ホワイト"])
+    is_maltese = any(mal in m for mal in ["マルチーズ", "まるちーず"])
+    is_dog = any(d in m for d in [
+        "犬", "子犬", "わんこ", "柴犬", "マルチーズ", "まるちーず", "プードル", "チワワ", "ポメラニアン", "ダックス"
+    ])
+    is_run = any(r in m for r in ["走", "駆", "かけっこ", "回り", "回る", "ダッシュ"])
+    is_white = any(w in m for w in ["白", "しろ", "ホワイト"]) or is_maltese
+
+    if is_maltese:
+        dog_desc = "cute fluffy white Maltese puppy dog"
+        # マルチーズが走る場合は座敷や和室との相性が抜群
+        if is_room or is_run:
+            return f"{dog_desc} running cheerfully across a traditional Japanese tatami zashiki room with shoji screens"
+        else:
+            return f"{dog_desc} sitting happily in a sunny Japanese room"
 
     if is_room and is_dog:
         dog_desc = "white playful puppy dog" if is_white else "cute friendly puppy dog"
@@ -661,6 +682,9 @@ def translate_motif_for_etegami_art(motif: str) -> str:
             return f"{dog_desc} running cheerfully across a traditional Japanese tatami zashiki room with shoji paper sliding doors and warm wooden architecture"
         else:
             return f"{dog_desc} sitting peacefully inside a traditional Japanese tatami zashiki room with sliding shoji doors and garden view"
+    elif is_dog and is_run:
+        dog_desc = "white playful puppy dog" if is_white else "cute friendly puppy dog"
+        return f"{dog_desc} running cheerfully across a traditional Japanese tatami room with green tatami mats"
     elif is_room and is_run:
         return "cheerful playful footsteps and warmth inside a traditional Japanese tatami zashiki room with sliding shoji doors"
     elif is_room:
@@ -668,6 +692,8 @@ def translate_motif_for_etegami_art(motif: str) -> str:
 
     # 2. 単独キーワードの翻訳テーブル
     translations = [
+        ("マルチーズ", "cute fluffy white Maltese puppy dog"),
+        ("まるちーず", "cute fluffy white Maltese puppy dog"),
         ("座敷の風景", "scenic traditional Japanese tatami zashiki room with sliding shoji paper screens, tatami mats, and wooden architecture"),
         ("座敷", "traditional Japanese tatami zashiki room with shoji screens and tatami mats"),
         ("雑式", "traditional Japanese tatami zashiki room with shoji screens and tatami mats"),
