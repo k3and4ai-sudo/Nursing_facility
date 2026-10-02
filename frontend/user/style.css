@@ -3323,6 +3323,289 @@ body.simple-mode .schedule-time-badge {
     }
 }
 
+/* ==========================================================================
+   🖼️ 絵手紙 選択・確認モーダル（スマホ・全画面最適化）
+   ========================================================================== */
+.etegami-select-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    background: rgba(15, 23, 42, 0.85) !important;
+    backdrop-filter: blur(14px) !important;
+    z-index: 10002 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px 12px !important;
+    box-sizing: border-box !important;
+    overflow-y: auto !important;
+}
+
+.etegami-select-card {
+    text-align: center !important;
+    padding: 24px 20px !important;
+    max-width: 520px !important;
+    width: 100% !important;
+    max-height: 94vh !important;
+    max-height: 94dvh !important;
+    background: #ffffff !important;
+    border-radius: 28px !important;
+    animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    margin: auto !important;
+    gap: 0 !important;
+}
+
+.etegami-modal-header {
+    flex-shrink: 0;
+    margin-bottom: 12px;
+}
+
+.etegami-modal-icon {
+    font-size: 2.8rem;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.etegami-modal-badge {
+    display: inline-block;
+    padding: 3px 14px;
+    border-radius: 20px;
+    font-weight: 800;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+.badge-info {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.badge-warning {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badge-success {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.etegami-modal-title {
+    font-size: 1.45rem;
+    font-weight: 900;
+    margin: 0 0 6px 0;
+    line-height: 1.3;
+}
+
+.etegami-modal-desc {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #475569;
+    margin: 0 0 8px 0;
+    font-weight: 600;
+}
+
+.etegami-modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    margin-bottom: 12px;
+    padding-right: 2px;
+}
+
+.motif-detail-box {
+    background: #f8fafc;
+    border: 2px dashed #94a3b8;
+    border-radius: 18px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.motif-field-label {
+    font-size: 0.9rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.motif-field-value {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #0f172a;
+    padding: 6px 10px;
+    background: #ffffff;
+    border-radius: 10px;
+    border-left: 5px solid #0284c7;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    word-break: break-word;
+}
+
+.motif-touch-banner {
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+    border-radius: 14px;
+    padding: 6px 12px;
+    font-size: 0.88rem;
+    color: #166534;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+/* 常に画面内に固定表示されるフッターボタン */
+.etegami-modal-buttons-row {
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    margin-top: auto;
+}
+
+.etegami-modal-buttons-vertical {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-top: auto;
+}
+
+.motif-btn-secondary {
+    flex: 1;
+    min-height: 56px;
+    padding: 8px 12px;
+    background: #f1f5f9;
+    border: 2px solid #cbd5e1;
+    border-radius: 18px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #475569;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: all 0.2s;
+}
+
+.motif-btn-primary {
+    flex: 1.4;
+    min-height: 56px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+    border-radius: 18px;
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
+    transition: all 0.2s;
+}
+
+.motif-btn-secondary .btn-icon,
+.motif-btn-primary .btn-icon {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+/* モバイル画面（幅640px以下、または高さ720px以下）調整 */
+@media screen and (max-width: 640px), screen and (max-height: 720px) {
+    .etegami-select-modal {
+        padding: 8px !important;
+        align-items: center !important;
+    }
+
+    .etegami-select-card {
+        padding: 14px 12px !important;
+        border-radius: 20px !important;
+        max-height: 96dvh !important;
+    }
+
+    .etegami-modal-header {
+        margin-bottom: 8px !important;
+    }
+
+    .etegami-modal-icon {
+        font-size: 2.2rem !important;
+        margin-bottom: 4px !important;
+    }
+
+    .etegami-modal-badge {
+        font-size: 0.8rem !important;
+        padding: 2px 10px !important;
+        margin-bottom: 4px !important;
+    }
+
+    .etegami-modal-title {
+        font-size: 1.25rem !important;
+        margin-bottom: 4px !important;
+    }
+
+    .etegami-modal-desc {
+        font-size: 0.85rem !important;
+        margin-bottom: 4px !important;
+    }
+
+    .motif-detail-box {
+        padding: 8px 10px !important;
+        margin-bottom: 6px !important;
+        border-radius: 14px !important;
+    }
+
+    .motif-field-label {
+        font-size: 0.8rem !important;
+    }
+
+    .motif-field-value {
+        font-size: 1.05rem !important;
+        padding: 4px 8px !important;
+    }
+
+    .motif-touch-banner {
+        font-size: 0.78rem !important;
+        padding: 4px 8px !important;
+    }
+
+    .motif-btn-secondary,
+    .motif-btn-primary {
+        min-height: 50px !important;
+        padding: 6px 10px !important;
+        border-radius: 14px !important;
+    }
+
+    .motif-btn-secondary {
+        font-size: 0.95rem !important;
+    }
+
+    .motif-btn-primary {
+        font-size: 1.05rem !important;
+    }
+
+    .motif-btn-secondary .btn-icon,
+    .motif-btn-primary .btn-icon {
+        font-size: 1.1rem !important;
+    }
+}
+
+
 
 
 

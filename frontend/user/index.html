@@ -371,102 +371,109 @@
         </div>
 
         <!-- 🖌️ 絵手紙モード選択（今までの絵をベースにするか、新しく描くか）確認モーダル -->
-        <div id="etegami-mode-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card" style="text-align: center; padding: 32px 24px; max-width: 580px; width: 95%; border: 4px solid #f59e0b; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(245, 158, 11, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div style="font-size: 3.8rem; margin-bottom: 8px; line-height: 1;">🖼️✨</div>
-                <div style="display: inline-block; background: #fef3c7; color: #b45309; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; margin-bottom: 10px;">絵手紙の描き方</div>
-                <h2 style="color: #92400e; margin-bottom: 10px; font-size: 1.8rem; font-weight: 900;">どちらの絵にしますか？</h2>
-                <p style="font-size: 1.15rem; line-height: 1.6; color: #374151; margin-bottom: 24px; font-weight: 600;">
-                    下のボタンをタッチして選んでください。
-                </p>
-                <div style="display: flex; flex-direction: column; gap: 14px; width: 100%;">
-                    <button id="btn-modal-choose-base" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); display: flex; align-items: center; justify-content: space-between;">
+        <div id="etegami-mode-confirm-modal" class="modal-overlay etegami-select-modal hidden">
+            <div class="modal-card etegami-select-card" style="border: 4px solid #f59e0b; box-shadow: 0 20px 50px rgba(245, 158, 11, 0.35);">
+                <div class="etegami-modal-header">
+                    <div class="etegami-modal-icon">🖼️✨</div>
+                    <div class="etegami-modal-badge badge-warning">絵手紙の描き方</div>
+                    <h2 class="etegami-modal-title" style="color: #92400e;">どちらの絵にしますか？</h2>
+                    <p class="etegami-modal-desc">
+                        下のボタンをタッチして選んでください。
+                    </p>
+                </div>
+                <div class="etegami-modal-buttons-vertical">
+                    <button id="btn-modal-choose-base" class="modal-btn" type="button" style="min-height: 64px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; padding: 10px 16px; border-radius: 18px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35); display: flex; align-items: center; justify-content: space-between;">
                         <div style="text-align: left;">
-                            <div style="font-size: 1.25rem;">🖼️ 今までの絵をベースにする</div>
-                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">直前の絵手紙の構図を受け継いで描きます</div>
+                            <div style="font-size: 1.15rem;">🖼️ 今までの絵をベースにする</div>
+                            <div style="font-size: 0.8rem; font-weight: 500; opacity: 0.95;">直前の絵手紙の構図を受け継いで描きます</div>
                         </div>
-                        <span style="font-size: 1.6rem;">👉</span>
+                        <span style="font-size: 1.4rem;">👉</span>
                     </button>
-                    <button id="btn-modal-choose-new" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
+                    <button id="btn-modal-choose-new" class="modal-btn" type="button" style="min-height: 64px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; padding: 10px 16px; border-radius: 18px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
                         <div style="text-align: left;">
-                            <div style="font-size: 1.25rem;">✨ 新しい絵を描く</div>
-                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">真っ白な色紙から新しい絵を手作りします</div>
+                            <div style="font-size: 1.15rem;">✨ 新しい絵を描く</div>
+                            <div style="font-size: 0.8rem; font-weight: 500; opacity: 0.95;">真っ白な色紙から新しい絵を手作りします</div>
                         </div>
-                        <span style="font-size: 1.6rem;">👉</span>
+                        <span style="font-size: 1.4rem;">👉</span>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- 🎨 画像生成AI エンジン選択（無料 vs 有料）事前確認モーダル -->
-        <div id="etegami-engine-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card" style="text-align: center; padding: 32px 24px; max-width: 580px; width: 95%; border: 4px solid #10b981; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(16, 185, 129, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div style="font-size: 3.8rem; margin-bottom: 8px; line-height: 1;">🎨</div>
-                <div style="display: inline-block; background: #ecfdf5; color: #059669; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; margin-bottom: 10px;">画像作成前の有料版確認</div>
-                <h2 style="color: #065f46; margin-bottom: 10px; font-size: 1.8rem; font-weight: 900;">画像生成AIを選んでください</h2>
-                <p style="font-size: 1.15rem; line-height: 1.6; color: #374151; margin-bottom: 24px; font-weight: 600;">
-                    下のボタンをタッチして選んでください。
-                </p>
-                <div style="display: flex; flex-direction: column; gap: 14px; width: 100%;">
-                    <button id="btn-modal-choose-free" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: space-between;">
+        <div id="etegami-engine-confirm-modal" class="modal-overlay etegami-select-modal hidden">
+            <div class="modal-card etegami-select-card" style="border: 4px solid #10b981; box-shadow: 0 20px 50px rgba(16, 185, 129, 0.35);">
+                <div class="etegami-modal-header">
+                    <div class="etegami-modal-icon">🎨</div>
+                    <div class="etegami-modal-badge badge-success">画像作成前の有料版確認</div>
+                    <h2 class="etegami-modal-title" style="color: #065f46;">画像生成AIを選んでください</h2>
+                    <p class="etegami-modal-desc">
+                        下のボタンをタッチして選んでください。
+                    </p>
+                </div>
+                <div class="etegami-modal-buttons-vertical">
+                    <button id="btn-modal-choose-free" class="modal-btn" type="button" style="min-height: 64px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; padding: 10px 16px; border-radius: 18px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: space-between;">
                         <div style="text-align: left;">
-                            <div style="font-size: 1.25rem;">🟢 無料 AI (Pollinations) で描く</div>
-                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">完全無料・登録不要・素早い水彩画</div>
+                            <div style="font-size: 1.15rem;">🟢 無料 AI (Pollinations) で描く</div>
+                            <div style="font-size: 0.8rem; font-weight: 500; opacity: 0.95;">完全無料・登録不要・素早い水彩画</div>
                         </div>
-                        <span style="font-size: 1.6rem;">👉</span>
+                        <span style="font-size: 1.4rem;">👉</span>
                     </button>
-                    <button id="btn-modal-choose-paid" class="modal-btn" type="button" style="min-height: 76px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.2rem; font-weight: 900; padding: 12px 20px; border-radius: 20px; border: none; cursor: pointer; box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
+                    <button id="btn-modal-choose-paid" class="modal-btn" type="button" style="min-height: 64px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-size: 1.15rem; font-weight: 900; padding: 10px 16px; border-radius: 18px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35); display: flex; align-items: center; justify-content: space-between;">
                         <div style="text-align: left;">
-                            <div style="font-size: 1.25rem;">🔵 Google Image (有料版) で描く</div>
-                            <div style="font-size: 0.85rem; font-weight: 500; opacity: 0.95;">Google AI Studio クラウド生成 (有料枠)</div>
+                            <div style="font-size: 1.15rem;">🔵 Google Image (有料版) で描く</div>
+                            <div style="font-size: 0.8rem; font-weight: 500; opacity: 0.95;">Google AI Studio クラウド生成 (有料枠)</div>
                         </div>
-                        <span style="font-size: 1.6rem;">👉</span>
+                        <span style="font-size: 1.4rem;">👉</span>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- 🖼️ 聞き取り内容確認モーダル（居住者にこれでよいか確認する） -->
-        <div id="etegami-motif-confirm-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(14px); z-index: 10002; display: flex; align-items: center; justify-content: center; padding: 20px;">
-            <div class="modal-card" style="text-align: center; padding: 32px 26px; max-width: 580px; width: 95%; border: 4px solid #0284c7; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(2, 132, 199, 0.35); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
-                <div style="font-size: 3.5rem; margin-bottom: 6px; line-height: 1;">👂🎨</div>
-                <div style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 16px; border-radius: 20px; font-weight: 800; font-size: 1rem; margin-bottom: 12px;">聞き取り内容の確認</div>
-                <h2 style="color: #0c4a6e; margin-bottom: 12px; font-size: 1.75rem; font-weight: 900;">この内容で絵を描きますか？</h2>
-                <p style="font-size: 1.1rem; line-height: 1.5; color: #475569; margin-bottom: 20px; font-weight: 600;">
-                    聞き取った内容をご確認ください。よろしければ下のボタンをタッチしてください。
-                </p>
+        <div id="etegami-motif-confirm-modal" class="modal-overlay etegami-select-modal hidden">
+            <div class="modal-card etegami-select-card" style="border: 4px solid #0284c7; box-shadow: 0 20px 50px rgba(2, 132, 199, 0.35);">
+                <!-- 固定ヘッダー -->
+                <div class="etegami-modal-header">
+                    <div class="etegami-modal-icon">👂🎨</div>
+                    <div class="etegami-modal-badge badge-info">聞き取り内容の確認</div>
+                    <h2 class="etegami-modal-title" style="color: #0c4a6e;">この内容で絵を描きますか？</h2>
+                </div>
 
-                <!-- 聞き取り内容詳細カード -->
-                <div style="background: #f8fafc; border: 2px dashed #94a3b8; border-radius: 22px; padding: 20px 22px; margin-bottom: 22px; text-align: left;">
-                    <div style="font-size: 0.95rem; font-weight: 800; color: #0284c7; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                        <span>🖌️</span><span>描く題材（モチーフ）：</span>
-                    </div>
-                    <div id="motif-confirm-target" style="font-size: 1.45rem; font-weight: 900; color: #0f172a; margin-bottom: 16px; padding: 8px 12px; background: #ffffff; border-radius: 12px; border-left: 5px solid #0284c7; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                        座敷を走る白いマルチーズ
+                <!-- スクロール可能なコンテンツエリア -->
+                <div class="etegami-modal-body">
+                    <!-- 聞き取り内容詳細カード -->
+                    <div class="motif-detail-box">
+                        <div class="motif-field-label" style="color: #0284c7;">
+                            <span>🖌️</span><span>描く題材（モチーフ）：</span>
+                        </div>
+                        <div id="motif-confirm-target" class="motif-field-value" style="border-left-color: #0284c7;">
+                            座敷を走る白いマルチーズ
+                        </div>
+
+                        <div class="motif-field-label" style="color: #d97706; margin-top: 8px;">
+                            <span>✍️</span><span>添える筆文字：</span>
+                        </div>
+                        <div id="motif-confirm-calligraphy" class="motif-field-value" style="border-left-color: #d97706;">
+                            元気に 駆け回る姿に… 笑顔咲く
+                        </div>
                     </div>
 
-                    <div style="font-size: 0.95rem; font-weight: 800; color: #d97706; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                        <span>✍️</span><span>添える筆文字：</span>
-                    </div>
-                    <div id="motif-confirm-calligraphy" style="font-size: 1.2rem; font-weight: 700; color: #334155; padding: 8px 12px; background: #ffffff; border-radius: 12px; border-left: 5px solid #d97706; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                        元気に 駆け回る姿に… 笑顔咲く
+                    <!-- タッチ案内バナー -->
+                    <div class="motif-touch-banner">
+                        <span style="font-size: 1.15rem;">👆</span>
+                        <span>下のボタンをタッチして選んでください</span>
                     </div>
                 </div>
 
-                <!-- タッチ案内バナー -->
-                <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 16px; padding: 10px 16px; margin-bottom: 22px; font-size: 1rem; color: #166534; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <span style="font-size: 1.3rem;">👆</span>
-                    <span>画面の「これで描く (はい)」または「直す (いいえ)」をタッチしてください</span>
-                </div>
-
-                <!-- 選択ボタン -->
-                <div style="display: flex; gap: 14px; width: 100%;">
-                    <button id="btn-motif-confirm-retry" class="modal-btn" type="button" style="flex: 1; min-height: 72px; padding: 12px 16px; background: #f1f5f9; border: 2.5px solid #cbd5e1; border-radius: 20px; font-size: 1.15rem; font-weight: 800; color: #475569; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: all 0.2s;">
-                        <span style="font-size: 1.5rem;">✏️</span>
+                <!-- 常に画面内に収まる固定フッターボタン -->
+                <div class="etegami-modal-buttons-row">
+                    <button id="btn-motif-confirm-retry" class="modal-btn motif-btn-secondary" type="button">
+                        <span class="btn-icon">✏️</span>
                         <span>直す (いいえ)</span>
                     </button>
-                    <button id="btn-motif-confirm-ok" class="modal-btn" type="button" style="flex: 1.5; min-height: 72px; padding: 12px 18px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 20px; font-size: 1.25rem; font-weight: 900; color: #ffffff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); transition: all 0.2s;">
-                        <span style="font-size: 1.5rem;">🎨</span>
+                    <button id="btn-motif-confirm-ok" class="modal-btn motif-btn-primary" type="button">
+                        <span class="btn-icon">🎨</span>
                         <span>これで描く (はい)</span>
                     </button>
                 </div>
