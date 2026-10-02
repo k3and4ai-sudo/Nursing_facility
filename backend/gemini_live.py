@@ -211,6 +211,11 @@ class GeminiLiveSession:
         self.last_etegami_update_time = 0.0
         self.has_resident_requested_etegami = False
         self.has_resident_spoken_in_session = False
+        # Incremental etegami drawing addition and details accumulation
+        self.etegami_base_motif = ""
+        self.etegami_accumulated_details = []
+        self.etegami_seed = None
+        self.etegami_last_prompt_en = ""
         self.history = history or []
         self.schedules = schedules or []
         self.ws = None

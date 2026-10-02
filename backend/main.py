@@ -1747,9 +1747,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 print(f"[Gemini Live Session ({terminal_id})]: Presenting motif confirmation for '{pending}' after engine choice")
                 eff_title = f"【手作り絵手紙】{pending}"
                 eff_calligraphy = "心穏やかに 寄り添う日々"
+                rich_prompt_en = multimedia.build_rich_etegami_prompt(motif_ja=pending)
                 session.pending_motif_confirm = {
                     "motif": pending,
-                    "prompt_en": "",
+                    "prompt_en": rich_prompt_en,
                     "title": eff_title,
                     "calligraphy": eff_calligraphy
                 }
@@ -1886,6 +1887,18 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "engine_label": engine_label
                 })
 
+                # Maintain seed and accumulated details for incremental drawing additions
+                if getattr(session, "etegami_seed", None) is None:
+                    session.etegami_seed = random.randint(10000, 999999)
+                eff_seed = session.etegami_seed
+                eff_details = getattr(session, "etegami_accumulated_details", [])
+
+                if not custom_prompt_en:
+                    custom_prompt_en = multimedia.build_rich_etegami_prompt(
+                        motif_ja=motif,
+                        details_ja=eff_details
+                    )
+
                 card_info = await asyncio.to_thread(
                     multimedia.modify_or_create_etegami,
                     user_id=user["id"],
@@ -1896,7 +1909,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     image_engine=curr_engine,
                     custom_prompt_en=custom_prompt_en,
                     custom_title=custom_title,
-                    custom_calligraphy=custom_calligraphy
+                    custom_calligraphy=custom_calligraphy,
+                    details_ja=eff_details,
+                    seed=eff_seed
                 )
                 if card_info.get("generation_error") or card_info.get("canceled"):
                     err_msg = card_info.get("error_message") or "画像生成AIでエラーが発生したため、描画を中断しました。"
@@ -1974,7 +1989,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         if confirmed:
             eff_motif = pending.get("motif", "") or getattr(session, "current_etegami_motif", "") or "思い出の情景"
-            print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Confirmed motif '{eff_motif}' - starting artwork update!")
+            if not getattr(session, "etegami_base_motif", ""):
+                session.etegami_base_motif = eff_motif
+            if getattr(session, "etegami_seed", None) is None:
+                session.etegami_seed = random.randint(10000, 999999)
+            print(f"[Etegami Motif Confirm Decision ({terminal_id})]: Confirmed motif '{eff_motif}' (seed={session.etegami_seed}) - starting artwork update!")
             ack_msg = f"🎨 みまもりさん：承知しました。{eff_motif}の絵手紙を描きますね。"
             await websocket.send_json({
                 "type": "mimamori_acknowledgement",
@@ -2270,6 +2289,22 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                             detected_motif = motif_cand
                             break
 
+            # モチーフと追加ディテールの累積・合成（最初の絵への書き加え）
+            base_m = getattr(session, "etegami_base_motif", "")
+            if not base_m:
+                session.etegami_base_motif = detected_motif
+                base_m = detected_motif
+            elif detected_motif and detected_motif != base_m:
+                # 既にベースモチーフがある状態で新しい発話（追加の描写・情景）があった場合
+                details = getattr(session, "etegami_accumulated_details", [])
+                if detected_motif not in details:
+                    details.append(detected_motif)
+                    session.etegami_accumulated_details = details
+                # モチーフ名もベースモチーフと追加要素を合成
+                if base_m not in detected_motif:
+                    detected_motif = f"{detected_motif}の{base_m}"
+                session.current_etegami_motif = detected_motif
+
             if detected_motif:
                 session.current_etegami_motif = detected_motif
             elif getattr(session, "is_etegami_visible", False) and getattr(session, "current_etegami_motif", ""):
@@ -2297,8 +2332,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             })
 
             eff_motif = detected_motif or getattr(session, "current_etegami_motif", "") or "思い出の情景"
+            eff_details = getattr(session, "etegami_accumulated_details", [])
             eff_title = custom_title or f"【手作り絵手紙】{eff_motif}"
             eff_calligraphy = custom_calligraphy or "心穏やかに 寄り添う日々"
+
+            # 英語プロンプトを合成（日本語文字の削れ防止 & 追加要素の結合）
+            if not custom_prompt_en:
+                custom_prompt_en = multimedia.build_rich_etegami_prompt(
+                    motif_ja=eff_motif,
+                    details_ja=eff_details
+                )
 
             # 💡 【居住者への確認ステップ】：すぐ描かず、聞き取り内容確認画面を表示して保留する
             session.pending_motif_confirm = {
