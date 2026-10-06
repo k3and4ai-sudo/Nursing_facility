@@ -2100,6 +2100,31 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "user_name": user.get("name", "利用者"),
                     "etegami": card_info
                 })
+
+                # 🛑 絵手紙セッションの完了・状態リセット
+                session.has_resident_requested_etegami = False
+                session.etegami_prepare_mode = None
+                session.has_confirmed_image_engine = False
+                session.is_etegami_modal_selecting = False
+                session.is_awaiting_etegami_retry = False
+                session.current_etegami_motif = ""
+                session.etegami_base_motif = ""
+                session.etegami_accumulated_details = []
+                session.pending_motif = None
+                session.pending_motif_confirm = None
+                session.pending_artwork_confirm = None
+                session.pending_save_confirm = None
+                session.is_etegami_visible = False
+
+                # 🎙️ Gemini Liveへ絵手紙完了と通常会話への復帰を明確に指示
+                try:
+                    if session.is_connected:
+                        asyncio.create_task(session.send_system_note(
+                            "絵手紙が完成し、保存・記録されました。絵手紙の作成や聞き取りは完全に終了しました。利用者に『素敵な絵手紙ができましたね！ご家族にも届けておきますね』と温かく労い、今後は絵手紙のモチーフや絵の質問を一切せず、通常の日常会話に戻ってください。"
+                        ))
+                except Exception as e_sn:
+                    print(f"Error sending completion system note ({terminal_id}): {e_sn}")
+
             except Exception as e:
                 print(f"Error handling live etegami completion ({terminal_id}): {e}")
                 await websocket.send_json({

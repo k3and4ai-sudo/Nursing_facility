@@ -583,6 +583,21 @@ document.addEventListener("DOMContentLoaded", () => {
             isModalOpen = false;
 
             setEtegamiStatusBadge("completed", "💮 完成・保存済み");
+
+            // 終了処理：次回の絵手紙開始に向けてモード選択状態等をリセット
+            hasConfirmedEtegamiModeAndEngine = false;
+            currentEtegamiMotif = "";
+            currentEtegamiTranscript = "";
+
+            // 完成・保存の余韻を表示した後、色紙カードを閉じる
+            if (window._etegamiCompletedCloseTimer) clearTimeout(window._etegamiCompletedCloseTimer);
+            window._etegamiCompletedCloseTimer = setTimeout(() => {
+                if (currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED) {
+                    console.log("[Etegami Card]: Auto closing card after completion display.");
+                    hideEtegamiCard();
+                    currentEtegamiPhase = ETEGAMI_PHASE.IDLE;
+                }
+            }, 6000);
         } else {
             // IDLE
             if (listeningPanel) listeningPanel.classList.add("hidden");
@@ -610,6 +625,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // 👂 聞き取りテキスト更新ヘルパー
     function updateEtegamiListeningText(text) {
         if (!text) return;
+        // 完成・保存済み、または聞き取りフェーズでない時は更新しない
+        if (currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED) {
+            return;
+        }
         currentEtegamiTranscript = text.trim();
         const listeningTextEl = document.getElementById("etegami-listening-text");
         if (listeningTextEl) {
@@ -1996,7 +2015,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[LiveWS]: Received etegami_listening ->", data.listening);
                 const listeningBadge = document.getElementById("etegami-listening-badge");
                 if (listeningBadge) {
-                    if (data.listening) {
+                    if (data.listening && currentEtegamiPhase !== ETEGAMI_PHASE.COMPLETED) {
                         listeningBadge.classList.remove("hidden");
                     } else {
                         listeningBadge.classList.add("hidden");
