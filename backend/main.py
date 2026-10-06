@@ -1936,6 +1936,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
                 # 2. Artwork is now prepared: show Etegami card with the new draft artwork
                 session.is_etegami_visible = True
+                session.pending_artwork_confirm = True
                 await websocket.send_json({
                     "type": "etegami_visibility",
                     "visible": True

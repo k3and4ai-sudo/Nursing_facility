@@ -150,8 +150,8 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("[Etegami Card]: Card shown.");
         updateShowEtegamiBtnVisibility();
 
-        // 🎨 開いた時に未完了なら①聞き取り中フェーズを開始
-        if (typeof setEtegamiPhase === "function" && (currentEtegamiPhase === ETEGAMI_PHASE.IDLE || currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED)) {
+        // 🎨 開いた時に未開始（IDLE）の場合のみ①聞き取り中フェーズを開始
+        if (typeof setEtegamiPhase === "function" && currentEtegamiPhase === ETEGAMI_PHASE.IDLE) {
             setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
         }
     }
@@ -313,6 +313,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let isFirstEtegamiLoad = true;
     let hasActiveSessionGeneration = false;
     let lastGeneratedArtworkData = null;
+    let lastConfirmFinishOpenTime = 0;
+    let lastConfirmContentOpenTime = 0;
 
     // 🎨 絵手紙ステータスバッジの明確な表示更新ヘルパー
     function setEtegamiStatusBadge(status, customText = "") {
@@ -395,8 +397,37 @@ document.addEventListener("DOMContentLoaded", () => {
             if (motifTarget) motifTarget.textContent = motifToConfirm;
             if (calligraphyTarget) calligraphyTarget.textContent = payload.calligraphy || currentEtegamiCalligraphy;
 
-            if (motifConfirmModal) motifConfirmModal.classList.remove("hidden");
+            if (motifConfirmModal) {
+                motifConfirmModal.classList.remove("hidden");
+                try { motifConfirmModal.scrollTop = 0; } catch (e) {}
 
+                const btnOk = document.getElementById("btn-motif-confirm-ok");
+                const btnRetry = document.getElementById("btn-motif-confirm-retry");
+                if (btnOk) {
+                    btnOk.disabled = true;
+                    btnOk.style.opacity = "0.6";
+                    btnOk.style.pointerEvents = "none";
+                }
+                if (btnRetry) {
+                    btnRetry.disabled = true;
+                    btnRetry.style.opacity = "0.6";
+                    btnRetry.style.pointerEvents = "none";
+                }
+                setTimeout(() => {
+                    if (btnOk) {
+                        btnOk.disabled = false;
+                        btnOk.style.opacity = "1";
+                        btnOk.style.pointerEvents = "auto";
+                    }
+                    if (btnRetry) {
+                        btnRetry.disabled = false;
+                        btnRetry.style.opacity = "1";
+                        btnRetry.style.pointerEvents = "auto";
+                    }
+                }, 800);
+            }
+
+            lastConfirmContentOpenTime = Date.now();
             isEtegamiConfirming = true;
             isEtegamiUpdating = false;
             isModalOpen = true;
@@ -463,8 +494,37 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            if (artworkConfirmModal) artworkConfirmModal.classList.remove("hidden");
+            if (artworkConfirmModal) {
+                artworkConfirmModal.classList.remove("hidden");
+                try { artworkConfirmModal.scrollTop = 0; } catch (e) {}
 
+                const btnOk = document.getElementById("btn-artwork-confirm-ok");
+                const btnRetry = document.getElementById("btn-artwork-confirm-retry");
+                if (btnOk) {
+                    btnOk.disabled = true;
+                    btnOk.style.opacity = "0.6";
+                    btnOk.style.pointerEvents = "none";
+                }
+                if (btnRetry) {
+                    btnRetry.disabled = true;
+                    btnRetry.style.opacity = "0.6";
+                    btnRetry.style.pointerEvents = "none";
+                }
+                setTimeout(() => {
+                    if (btnOk) {
+                        btnOk.disabled = false;
+                        btnOk.style.opacity = "1";
+                        btnOk.style.pointerEvents = "auto";
+                    }
+                    if (btnRetry) {
+                        btnRetry.disabled = false;
+                        btnRetry.style.opacity = "1";
+                        btnRetry.style.pointerEvents = "auto";
+                    }
+                }, 800);
+            }
+
+            lastConfirmFinishOpenTime = Date.now();
             isEtegamiConfirming = true;
             isEtegamiUpdating = false;
             isModalOpen = true;
@@ -634,13 +694,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     // 🎨 描画更新が完了したタイミングで「完成確認中」へ確実に遷移！
                     lastGeneratedArtworkData = data;
-                    if (currentEtegamiPhase === ETEGAMI_PHASE.DRAWING || hasActiveSessionGeneration) {
-                        hasActiveSessionGeneration = false;
-                        setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_FINISH, { data: data });
-                    } else if (data.is_completed) {
+                    if (data.is_completed) {
                         setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
                     } else if (data.is_initial || isFirstEtegamiLoad) {
                         setEtegamiStatusBadge("drafting");
+                    } else {
+                        // ユーザーセッションで生成された新しい絵手紙は例外なく④完成確認中へ遷移！
+                        hasActiveSessionGeneration = false;
+                        setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_FINISH, { data: data });
                     }
                     isFirstEtegamiLoad = false;
                 }, 850);
@@ -650,12 +711,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 cardImg.src = rawUrl;
                 if (updatingBadge) updatingBadge.classList.add("hidden");
                 isEtegamiUpdating = false;
-                isFirstEtegamiLoad = false;
                 lastGeneratedArtworkData = data;
-                if (currentEtegamiPhase === ETEGAMI_PHASE.DRAWING || hasActiveSessionGeneration) {
+                if (data.is_completed) {
+                    setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
+                } else if (!data.is_initial && !isFirstEtegamiLoad) {
                     hasActiveSessionGeneration = false;
                     setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_FINISH, { data: data });
                 }
+                isFirstEtegamiLoad = false;
             };
             imgLoader.src = newUrl;
         } else if (cardImg) {
@@ -663,11 +726,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (updatingBadge) updatingBadge.classList.add("hidden");
             isEtegamiUpdating = false;
             lastGeneratedArtworkData = data;
-            if (currentEtegamiPhase === ETEGAMI_PHASE.DRAWING || hasActiveSessionGeneration) {
+            if (data.is_completed) {
+                setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
+            } else if (!data.is_initial && !isFirstEtegamiLoad) {
                 hasActiveSessionGeneration = false;
                 setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_FINISH, { data: data });
-            } else if (data.is_completed) {
-                setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
             }
             isFirstEtegamiLoad = false;
         }
@@ -4291,6 +4354,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (btnOk) {
             btnOk.addEventListener("click", (e) => {
                 e.stopPropagation();
+                if (currentEtegamiPhase !== ETEGAMI_PHASE.CONFIRM_CONTENT) {
+                    console.log("[Etegami Motif Confirm]: Ignored OK click because not in CONFIRM_CONTENT phase:", currentEtegamiPhase);
+                    return;
+                }
+                if (Date.now() - lastConfirmContentOpenTime < 800) {
+                    console.log("[Etegami Motif Confirm]: Ignored premature OK click within 800ms guard");
+                    return;
+                }
                 console.log("[Etegami Motif Confirm]: Resident confirmed motif (はい) -> Advancing to DRAWING");
                 setEtegamiPhase(ETEGAMI_PHASE.DRAWING);
 
@@ -4310,6 +4381,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (btnRetry) {
             btnRetry.addEventListener("click", (e) => {
                 e.stopPropagation();
+                if (currentEtegamiPhase !== ETEGAMI_PHASE.CONFIRM_CONTENT) {
+                    console.log("[Etegami Motif Confirm]: Ignored Retry click because not in CONFIRM_CONTENT phase:", currentEtegamiPhase);
+                    return;
+                }
+                if (Date.now() - lastConfirmContentOpenTime < 800) {
+                    console.log("[Etegami Motif Confirm]: Ignored premature Retry click within 800ms guard");
+                    return;
+                }
                 console.log("[Etegami Motif Confirm]: Resident requested retry (いいえ) -> Returning to LISTENING");
                 setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
 
@@ -4335,6 +4414,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (btnOk) {
             btnOk.addEventListener("click", (e) => {
                 e.stopPropagation();
+                if (currentEtegamiPhase !== ETEGAMI_PHASE.CONFIRM_FINISH) {
+                    console.log("[Etegami Artwork Confirm]: Ignored OK click because not in CONFIRM_FINISH phase:", currentEtegamiPhase);
+                    return;
+                }
+                if (Date.now() - lastConfirmFinishOpenTime < 800) {
+                    console.log("[Etegami Artwork Confirm]: Ignored premature OK click within 800ms guard");
+                    return;
+                }
                 console.log("[Etegami Artwork Confirm]: Resident approved artwork (はい) -> Completing & Saving!");
                 setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
 
@@ -4350,7 +4437,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (btnRetry) {
             btnRetry.addEventListener("click", (e) => {
                 e.stopPropagation();
-                console.log("[Etegami Artwork Confirm]: Resident requested redraw (いいえ) -> Returning to LISTENING");
+                if (currentEtegamiPhase !== ETEGAMI_PHASE.CONFIRM_FINISH) {
+                    console.log("[Etegami Artwork Confirm]: Ignored Retry click because not in CONFIRM_FINISH phase:", currentEtegamiPhase);
+                    return;
+                }
+                if (Date.now() - lastConfirmFinishOpenTime < 800) {
+                    console.log("[Etegami Artwork Confirm]: Ignored premature Retry click within 800ms guard");
+                    return;
+                }
+                console.log("[Etegami Artwork Confirm]: Resident explicitly requested redraw (いいえ) -> Returning to LISTENING");
                 setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
 
                 const payload = {
