@@ -150,8 +150,19 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("[Etegami Card]: Card shown.");
         updateShowEtegamiBtnVisibility();
 
-        // 🎨 開いた時に未開始（IDLE）の場合のみ①聞き取り中フェーズを開始
-        if (typeof setEtegamiPhase === "function" && currentEtegamiPhase === ETEGAMI_PHASE.IDLE) {
+        // 🎨 開いた時にモード・モデル未決定の場合は「どちらの絵にしますか」から開始し、モデル決定まで他の入力をブロック
+        if (!hasConfirmedEtegamiModeAndEngine) {
+            const modeModal = document.getElementById("etegami-mode-confirm-modal");
+            if (modeModal) {
+                modeModal.classList.remove("hidden");
+            }
+            isEtegamiModalSelecting = true;
+            isEtegamiConfirming = true;
+            isModalOpen = true;
+            if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                liveWs.send(JSON.stringify({ type: "etegami_card_opened" }));
+            }
+        } else if (typeof setEtegamiPhase === "function" && currentEtegamiPhase === ETEGAMI_PHASE.IDLE) {
             setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
         }
     }
@@ -163,6 +174,16 @@ document.addEventListener("DOMContentLoaded", () => {
         isEtegamiCardVisible = false;
         console.log("[Etegami Card]: Card hidden.");
         updateShowEtegamiBtnVisibility();
+
+        const modeModal = document.getElementById("etegami-mode-confirm-modal");
+        const engineModal = document.getElementById("etegami-engine-confirm-modal");
+        if (modeModal) modeModal.classList.add("hidden");
+        if (engineModal) engineModal.classList.add("hidden");
+        if (isEtegamiModalSelecting) {
+            isEtegamiModalSelecting = false;
+            isEtegamiConfirming = false;
+            isModalOpen = false;
+        }
     }
 
     // 🎨 デジタル絵手紙：第一キーワード（対象）× 第二キーワード（アクション）による意図判定
@@ -233,8 +254,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function handleEtegamiVoiceTrigger(text, source = "voice") {
-        if (isEtegamiConfirming) {
-            console.log(`[Etegami Voice Trigger] (${source}): Blocked voice hide/show trigger because confirmation modal is active: "${text}"`);
+        if (isEtegamiConfirming || isEtegamiModalSelecting) {
+            console.log(`[Etegami Voice Trigger] (${source}): Blocked voice hide/show trigger because confirmation/selection modal is active: "${text}"`);
             return false;
         }
         const intent = checkEtegamiVoiceIntent(text);
@@ -310,6 +331,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentEtegamiCalligraphy = "心穏やかに 寄り添う日々";
     let currentEtegamiTranscript = "";
     let isEtegamiConfirming = false;
+    let isEtegamiModalSelecting = false;
+    let hasConfirmedEtegamiModeAndEngine = false;
     let isFirstEtegamiLoad = true;
     let hasActiveSessionGeneration = false;
     let lastGeneratedArtworkData = null;
@@ -1739,6 +1762,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     setAvatarState("speaking");
                 }
             } else if (data.type === "transcription_result") {
+                if (isEtegamiModalSelecting) {
+                    console.log("[LiveWS]: Suppressed transcription_result during mode/engine modal selection");
+                    return;
+                }
                 // Always display latest user speech transcription result on screen
                 if (userSpeechBox && data.text) {
                     userSpeechBox.textContent = data.text;
@@ -1750,6 +1777,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
             } else if (data.type === "chat_response") {
+                if (isEtegamiModalSelecting) {
+                    console.log("[LiveWS]: Suppressed chat_response during mode/engine modal selection");
+                    return;
+                }
                 if (userSpeechBox && data.user_text) {
                     userSpeechBox.textContent = data.user_text;
                     handleEtegamiVoiceTrigger(data.user_text, "LiveWS_ChatResponseUser");
@@ -1991,32 +2022,42 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (listeningBadge) listeningBadge.classList.add("hidden");
                 isEtegamiConfirming = false;
                 isModalOpen = false;
+            } else if (data.type === "stop_audio_playback") {
+                console.log("[LiveWS]: Received stop_audio_playback -> halting all audio immediately");
+                stopLiveAudioPlayback();
+                setAvatarState("idle");
+                setLiveLampState("idle");
             } else if (data.type === "etegami_mode_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_mode_confirm_prompt ->", data);
                 const modeModal = document.getElementById("etegami-mode-confirm-modal");
                 if (modeModal) modeModal.classList.remove("hidden");
+                isEtegamiModalSelecting = true;
                 isEtegamiConfirming = true;
                 isModalOpen = true;
             } else if (data.type === "etegami_mode_confirm_dismiss") {
                 console.log("[LiveWS]: Received etegami_mode_confirm_dismiss");
                 const modeModal = document.getElementById("etegami-mode-confirm-modal");
                 if (modeModal) modeModal.classList.add("hidden");
-                isEtegamiConfirming = false;
-                isModalOpen = false;
             } else if (data.type === "etegami_engine_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_engine_confirm_prompt ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
                 if (confirmModal) confirmModal.classList.remove("hidden");
+                isEtegamiModalSelecting = true;
                 isEtegamiConfirming = true;
                 isModalOpen = true;
             } else if (data.type === "etegami_engine_updated") {
                 console.log("[LiveWS]: Received etegami_engine_updated ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
                 if (confirmModal) confirmModal.classList.add("hidden");
+                isEtegamiModalSelecting = false;
                 isEtegamiConfirming = false;
                 isModalOpen = false;
+                hasConfirmedEtegamiModeAndEngine = true;
                 if (typeof updateEngineToggleUI === "function") {
                     updateEngineToggleUI(data.engine);
+                }
+                if (currentEtegamiPhase === ETEGAMI_PHASE.IDLE) {
+                    setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
                 }
             } else if (data.type === "show_artwork_confirm_modal") {
                 console.log("[LiveWS]: Received show_artwork_confirm_modal ->", data);
@@ -4281,6 +4322,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const sendEngineChoice = (engine) => {
             updateEngineToggleUI(engine);
             if (confirmModal) confirmModal.classList.add("hidden");
+
+            // 🛑 即座にジェミナイの音声を完全中断＆アバター・ランプを停止
+            stopLiveAudioPlayback();
+            setAvatarState("idle");
+            setLiveLampState("idle");
+
+            // モデル決定完了 -> モーダル選択ロック解除して聞き取り中へ
+            isEtegamiModalSelecting = false;
+            isEtegamiConfirming = false;
+            isModalOpen = false;
+            hasConfirmedEtegamiModeAndEngine = true;
+            setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
+
             if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                 console.log("[Etegami Engine]: Sending set_image_engine ->", engine);
                 liveWs.send(JSON.stringify({
@@ -4312,6 +4366,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const sendModeChoice = (mode) => {
             if (modeModal) modeModal.classList.add("hidden");
+
+            // 🛑 即座にジェミナイの音声を完全中断＆アバター・ランプを停止
+            stopLiveAudioPlayback();
+            setAvatarState("idle");
+            setLiveLampState("idle");
+
+            if (mode === "asset_base") {
+                // ベースモデル選択完了 -> モーダル選択ロック解除して聞き取り中へ
+                isEtegamiModalSelecting = false;
+                isEtegamiConfirming = false;
+                isModalOpen = false;
+                hasConfirmedEtegamiModeAndEngine = true;
+                setEtegamiPhase(ETEGAMI_PHASE.LISTENING);
+            } else {
+                // 新しい絵を描く -> 次の画像AIモデル選択モーダルへ進むため、選択中ロックは維持
+                isEtegamiModalSelecting = true;
+                isEtegamiConfirming = true;
+                isModalOpen = true;
+                const engineModal = document.getElementById("etegami-engine-confirm-modal");
+                if (engineModal) engineModal.classList.remove("hidden");
+            }
+
             const payload = {
                 type: "set_prepare_mode",
                 mode: mode
@@ -4333,9 +4409,33 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // 👂 ① 聞き取り中パネルの「次へ進む」ボタン制御
+    // 👂 ① 聞き取り中パネルの「次へ進む」「内容クリア」ボタン制御
     function initEtegamiListeningNext() {
         const btnNext = document.getElementById("btn-etegami-listening-next");
+        const btnClear = document.getElementById("btn-etegami-listening-clear");
+
+        if (btnClear) {
+            btnClear.addEventListener("click", (e) => {
+                e.stopPropagation();
+                console.log("[Etegami]: Resident pressed '内容クリア' -> Clearing transcript & motif");
+                currentEtegamiTranscript = "";
+                currentEtegamiMotif = "";
+                const listeningTextEl = document.getElementById("etegami-listening-text");
+                if (listeningTextEl) {
+                    listeningTextEl.textContent = "（お話しされた内容をお待ちしています…）";
+                }
+                showTemporaryToast("🗑️ 聞き取った内容をクリアしました。もう一度お話しくださいね。", 4000);
+                const payload = {
+                    type: "clear_etegami_transcript"
+                };
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify(payload));
+                } else if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(payload));
+                }
+            });
+        }
+
         if (btnNext) {
             btnNext.addEventListener("click", (e) => {
                 e.stopPropagation();

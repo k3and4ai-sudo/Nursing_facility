@@ -2231,6 +2231,41 @@ body.simple-mode .speech-box.user-box {
 .listening-panel-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.btn-etegami-listening-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 9999px;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #ef4444;
+    background: #ffffff;
+    border: 2px solid #fca5a5;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.18);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-etegami-listening-clear:hover {
+    background: #fef2f2;
+    border-color: #ef4444;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.28);
+}
+
+.btn-etegami-listening-clear:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+.btn-etegami-listening-clear .clear-icon {
+    font-size: 1.2rem;
 }
 
 .btn-etegami-listening-next {

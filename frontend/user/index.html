@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>利用者様クライアント - Nursing Care AI</title>
-    <link rel="stylesheet" href="style.css?v=20261006_etegami_finish_fix2">
+    <link rel="stylesheet" href="style.css?v=20261007_etegami_clear_block">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Shippori+Mincho:wght@700;900&family=Yuji+Boku&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
@@ -216,8 +216,12 @@
                             <div id="etegami-listening-text" class="listening-transcript-text">（お話しされた内容をお待ちしています…）</div>
                         </div>
                         <div class="listening-panel-actions">
+                            <button id="btn-etegami-listening-clear" class="btn-etegami-listening-clear" type="button" title="聞き取った内容を消去してやり直します">
+                                <span class="clear-icon">🗑️</span>
+                                <span>内容クリア</span>
+                            </button>
                             <button id="btn-etegami-listening-next" class="btn-etegami-listening-next" type="button" title="この内容で内容確認へ進みます">
-                                <span>この内容で次へ進む</span>
+                                <span>この内容で次に進む</span>
                                 <span class="next-arrow">➔</span>
                             </button>
                         </div>
@@ -764,6 +768,6 @@
 
     </div>
     <script src="wav_encoder.js?v=20260909_2"></script>
-    <script src="app.js?v=20261006_etegami_finish_fix2"></script>
+    <script src="app.js?v=20261007_etegami_clear_block"></script>
 </body>
 </html>
