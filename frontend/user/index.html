@@ -480,6 +480,83 @@
             </div>
         </div>
 
+        <!-- 🖼️ 描画完了確認モーダル（これで良いですか？） -->
+        <div id="etegami-artwork-confirm-modal" class="modal-overlay etegami-select-modal hidden">
+            <div class="modal-card etegami-select-card" style="border: 4px solid #10b981; box-shadow: 0 20px 50px rgba(16, 185, 129, 0.35);">
+                <!-- 固定ヘッダー -->
+                <div class="etegami-modal-header">
+                    <div class="etegami-modal-icon">🖼️✨</div>
+                    <div class="etegami-modal-badge badge-success">描画完了・仕上がり確認</div>
+                    <h2 class="etegami-modal-title" style="color: #065f46;">描いた絵はこれでよろしいですか？</h2>
+                </div>
+
+                <!-- スクロール可能なコンテンツエリア -->
+                <div class="etegami-modal-body">
+                    <div class="motif-detail-box" style="border-color: #10b981;">
+                        <div class="motif-field-label" style="color: #059669;">
+                            <span>🎨</span><span>描き上がった絵手紙：</span>
+                        </div>
+                        <div id="artwork-confirm-title" class="motif-field-value" style="border-left-color: #10b981;">
+                            【手作り絵手紙】思い出の風景
+                        </div>
+                    </div>
+
+                    <div class="motif-touch-banner" style="background: #f0fdf4; border-color: #86efac; color: #166534;">
+                        <span style="font-size: 1.15rem;">👆</span>
+                        <span>画面のボタンをタッチしてお答えください</span>
+                    </div>
+                </div>
+
+                <!-- 常に画面内に収まる固定フッターボタン -->
+                <div class="etegami-modal-buttons-row">
+                    <button id="btn-artwork-confirm-retry" class="modal-btn motif-btn-secondary" type="button">
+                        <span class="btn-icon">✏️</span>
+                        <span>直す (いいえ)</span>
+                    </button>
+                    <button id="btn-artwork-confirm-ok" class="modal-btn motif-btn-primary" type="button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                        <span class="btn-icon">💖</span>
+                        <span>これで良い (はい)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 💾 絵手紙保存確認モーダル（保存しますか？） -->
+        <div id="etegami-save-confirm-modal" class="modal-overlay etegami-select-modal hidden">
+            <div class="modal-card etegami-select-card" style="border: 4px solid #6366f1; box-shadow: 0 20px 50px rgba(99, 102, 241, 0.35);">
+                <!-- 固定ヘッダー -->
+                <div class="etegami-modal-header">
+                    <div class="etegami-modal-icon">💾💮</div>
+                    <div class="etegami-modal-badge" style="background: #ede9fe; color: #6366f1;">作品の保存確認</div>
+                    <h2 class="etegami-modal-title" style="color: #3730a3;">この絵手紙を完成として保存しますか？</h2>
+                    <p class="etegami-modal-desc" style="color: #4b5563;">
+                        完成として保存すると、ご家族の見守り画面にもお届けします。
+                    </p>
+                </div>
+
+                <!-- スクロール可能なコンテンツエリア -->
+                <div class="etegami-modal-body">
+                    <div class="motif-touch-banner" style="background: #eef2ff; border-color: #c7d2fe; color: #3730a3;">
+                        <span style="font-size: 1.15rem;">👆</span>
+                        <span>画面のボタンをタッチしてお答えください</span>
+                    </div>
+                </div>
+
+                <!-- 常に画面内に収まる固定フッターボタン -->
+                <div class="etegami-modal-buttons-row">
+                    <button id="btn-save-confirm-no" class="modal-btn motif-btn-secondary" type="button">
+                        <span class="btn-icon">↩️</span>
+                        <span>まだ保存しない</span>
+                    </button>
+                    <button id="btn-save-confirm-yes" class="modal-btn motif-btn-primary" type="button" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);">
+                        <span class="btn-icon">💮</span>
+                        <span>完成・保存する (はい)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
         <!-- 🔒 みまもりさん 会話記録停止・再開 ポップアップモーダル -->
         <div id="mimamori-popup" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(30, 27, 46, 0.85); backdrop-filter: blur(12px); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
             <div class="modal-card mimamori-card" style="text-align: center; padding: 36px 28px; max-width: 580px; width: 95%; border: 4px solid #8b5cf6; border-radius: 32px; background: #ffffff; box-shadow: 0 25px 60px rgba(139, 92, 246, 0.4); animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">

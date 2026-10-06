@@ -716,23 +716,9 @@ class GeminiLiveSession:
                 if self.on_etegami_prepare_mode:
                     self.on_etegami_prepare_mode("generate_new")
 
-        # Detect Etegami Completion command from Gemini speech or thought
-        is_gemini_etegami_complete = (
-            "デジタル絵手紙完成" in eval_text or
-            ("みまもりさん" in eval_text and "絵手紙" in eval_text and "完成" in eval_text) or
-            "絵手紙完成" in eval_text
-        )
-        if is_gemini_etegami_complete:
-            if not self.has_resident_requested_etegami:
-                print(f"[Gemini Live Session]: Ignored etegami completion trigger because resident has not requested etegami: '{eval_text[-60:]}'")
-            else:
-                print(f"[Gemini Live Session]: Detected Gemini Etegami Completion Trigger in eval_text: '{eval_text[-60:]}'")
-                self.ai_streamed_text_buffer = ""
-                if self.on_etegami_completed:
-                    self.on_etegami_completed()
+        # Note: Etegami completion and saving is strictly touch-only on client screen.
+        # Gemini speech/thought buffer must NEVER automatically trigger on_etegami_completed.
 
-        # Note: Etegami updates are triggered cleanly and directly via resident speech (Whisper STT).
-        # Gemini does not trigger internal JSON updates from its own speech.
 
         if text_val.startswith("**") or text_val.startswith("Thought:") or "reassuring" in text_val.lower():
             print(f"[Gemini Live Session Filtered Thought]: {text_val}")

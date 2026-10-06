@@ -2131,11 +2131,15 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
 
         is_busy = getattr(session, "is_etegami_updating", False)
 
-        # 0. 「聞き取り内容の確認待ち (pending_motif_confirm)」がある場合
+        # 0. 「聞き取り内容の確認待ち」「描画完了確認」「保存確認」がある場合
         # 音声での回答判定は画面との不一致を防ぐため廃止し、画面タッチ（ボタン操作）のみで受け付ける
-        pending_confirm = getattr(session, "pending_motif_confirm", None)
-        if pending_confirm:
-            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Motif confirmation is pending on screen - awaiting screen touch only (voice answer ignored).")
+        is_any_confirm_pending = (
+            getattr(session, "pending_motif_confirm", None) or
+            getattr(session, "pending_artwork_confirm", None) or
+            getattr(session, "pending_save_confirm", None)
+        )
+        if is_any_confirm_pending:
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Confirmation is pending on screen - awaiting screen touch only (voice answer ignored).")
             return
 
         # 1. 「更新中ですか？」「今更新中？」「絵を描いてる？」等の状態問い合わせ判定
@@ -2172,10 +2176,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 }))
                 return
 
-        # Check completion keywords
+        # Check completion keywords -> Prompt resident with save confirm modal (Touch-only decision)
         if any(kw in clean for kw in etegami_complete_keywords):
-            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected resident completion request in '{speech_text}'")
-            asyncio.create_task(on_live_etegami_complete())
+            print(f"[Mimamori Resident Etegami Trigger ({terminal_id})]: Detected completion intent in speech '{speech_text}' -> prompting touch-only save modal on screen.")
+            asyncio.create_task(websocket.send_json({"type": "show_save_confirm_modal"}))
+            try:
+                asyncio.create_task(session.send_system_note(
+                    "利用者が絵手紙を完成・保存したいと話しました。画面に『この絵手紙を完成として保存しますか？』が表示されています。優しく『この絵手紙を完成として保存しますか？よろしければ画面のボタンをタッチしてくださいね』と短く音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                ))
+            except Exception:
+                pass
             return
 
         # 更新中であれば他の描画トリガーも多重起動させない
@@ -2491,8 +2501,16 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Etegami Card: '{text_to_check}'")
             asyncio.create_task(on_live_etegami_visibility(True))
         elif etegami_vis_intent is False:
-            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
-            asyncio.create_task(on_live_etegami_visibility(False))
+            is_confirming = (
+                getattr(session, "pending_motif_confirm", None) or
+                getattr(session, "pending_artwork_confirm", None) or
+                getattr(session, "pending_save_confirm", None)
+            )
+            if not is_confirming:
+                print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
+                asyncio.create_task(on_live_etegami_visibility(False))
+            else:
+                print(f"[Whisper Guardrail ({terminal_id})]: Blocked Hide Etegami Card because confirmation is pending on screen: '{text_to_check}'")
 
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
@@ -2838,6 +2856,39 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 print(f"[Client Message ({terminal_id})]: UI requested etegami_motif_confirm_response -> confirmed={confirmed}")
                 asyncio.create_task(on_live_etegami_motif_confirm_decision(confirmed))
 
+            elif msg_type == "etegami_artwork_ready":
+                artwork_title = data.get("title", "手作り絵手紙")
+                session.pending_artwork_confirm = True
+                print(f"[Client Message ({terminal_id})]: Artwork ready on screen -> '{artwork_title}'. Prompting resident.")
+                try:
+                    asyncio.create_task(session.send_system_note(
+                        f"新しい絵の手描きが完了し、画面に仕上がり確認（『{artwork_title}』）が表示されました。利用者に優しく『絵が描き上がりましたよ。この絵でよろしいですか？画面のボタンをタッチしてくださいね』と短く音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                    ))
+                except Exception as e:
+                    print(f"[Etegami Artwork Ready ({terminal_id})]: Error sending system note: {e}")
+
+            elif msg_type == "etegami_save_confirm_prompt":
+                session.pending_artwork_confirm = None
+                session.pending_save_confirm = True
+                print(f"[Client Message ({terminal_id})]: Presenting save confirm prompt to resident.")
+                try:
+                    asyncio.create_task(session.send_system_note(
+                        "利用者が絵の仕上がりに『はい』と答えました。画面に『この絵手紙を完成として保存しますか？』が表示されています。利用者に優しく『この絵手紙を完成として保存しますか？よろしければ画面のボタンをタッチしてくださいね』と短く音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                    ))
+                except Exception as e:
+                    print(f"[Etegami Save Confirm Prompt ({terminal_id})]: Error sending system note: {e}")
+
+            elif msg_type == "etegami_artwork_retry":
+                session.pending_artwork_confirm = None
+                session.pending_save_confirm = None
+                print(f"[Client Message ({terminal_id})]: Resident requested retry on artwork confirmation.")
+                try:
+                    asyncio.create_task(session.send_system_note(
+                        "利用者が描き上がった絵の手直し・描き直しを希望しました。優しく『わかりました、どんな風に手直ししましょうか？教えてくださいね』と問いかけてください。"
+                    ))
+                except Exception as e:
+                    print(f"[Etegami Artwork Retry ({terminal_id})]: Error sending system note: {e}")
+
             elif msg_type == "client_ui_mode":
                 new_mode = data.get("mode", "simple")
                 session.current_ui_mode = new_mode
@@ -2850,6 +2901,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 await websocket.send_json({"type": "session_resumed", "status": "ok"})
 
             elif msg_type in ["complete_etegami", "etegami_complete"]:
+                session.pending_artwork_confirm = None
+                session.pending_save_confirm = None
                 print(f"[Client WS ({terminal_id})]: Received explicit complete_etegami action")
                 asyncio.create_task(on_live_etegami_complete())
 

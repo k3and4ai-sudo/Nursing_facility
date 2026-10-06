@@ -228,6 +228,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function handleEtegamiVoiceTrigger(text, source = "voice") {
+        if (isEtegamiConfirming) {
+            console.log(`[Etegami Voice Trigger] (${source}): Blocked voice hide/show trigger because confirmation modal is active: "${text}"`);
+            return false;
+        }
         const intent = checkEtegamiVoiceIntent(text);
         if (intent === true) {
             console.log(`[Etegami Voice Trigger] (${source}): Detected SHOW trigger in "${text}"`);
@@ -284,7 +288,87 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // 🎨 絵手紙ステータスバッジの明確な表示更新ヘルパー
+    function setEtegamiStatusBadge(status, customText = "") {
+        const statusBadge = document.getElementById("etegami-status-badge");
+        if (!statusBadge) return;
+        statusBadge.classList.remove("hidden", "badge-drafting", "badge-updating", "badge-ready", "badge-completed");
+
+        if (status === "updating") {
+            statusBadge.classList.add("badge-updating");
+            statusBadge.innerHTML = `<span class="spin-icon">🎨</span><span>⏳ ${customText || "絵を生成中... (お待ちください)"}</span>`;
+        } else if (status === "ready") {
+            statusBadge.classList.add("badge-ready");
+            statusBadge.innerHTML = `<span>✅</span><span>${customText || "描画完了！ (確認してください)"}</span>`;
+        } else if (status === "completed") {
+            statusBadge.classList.add("badge-completed");
+            statusBadge.innerHTML = `<span>💮</span><span>${customText || "完成・保存済み"}</span>`;
+        } else {
+            statusBadge.classList.add("badge-drafting");
+            statusBadge.innerHTML = `<span>🎨</span><span>${customText || "下絵表示中"}</span>`;
+        }
+    }
+    window.setEtegamiStatusBadge = setEtegamiStatusBadge;
+
+    let isEtegamiConfirming = false;
     let isFirstEtegamiLoad = true;
+
+    // 🖼️ 描画完了確認モーダルの表示（これで良いですか？）
+    function showArtworkConfirmModal(data) {
+        isEtegamiConfirming = true;
+        isModalOpen = true;
+        setEtegamiStatusBadge("ready");
+
+        const modal = document.getElementById("etegami-artwork-confirm-modal");
+        const titleEl = document.getElementById("artwork-confirm-title");
+        if (titleEl) {
+            titleEl.textContent = (data && data.title) ? data.title : "【手作り絵手紙】思い出の風景";
+        }
+        if (modal) {
+            modal.classList.remove("hidden");
+        }
+
+        // メッセージ案内表示
+        showTemporaryToast("✨ みまもりさん：絵が描き上がりました。この絵でよろしいですか？画面のボタンをタッチしてくださいね。", 7000);
+
+        // サーバー（Gemini Live）へ音声案内リクエストを送信
+        const notifyPayload = {
+            type: "etegami_artwork_ready",
+            title: (data && data.title) ? data.title : "手作り絵手紙"
+        };
+        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+            liveWs.send(JSON.stringify(notifyPayload));
+        } else if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(notifyPayload));
+        }
+    }
+    window.showArtworkConfirmModal = showArtworkConfirmModal;
+
+    // 💾 絵手紙保存確認モーダルの表示（保存しますか？）
+    function showSaveConfirmModal() {
+        isEtegamiConfirming = true;
+        isModalOpen = true;
+
+        const modal = document.getElementById("etegami-save-confirm-modal");
+        if (modal) {
+            modal.classList.remove("hidden");
+        }
+
+        // メッセージ案内表示
+        showTemporaryToast("💾 みまもりさん：この絵手紙を完成として保存しますか？画面のボタンをタッチしてくださいね。", 7000);
+
+        // サーバー（Gemini Live）へ保存確認音声案内リクエストを送信
+        const notifyPayload = {
+            type: "etegami_save_confirm_prompt"
+        };
+        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+            liveWs.send(JSON.stringify(notifyPayload));
+        } else if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(notifyPayload));
+        }
+    }
+    window.showSaveConfirmModal = showSaveConfirmModal;
+
     function updateEtegamiDisplay(data) {
         if (!data) return;
         if (data.force_open === true) {
@@ -323,6 +407,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.is_updating === true) {
             if (updatingBadge) updatingBadge.classList.remove("hidden");
             if (voiceHint) voiceHint.classList.remove("hidden");
+            setEtegamiStatusBadge("updating");
         } else {
             if (updatingBadge) updatingBadge.classList.add("hidden");
             if (voiceHint) voiceHint.classList.add("hidden");
@@ -351,6 +436,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     cardImgNext.classList.remove("current");
                     if (updatingBadge) updatingBadge.classList.add("hidden");
                     isEtegamiUpdating = false;
+
+                    // 描画更新が完了したタイミングで「これで良いですか？」確認画面を表示！
+                    // 初回ロードではなく、絵が更新・生成された時
+                    if (!isFirstEtegamiLoad && data.is_updating !== true && !data.is_completed) {
+                        showArtworkConfirmModal(data);
+                    } else if (data.is_completed) {
+                        setEtegamiStatusBadge("completed");
+                    } else if (isFirstEtegamiLoad) {
+                        setEtegamiStatusBadge("drafting");
+                    }
+                    isFirstEtegamiLoad = false;
                 }, 850);
             };
             imgLoader.onerror = () => {
@@ -358,12 +454,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 cardImg.src = rawUrl;
                 if (updatingBadge) updatingBadge.classList.add("hidden");
                 isEtegamiUpdating = false;
+                isFirstEtegamiLoad = false;
             };
             imgLoader.src = newUrl;
         } else if (cardImg) {
             cardImg.src = newUrl;
             if (updatingBadge) updatingBadge.classList.add("hidden");
             isEtegamiUpdating = false;
+            if (!isFirstEtegamiLoad && data.is_updating !== true && !data.is_completed) {
+                showArtworkConfirmModal(data);
+            } else if (data.is_completed) {
+                setEtegamiStatusBadge("completed");
+            }
+            isFirstEtegamiLoad = false;
         }
 
         if (calligraphyEl) calligraphyEl.textContent = newCalligraphy;
@@ -1074,6 +1177,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (mTarget) mTarget.textContent = data.motif || "心温まる思い出";
                     if (cTarget) cTarget.textContent = data.calligraphy || "心穏やかに 寄り添う日々";
                     if (confModal) confModal.classList.remove("hidden");
+                    isEtegamiConfirming = true;
+                    isModalOpen = true;
                     break;
 
                 case "etegami_motif_confirm_dismiss":
@@ -1081,29 +1186,47 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (confModal2) confModal2.classList.add("hidden");
                     const lBadge3 = document.getElementById("etegami-listening-badge");
                     if (lBadge3) lBadge3.classList.add("hidden");
+                    isEtegamiConfirming = false;
+                    isModalOpen = false;
                     break;
 
                 case "etegami_mode_confirm_prompt":
                     const modeModalMain = document.getElementById("etegami-mode-confirm-modal");
                     if (modeModalMain) modeModalMain.classList.remove("hidden");
+                    isEtegamiConfirming = true;
+                    isModalOpen = true;
                     break;
 
                 case "etegami_mode_confirm_dismiss":
                     const modeModalMain2 = document.getElementById("etegami-mode-confirm-modal");
                     if (modeModalMain2) modeModalMain2.classList.add("hidden");
+                    isEtegamiConfirming = false;
+                    isModalOpen = false;
                     break;
 
                 case "etegami_engine_confirm_prompt":
                     const engModalMain = document.getElementById("etegami-engine-confirm-modal");
                     if (engModalMain) engModalMain.classList.remove("hidden");
+                    isEtegamiConfirming = true;
+                    isModalOpen = true;
                     break;
 
                 case "etegami_engine_updated":
                     const engModalMain2 = document.getElementById("etegami-engine-confirm-modal");
                     if (engModalMain2) engModalMain2.classList.add("hidden");
+                    isEtegamiConfirming = false;
+                    isModalOpen = false;
                     if (typeof updateEngineToggleUI === "function") {
                         updateEngineToggleUI(data.engine);
                     }
+                    break;
+
+                case "show_artwork_confirm_modal":
+                    showArtworkConfirmModal(data);
+                    break;
+
+                case "show_save_confirm_modal":
+                    showSaveConfirmModal();
                     break;
 
                 case "guardrail_result":
@@ -1582,31 +1705,49 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (motifTarget) motifTarget.textContent = data.motif || "心温まる思い出";
                 if (calligraphyTarget) calligraphyTarget.textContent = data.calligraphy || "心穏やかに 寄り添う日々";
                 if (confirmModal) confirmModal.classList.remove("hidden");
+                isEtegamiConfirming = true;
+                isModalOpen = true;
             } else if (data.type === "etegami_motif_confirm_dismiss") {
                 console.log("[LiveWS]: Received etegami_motif_confirm_dismiss");
                 const confirmModal = document.getElementById("etegami-motif-confirm-modal");
                 if (confirmModal) confirmModal.classList.add("hidden");
                 const listeningBadge = document.getElementById("etegami-listening-badge");
                 if (listeningBadge) listeningBadge.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
             } else if (data.type === "etegami_mode_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_mode_confirm_prompt ->", data);
                 const modeModal = document.getElementById("etegami-mode-confirm-modal");
                 if (modeModal) modeModal.classList.remove("hidden");
+                isEtegamiConfirming = true;
+                isModalOpen = true;
             } else if (data.type === "etegami_mode_confirm_dismiss") {
                 console.log("[LiveWS]: Received etegami_mode_confirm_dismiss");
                 const modeModal = document.getElementById("etegami-mode-confirm-modal");
                 if (modeModal) modeModal.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
             } else if (data.type === "etegami_engine_confirm_prompt") {
                 console.log("[LiveWS]: Received etegami_engine_confirm_prompt ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
                 if (confirmModal) confirmModal.classList.remove("hidden");
+                isEtegamiConfirming = true;
+                isModalOpen = true;
             } else if (data.type === "etegami_engine_updated") {
                 console.log("[LiveWS]: Received etegami_engine_updated ->", data);
                 const confirmModal = document.getElementById("etegami-engine-confirm-modal");
                 if (confirmModal) confirmModal.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
                 if (typeof updateEngineToggleUI === "function") {
                     updateEngineToggleUI(data.engine);
                 }
+            } else if (data.type === "show_artwork_confirm_modal") {
+                console.log("[LiveWS]: Received show_artwork_confirm_modal ->", data);
+                showArtworkConfirmModal(data);
+            } else if (data.type === "show_save_confirm_modal") {
+                console.log("[LiveWS]: Received show_save_confirm_modal ->", data);
+                showSaveConfirmModal();
             } else if (data.type === "api_error_notice") {
                 console.warn("[LiveWS]: Received api_error_notice ->", data.title, data.message);
                 const bannerText = `⚠️ ${data.title || 'APIエラー'}: ${data.message}`;
@@ -3926,6 +4067,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const sendMotifDecision = (confirmed) => {
             if (confirmModal) confirmModal.classList.add("hidden");
             if (listeningBadge) listeningBadge.classList.add("hidden");
+            isEtegamiConfirming = false;
+            isModalOpen = false;
 
             const payload = {
                 type: "etegami_motif_confirm_response",
@@ -3941,10 +4084,90 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         if (btnOk) {
-            btnOk.addEventListener("click", () => sendMotifDecision(true));
+            btnOk.addEventListener("click", (e) => {
+                e.stopPropagation();
+                sendMotifDecision(true);
+            });
         }
         if (btnRetry) {
-            btnRetry.addEventListener("click", () => sendMotifDecision(false));
+            btnRetry.addEventListener("click", (e) => {
+                e.stopPropagation();
+                sendMotifDecision(false);
+            });
+        }
+    }
+
+    // 🖼️ 描画完了確認モーダルの制御（これで良いですか？）
+    function initEtegamiArtworkConfirm() {
+        const modal = document.getElementById("etegami-artwork-confirm-modal");
+        const btnOk = document.getElementById("btn-artwork-confirm-ok");
+        const btnRetry = document.getElementById("btn-artwork-confirm-retry");
+
+        if (btnOk) {
+            btnOk.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (modal) modal.classList.add("hidden");
+                console.log("[Etegami Artwork Confirm]: Resident approved artwork -> advancing to save confirm.");
+                showSaveConfirmModal();
+            });
+        }
+
+        if (btnRetry) {
+            btnRetry.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (modal) modal.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
+                setEtegamiStatusBadge("drafting");
+
+                console.log("[Etegami Artwork Confirm]: Resident requested redraw.");
+                const payload = {
+                    type: "etegami_artwork_retry"
+                };
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify(payload));
+                } else if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(payload));
+                }
+                showTemporaryToast("🎨 みまもりさん：承知しました。どのように描き直しましょうか？教えてくださいね。", 4500);
+            });
+        }
+    }
+
+    // 💾 絵手紙保存確認モーダルの制御（保存しますか？）
+    function initEtegamiSaveConfirm() {
+        const modal = document.getElementById("etegami-save-confirm-modal");
+        const btnYes = document.getElementById("btn-save-confirm-yes");
+        const btnNo = document.getElementById("btn-save-confirm-no");
+
+        if (btnYes) {
+            btnYes.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (modal) modal.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
+                setEtegamiStatusBadge("completed");
+
+                console.log("[Etegami Save Confirm]: Resident confirmed save via screen touch -> completing!");
+                showTemporaryToast("💮 みまもりさん：絵手紙を完成として保存しました！ご家族にもお届けしますね。", 5000);
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify({ type: "complete_etegami" }));
+                } else if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "complete_etegami" }));
+                }
+            });
+        }
+
+        if (btnNo) {
+            btnNo.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (modal) modal.classList.add("hidden");
+                isEtegamiConfirming = false;
+                isModalOpen = false;
+                setEtegamiStatusBadge("drafting");
+                console.log("[Etegami Save Confirm]: Resident chose not to save yet.");
+                showTemporaryToast("🎨 みまもりさん：下絵のまま残しておきますね。いつでも保存できますよ。", 4500);
+            });
         }
     }
 
@@ -3959,6 +4182,8 @@ document.addEventListener("DOMContentLoaded", () => {
             initEtegamiEngineSelector();
             initEtegamiModeConfirm();
             initEtegamiMotifConfirm();
+            initEtegamiArtworkConfirm();
+            initEtegamiSaveConfirm();
             if (isDebugMode) {
                 connectLiveWS();
             }
@@ -3968,3 +4193,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     initApp();
 });
+
