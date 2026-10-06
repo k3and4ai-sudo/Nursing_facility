@@ -180,13 +180,47 @@
                         </div>
                     </div>
 
-                    <!-- 和風色紙フレーム (クリックで拡大鑑賞) -->
-                    <!-- 👂 描画内容聞き取り中バッジ -->
-                    <div id="etegami-listening-badge" class="etegami-listening-badge hidden">
-                        <div class="listening-pulse-dot"></div>
-                        <span class="listening-badge-icon">👂</span>
-                        <span class="listening-badge-text">描画内容を聞き取り中…</span>
-                        <span class="listening-badge-sub">（お話しを終えると確認画面が出ます）</span>
+                    <!-- 🎨 4工程シーケンシャル進行ステップバー -->
+                    <div id="etegami-step-progress" class="etegami-step-progress">
+                        <div id="step-pill-listening" class="etegami-step-pill active" title="1. 聞き取り中">
+                            <span class="step-num">1</span>
+                            <span class="step-label">聞き取り中</span>
+                        </div>
+                        <div class="step-arrow">➔</div>
+                        <div id="step-pill-confirm-content" class="etegami-step-pill" title="2. 内容確認中">
+                            <span class="step-num">2</span>
+                            <span class="step-label">内容確認中</span>
+                        </div>
+                        <div class="step-arrow">➔</div>
+                        <div id="step-pill-drawing" class="etegami-step-pill" title="3. 描画中">
+                            <span class="step-num">3</span>
+                            <span class="step-label">描画中</span>
+                        </div>
+                        <div class="step-arrow">➔</div>
+                        <div id="step-pill-confirm-finish" class="etegami-step-pill" title="4. 完成確認中">
+                            <span class="step-num">4</span>
+                            <span class="step-label">完成確認中</span>
+                        </div>
+                    </div>
+
+                    <!-- 👂 聞き取り中パネル（聞き取った内容を表示し、「次へ」ボタンで進む） -->
+                    <div id="etegami-listening-panel" class="etegami-listening-panel">
+                        <div class="listening-panel-header">
+                            <div class="listening-pulse-dot"></div>
+                            <span class="listening-panel-icon">👂</span>
+                            <span class="listening-panel-title">どんな絵手紙を描きましょうか？</span>
+                            <span class="listening-panel-sub">お話しされた内容が下に表示されます</span>
+                        </div>
+                        <div class="listening-transcript-box">
+                            <div class="listening-transcript-label">聞き取った内容：</div>
+                            <div id="etegami-listening-text" class="listening-transcript-text">（お話しされた内容をお待ちしています…）</div>
+                        </div>
+                        <div class="listening-panel-actions">
+                            <button id="btn-etegami-listening-next" class="btn-etegami-listening-next" type="button" title="この内容で内容確認へ進みます">
+                                <span>この内容で次へ進む</span>
+                                <span class="next-arrow">➔</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div id="etegami-voice-hint" class="etegami-voice-hint hidden">
@@ -492,6 +526,9 @@
 
                 <!-- スクロール可能なコンテンツエリア -->
                 <div class="etegami-modal-body">
+                    <div style="text-align: center; margin-bottom: 12px;">
+                        <img id="artwork-confirm-preview-img" src="/family/assets/sample_postcard.jpg" alt="仕上がり絵手紙" style="max-height: 180px; max-width: 100%; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); border: 2px solid #10b981;">
+                    </div>
                     <div class="motif-detail-box" style="border-color: #10b981;">
                         <div class="motif-field-label" style="color: #059669;">
                             <span>🎨</span><span>描き上がった絵手紙：</span>

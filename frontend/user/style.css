@@ -2057,33 +2057,215 @@ body.simple-mode .speech-box.user-box {
 }
 
 /* 👂 描画内容聞き取り中バッジ */
-.etegami-listening-badge {
+/* 🎨 4工程シーケンシャル進行ステップバー */
+.etegami-step-progress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 8px 0 14px 0;
+    padding: 8px 12px;
+    background: rgba(15, 23, 42, 0.7);
+    border-radius: 16px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    flex-wrap: wrap;
+}
+
+.etegami-step-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.etegami-step-pill .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.etegami-step-pill.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border-color: #38bdf8;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.5), 0 0 10px rgba(56, 189, 248, 0.4);
+    transform: scale(1.05);
+    animation: stepPulse 2s infinite ease-in-out;
+}
+
+.etegami-step-pill.active .step-num {
+    background: #ffffff;
+    color: #0369a1;
+}
+
+/* 各フェーズ専用のアクティブ色 */
+#step-pill-confirm-content.active {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    border-color: #fbbf24;
+    box-shadow: 0 4px 14px rgba(217, 119, 6, 0.5), 0 0 10px rgba(251, 191, 36, 0.4);
+}
+#step-pill-confirm-content.active .step-num {
+    color: #92400e;
+}
+
+#step-pill-drawing.active {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    border-color: #34d399;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.5), 0 0 10px rgba(52, 211, 153, 0.4);
+}
+#step-pill-drawing.active .step-num {
+    color: #065f46;
+}
+
+#step-pill-confirm-finish.active {
+    background: linear-gradient(135deg, #db2777 0%, #be185d 100%);
+    border-color: #f472b6;
+    box-shadow: 0 4px 14px rgba(219, 39, 119, 0.5), 0 0 10px rgba(244, 114, 182, 0.4);
+}
+#step-pill-confirm-finish.active .step-num {
+    color: #9d174d;
+}
+
+.etegami-step-pill.done {
+    color: #86efac;
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+}
+.etegami-step-pill.done .step-num {
+    background: #22c55e;
+    color: #ffffff;
+}
+
+.step-arrow {
+    color: #64748b;
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+
+@keyframes stepPulse {
+    0%, 100% {
+        transform: scale(1.05);
+    }
+    50% {
+        transform: scale(1.08);
+    }
+}
+
+/* 👂 聞き取り中パネル */
+.etegami-listening-panel {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+    border: 2.5px solid #38bdf8;
+    border-radius: 20px;
+    padding: 16px 20px;
+    margin: 0 0 14px 0;
+    box-shadow: 0 8px 24px rgba(2, 132, 199, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.etegami-listening-panel.hidden {
+    display: none !important;
+}
+
+.listening-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.listening-panel-icon {
+    font-size: 1.4rem;
+}
+
+.listening-panel-title {
+    color: #f0f9ff;
+    font-size: 1.2rem;
+    font-weight: 800;
+}
+
+.listening-panel-sub {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    margin-left: auto;
+}
+
+.listening-transcript-box {
+    background: rgba(2, 132, 199, 0.12);
+    border: 1.5px dashed #38bdf8;
+    border-radius: 14px;
+    padding: 12px 16px;
+}
+
+.listening-transcript-label {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #7dd3fc;
+    margin-bottom: 4px;
+}
+
+.listening-transcript-text {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #ffffff;
+    min-height: 2em;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.listening-panel-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-etegami-listening-next {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.96) 100%);
-    border: 2.5px solid #38bdf8;
-    color: #f0f9ff;
-    padding: 10px 22px;
+    padding: 12px 28px;
     border-radius: 9999px;
-    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45), 0 0 14px rgba(56, 189, 248, 0.3);
-    margin: 0 auto 12px auto;
-    font-size: 1.15rem;
+    font-size: 1.25rem;
     font-weight: 800;
-    letter-spacing: 0.02em;
-    animation: listeningPulse 2s infinite ease-in-out;
-    width: fit-content;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border: 2px solid #38bdf8;
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes listeningPulse {
-    0%, 100% {
-        box-shadow: 0 4px 18px rgba(56, 189, 248, 0.4), 0 0 10px rgba(56, 189, 248, 0.25);
-        transform: translateY(0);
-    }
-    50% {
-        box-shadow: 0 8px 28px rgba(56, 189, 248, 0.7), 0 0 20px rgba(56, 189, 248, 0.5);
-        transform: translateY(-2px);
-    }
+.btn-etegami-listening-next:hover {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+    box-shadow: 0 8px 24px rgba(2, 132, 199, 0.6);
+    transform: translateY(-2px);
+}
+
+.btn-etegami-listening-next:active {
+    transform: translateY(1px);
+    box-shadow: 0 3px 10px rgba(2, 132, 199, 0.4);
+}
+
+.btn-etegami-listening-next .next-arrow {
+    font-size: 1.35rem;
+    transition: transform 0.2s ease;
+}
+.btn-etegami-listening-next:hover .next-arrow {
+    transform: translateX(4px);
 }
 
 .listening-pulse-dot {
