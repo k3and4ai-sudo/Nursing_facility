@@ -128,7 +128,7 @@ class TestEtegamiConversationBase(unittest.TestCase):
         self.assertIn("ご本人様と一緒に絵や添え字", meta.get("summary_for_family", ""))
 
     def test_gemini_live_completion_trigger(self):
-        """Verify that Gemini's 'みまもりさん、デジタル絵手紙完成' triggers callback."""
+        """Verify that Gemini's speech does NOT auto-complete (screen touch required for save/completion)."""
         completed_called = []
         def on_completed():
             completed_called.append(True)
@@ -142,7 +142,8 @@ class TestEtegamiConversationBase(unittest.TestCase):
 
         session.has_resident_requested_etegami = True
         session._handle_text_chunk("みまもりさん、デジタル絵手紙完成。とても素敵な絵手紙ができましたね！")
-        self.assertEqual(len(completed_called), 1)
+        # Completion must ONLY be triggered by screen touch confirmation modal, not voice text
+        self.assertEqual(len(completed_called), 0)
 
 if __name__ == "__main__":
     unittest.main()

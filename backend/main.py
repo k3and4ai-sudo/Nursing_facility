@@ -2432,6 +2432,13 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     session.etegami_image_engine = "pollinations"  # Default: free AI
     session.has_confirmed_image_engine = False
     session.pending_motif_for_engine_confirm = None
+    session.has_resident_requested_etegami = False
+    session.pending_motif = None
+    session.pending_motif_confirm = None
+    session.pending_artwork_confirm = None
+    session.pending_save_confirm = None
+    session.is_etegami_updating = False
+    session.is_etegami_visible = False
 
     latest_whisper_transcription = {"text": "", "time": 0.0}
 
@@ -2857,6 +2864,9 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 asyncio.create_task(on_live_etegami_motif_confirm_decision(confirmed))
 
             elif msg_type == "etegami_artwork_ready":
+                if not getattr(session, "has_resident_requested_etegami", False):
+                    print(f"[Etegami Artwork Ready ({terminal_id})]: Blocked - resident has not requested etegami creation in this session.")
+                    continue
                 artwork_title = data.get("title", "手作り絵手紙")
                 session.pending_artwork_confirm = True
                 print(f"[Client Message ({terminal_id})]: Artwork ready on screen -> '{artwork_title}'. Prompting resident.")

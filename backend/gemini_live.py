@@ -312,8 +312,9 @@ class GeminiLiveSession:
                         last_msg_text = msg
                     if recent_turns:
                         history_text = (
-                            "\n【直近の会話履歴（※過去の参考情報です。起動時は続きを話さず必ず最初の挨拶を行ってください）】\n" +
-                            "\n".join(recent_turns) + "\n"
+                            "\n【過去の会話の参考情報（※前回の会話内容はすでに終了しています。新規セッションのため続きを話さず必ず最初の挨拶を行ってください）】\n" +
+                            "\n".join([f"・[過去ログメモ] {t}" for t in recent_turns]) +
+                            "\n※上記は過去の会話の背景知識です。前回の会話の返答や続きを話してはいけません。\n"
                         )
 
                 # Resident schedules context for today (with current time and past/upcoming status)
@@ -486,8 +487,12 @@ class GeminiLiveSession:
                                         f"3. これからの楽しみ（季節の移り変わり、お花、美味しい食べ物、昔の思い出など ※架空のレクリエーションや予定を勝手に創作・でっち上げることは絶対に厳禁）\n"
                                         f"4. 相談事・お悩み・日々の愚痴や不安（無理に詮索せず受容・共感し、安心感を届ける）\n"
                                         f"※思考解説や英語は一切喋らず、利用者様への温かい日本語の返答のみ（1〜2文）を発話してください。\n"
-                                        f"{today_schedules_text}"
-                                        f"{history_text}"
+                                        f"{history_text}\n"
+                                        f"{today_schedules_text}\n"
+                                        f"★【接続開始時の発話ルール（絶対厳守）】：\n"
+                                        f"・本セッションは今新しく接続されたばかりの新規セッションです。過去の会話バッファの返答や続きを話すことは【絶対に禁止】です。\n"
+                                        f"・利用者が今このセッションで「絵を描きたい」と言うまで、絵手紙の話題をあなたから出すことは【絶対に厳禁】です。\n"
+                                        f"・最初の発話（挨拶）は、必ず明るく『{nickname}、こんにちは！何かお手伝いできることはありますか？』とだけ温かく語りかけ、利用者の応答を静かに待ってください。\n"
                                     )
                                 }
                             ]
@@ -496,16 +501,9 @@ class GeminiLiveSession:
                 }
                 await self.ws.send(json.dumps(setup_frame, ensure_ascii=False))
                 
-                # Flush any pending PCM audio chunks buffered during reconnect
+                # Drop any stale pending PCM audio chunks from previous connection to prevent buffer replay
                 if self.pending_chunks:
-                    print(f"[Gemini Live Session]: Flushing {len(self.pending_chunks)} buffered audio chunks after reconnect...")
-                    for chunk_b64 in self.pending_chunks:
-                        media_frame = {
-                            "realtimeInput": {
-                                "mediaChunks": [{"mimeType": "audio/pcm;rate=16000", "data": chunk_b64}]
-                            }
-                        }
-                        await self.ws.send(json.dumps(media_frame))
+                    print(f"[Gemini Live Session]: Discarding {len(self.pending_chunks)} stale buffered audio chunks from previous connection.")
                     self.pending_chunks.clear()
 
                 # Start background listener loop for incoming Gemini responses
