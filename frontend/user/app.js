@@ -310,7 +310,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentEtegamiCalligraphy = "心穏やかに 寄り添う日々";
     let currentEtegamiTranscript = "";
     let isEtegamiConfirming = false;
-    let isEtegamiUpdating = false;
     let isFirstEtegamiLoad = true;
     let hasActiveSessionGeneration = false;
     let lastGeneratedArtworkData = null;
@@ -511,6 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
             isEtegamiConfirming = false;
             isEtegamiUpdating = false;
         }
+    }
     window.setEtegamiPhase = setEtegamiPhase;
 
     // 互換性ラッパー（外部やレガシーハンドラからの呼び出し用）
