@@ -151,6 +151,11 @@ document.addEventListener("DOMContentLoaded", () => {
         updateShowEtegamiBtnVisibility();
 
         // 🎨 開いた時にモード・モデル未決定の場合は「どちらの絵にしますか」から開始し、モデル決定まで他の入力をブロック
+        // （完成直後の場合は再度モード確認モーダルを開かない）
+        if (currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED) {
+            console.log("[Etegami Card]: Suppressed startup mode modal because current phase is COMPLETED.");
+            return;
+        }
         if (!hasConfirmedEtegamiModeAndEngine) {
             const modeModal = document.getElementById("etegami-mode-confirm-modal");
             if (modeModal) {
@@ -589,15 +594,23 @@ document.addEventListener("DOMContentLoaded", () => {
             currentEtegamiMotif = "";
             currentEtegamiTranscript = "";
 
-            // 完成・保存の余韻を表示した後、色紙カードを閉じる
+            // UI通知と音声案内「通常会話に戻します」を実行
+            if (typeof showTemporaryToast === "function") {
+                showTemporaryToast("💮 絵手紙が完成しました。通常会話に戻します。", 5000);
+            } else if (typeof showUIToast === "function") {
+                showUIToast("💮 絵手紙が完成しました。通常会話に戻します。", "simple");
+            }
+            if (typeof playTTSVoice === "function") {
+                playTTSVoice("絵手紙が完成しました。通常会話に戻します。", true);
+            }
+
+            // 完成・保存の余韻を少し表示した後、色紙カードを閉じて通常会話状態(IDLE)へ戻す
             if (window._etegamiCompletedCloseTimer) clearTimeout(window._etegamiCompletedCloseTimer);
             window._etegamiCompletedCloseTimer = setTimeout(() => {
-                if (currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED) {
-                    console.log("[Etegami Card]: Auto closing card after completion display.");
-                    hideEtegamiCard();
-                    currentEtegamiPhase = ETEGAMI_PHASE.IDLE;
-                }
-            }, 6000);
+                console.log("[Etegami Card]: Closing card and returning to IDLE (normal conversation).");
+                hideEtegamiCard();
+                currentEtegamiPhase = ETEGAMI_PHASE.IDLE;
+            }, 3000);
         } else {
             // IDLE
             if (listeningPanel) listeningPanel.classList.add("hidden");
@@ -667,7 +680,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateEtegamiDisplay(data) {
         if (!data) return;
-        if (data.force_open === true) {
+        if (data.force_open === true && !data.is_completed) {
             showEtegamiCard();
         }
         // Note: Do NOT hide motifConfirmModal here to prevent premature modal dismissal while user is confirming
@@ -867,15 +880,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.is_initial === true || isFirstEtegamiLoad || !hasActiveSessionGeneration) {
             isFirstEtegamiLoad = false;
         } else {
-            // New or updated artwork ready: prominently show and center card
-            showEtegamiCard(true);
             if (isCompleted) {
                 if (typeof showTemporaryToast === "function") {
-                    showTemporaryToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, 5000);
+                    showTemporaryToast(`💮 絵手紙が完成しました。通常会話に戻します。`, 5000);
                 } else if (typeof showUIToast === "function") {
-                    showUIToast(`💮 絵手紙が完成しました！ご家族様にお届けします`, "simple");
+                    showUIToast(`💮 絵手紙が完成しました。通常会話に戻します。`, "simple");
                 }
             } else {
+                // New or updated artwork ready: prominently show and center card
+                showEtegamiCard(true);
                 if (typeof showTemporaryToast === "function") {
                     showTemporaryToast(`🎨 みまもりさん：新しい絵手紙を描きました（${newTitle}）`, 5500);
                 } else if (typeof showUIToast === "function") {
@@ -883,7 +896,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         }
-        if (data && data.force_open === true) {
+        if (data && data.force_open === true && !isCompleted) {
             showEtegamiCard(true);
         }
     }
@@ -2007,7 +2020,29 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                         }, 4000);
                     }
+                    if (typeof showTemporaryToast === "function") {
+                        showTemporaryToast("💮 絵手紙が完成しました。通常会話に戻します。", 5000);
+                    }
+                    if (typeof playTTSVoice === "function") {
+                        playTTSVoice("絵手紙が完成しました。通常会話に戻します。", true);
+                    }
+                    if (typeof hideEtegamiCard === "function") {
+                        hideEtegamiCard();
+                    }
+                    currentEtegamiPhase = ETEGAMI_PHASE.IDLE;
                 }
+            } else if (data.type === "etegami_completed_notice") {
+                console.log("[LiveWS]: Received etegami_completed_notice ->", data.message);
+                if (typeof showTemporaryToast === "function") {
+                    showTemporaryToast(data.message || "💮 絵手紙が完成しました。通常会話に戻します。", 5000);
+                }
+                if (typeof playTTSVoice === "function") {
+                    playTTSVoice(data.message || "絵手紙が完成しました。通常会話に戻します。", true);
+                }
+                if (typeof hideEtegamiCard === "function") {
+                    hideEtegamiCard();
+                }
+                currentEtegamiPhase = ETEGAMI_PHASE.IDLE;
             } else if (data.type === "etegami_update") {
                 console.log("[LiveWS]: Received etegami_update ->", data);
                 updateEtegamiDisplay(data);
@@ -2593,13 +2628,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function playTTSVoice(text) {
+    function playTTSVoice(text, force = false) {
         if (!text || !window.speechSynthesis) return;
 
-        // Mutual Exclusion: If Gemini Live is currently speaking or has audio queued, suppress Mimamori TTS voice
-        if (isPlayingPCM24 || isAISpeaking || (liveAudioCtx && nextAudioStartTime > liveAudioCtx.currentTime + 0.1)) {
+        // Mutual Exclusion: If Gemini Live is currently speaking or has audio queued, suppress Mimamori TTS voice unless force is true
+        if (!force && (isPlayingPCM24 || isAISpeaking || (liveAudioCtx && nextAudioStartTime > liveAudioCtx.currentTime + 0.1))) {
             console.log("[TTS]: Suppressed Mimamori voice ('" + text + "') to prevent overlap with Gemini speech.");
             return;
+        }
+
+        if (force) {
+            stopLiveAudioPlayback();
         }
 
         window.speechSynthesis.cancel();
@@ -4544,11 +4583,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[Etegami Artwork Confirm]: Resident approved artwork (はい) -> Completing & Saving!");
                 setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
 
-                showTemporaryToast("💮 みまもりさん：絵手紙を完成として保存しました！ご家族にもお届けしますね。", 5000);
+                showTemporaryToast("💮 絵手紙が完成しました。通常会話に戻します。", 5000);
+                playTTSVoice("絵手紙が完成しました。通常会話に戻します。", true);
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "complete_etegami" }));
                 } else if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: "complete_etegami" }));
+                    liveWs.send(JSON.stringify({ type: "complete_etegami" }));
                 }
             });
         }
@@ -4591,7 +4631,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 e.stopPropagation();
                 if (modal) modal.classList.add("hidden");
                 setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
-                showTemporaryToast("💮 みまもりさん：絵手紙を完成として保存しました！ご家族にもお届けしますね。", 5000);
+                showTemporaryToast("💮 絵手紙が完成しました。通常会話に戻します。", 5000);
+                playTTSVoice("絵手紙が完成しました。通常会話に戻します。", true);
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify({ type: "complete_etegami" }));
                 } else if (ws && ws.readyState === WebSocket.OPEN) {

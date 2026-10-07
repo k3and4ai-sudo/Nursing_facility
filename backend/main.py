@@ -2082,13 +2082,17 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 )
                 await websocket.send_json({
                     "type": "etegami_update",
-                    "force_open": True,
+                    "force_open": False,
                     **card_info
+                })
+                await websocket.send_json({
+                    "type": "etegami_completed_notice",
+                    "message": "絵手紙が完成しました。通常会話に戻します。"
                 })
                 await websocket.send_json({
                     "type": "mimamori_acknowledgement",
                     "action": "etegami_complete",
-                    "message": "💮 みまもりさん：絵手紙を完成として記録・保存しました"
+                    "message": "💮 みまもりさん：絵手紙を完成として記録・保存しました。通常会話に戻します。"
                 })
                 await websocket.send_json({
                     "type": "etegami_updating",
@@ -2120,7 +2124,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 try:
                     if session.is_connected:
                         asyncio.create_task(session.send_system_note(
-                            "絵手紙が完成し、保存・記録されました。絵手紙の作成や聞き取りは完全に終了しました。利用者に『素敵な絵手紙ができましたね！ご家族にも届けておきますね』と温かく労い、今後は絵手紙のモチーフや絵の質問を一切せず、通常の日常会話に戻ってください。"
+                            "絵手紙が完成し、保存・記録されました。絵手紙の作成や聞き取りは完全に終了しました。利用者に『素敵な絵手紙ができましたね！通常会話に戻りますので、何でもお話ししてくださいね』と温かく労い、今後は絵手紙のモチーフや絵の質問を一切せず、通常の日常会話に戻ってください。"
                         ))
                 except Exception as e_sn:
                     print(f"Error sending completion system note ({terminal_id}): {e_sn}")

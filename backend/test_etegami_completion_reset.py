@@ -44,7 +44,7 @@ class TestEtegamiCompletionSessionReset(unittest.IsolatedAsyncioTestCase):
         session.is_etegami_visible = False
 
         await session.send_system_note(
-            "絵手紙が完成し、保存・記録されました。絵手紙の作成や聞き取りは完全に終了しました。利用者に『素敵な絵手紙ができましたね！ご家族にも届けておきますね』と温かく労い、今後は絵手紙のモチーフや絵の質問を一切せず、通常の日常会話に戻ってください。"
+            "絵手紙が完成し、保存・記録されました。絵手紙の作成や聞き取りは完全に終了しました。利用者に『素敵な絵手紙ができましたね！通常会話に戻りますので、何でもお話ししてくださいね』と温かく労い、今後は絵手紙のモチーフや絵の質問を一切せず、通常の日常会話に戻ってください。"
         )
 
         self.assertFalse(session.has_resident_requested_etegami)
