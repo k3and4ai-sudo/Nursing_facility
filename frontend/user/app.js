@@ -354,6 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentEtegamiMotif = "";
     let currentEtegamiCalligraphy = "心穏やかに 寄り添う日々";
     let currentEtegamiTranscript = "";
+    let currentEtegamiPromptEn = "";
     let etegamiAccumulatedUtterances = [];
     let etegamiAccumulatedText = "";
     let isEtegamiConfirming = false;
@@ -516,6 +517,27 @@ document.addEventListener("DOMContentLoaded", () => {
                 updatingSub.textContent = `「${currentEtegamiMotif || '絵手紙'}」を描いています`;
             }
 
+            // 📝 掻き出し・描画中のプロンプト蓄積表示
+            const updatingPromptBox = document.getElementById("updating-prompt-box");
+            const updatingPromptJa = document.getElementById("updating-prompt-ja");
+            const updatingPromptEn = document.getElementById("updating-prompt-en");
+            const fullAccText = payload.accumulated_text || etegamiAccumulatedText || currentEtegamiTranscript || "";
+            const fullPromptEn = payload.prompt_en || currentEtegamiPromptEn || "";
+
+            if (updatingPromptBox) {
+                if (fullAccText || fullPromptEn) {
+                    updatingPromptBox.classList.remove("hidden");
+                    if (updatingPromptJa) {
+                        updatingPromptJa.textContent = fullAccText ? `【要望・会話詳細】: ${fullAccText}` : `【モチーフ】: ${currentEtegamiMotif || '思い出の情景'}`;
+                    }
+                    if (updatingPromptEn) {
+                        updatingPromptEn.textContent = fullPromptEn ? `【AI画像プロンプト】: ${fullPromptEn}` : "";
+                    }
+                } else {
+                    updatingPromptBox.classList.add("hidden");
+                }
+            }
+
             isEtegamiConfirming = false;
             isEtegamiUpdating = true;
             isModalOpen = false;
@@ -544,6 +566,27 @@ document.addEventListener("DOMContentLoaded", () => {
                     previewImg.src = artworkData.image_url.includes("?") 
                         ? `${artworkData.image_url}&t=${cacheBuster}` 
                         : `${artworkData.image_url}?t=${cacheBuster}`;
+                }
+            }
+
+            // 📝 完成確認画面でもプロンプトの蓄積を表示
+            const confirmPromptContainer = document.getElementById("artwork-confirm-prompt-container");
+            const confirmPromptJa = document.getElementById("artwork-confirm-prompt-ja");
+            const confirmPromptEn = document.getElementById("artwork-confirm-prompt-en");
+            const finishAccText = (artworkData && artworkData.accumulated_text) || etegamiAccumulatedText || currentEtegamiTranscript || "";
+            const finishPromptEn = (artworkData && (artworkData.prompt_en || (artworkData.image_generation_prompt && artworkData.image_generation_prompt.positive_prompt))) || currentEtegamiPromptEn || "";
+
+            if (confirmPromptContainer) {
+                if (finishAccText || finishPromptEn) {
+                    confirmPromptContainer.classList.remove("hidden");
+                    if (confirmPromptJa) {
+                        confirmPromptJa.textContent = finishAccText ? `【要望・会話詳細】: ${finishAccText}` : `【モチーフ】: ${currentEtegamiMotif || '思い出の情景'}`;
+                    }
+                    if (confirmPromptEn) {
+                        confirmPromptEn.textContent = finishPromptEn ? `【AI画像プロンプト】: ${finishPromptEn}` : "";
+                    }
+                } else {
+                    confirmPromptContainer.classList.add("hidden");
                 }
             }
 
@@ -1962,6 +2005,30 @@ document.addEventListener("DOMContentLoaded", () => {
                         const engineText = data.engine_label || "無料AI Pollinations";
                         updatingTextSub.textContent = `「${motifText}」（${engineText}）`;
                     }
+                    if (data.motif) currentEtegamiMotif = data.motif;
+                    if (data.prompt_en) currentEtegamiPromptEn = data.prompt_en;
+                    if (data.accumulated_text) etegamiAccumulatedText = data.accumulated_text;
+
+                    const updatingPromptBox = document.getElementById("updating-prompt-box");
+                    const updatingPromptJa = document.getElementById("updating-prompt-ja");
+                    const updatingPromptEn = document.getElementById("updating-prompt-en");
+                    const fullAccText = data.accumulated_text || etegamiAccumulatedText || currentEtegamiTranscript || "";
+                    const fullPromptEn = data.prompt_en || currentEtegamiPromptEn || "";
+
+                    if (updatingPromptBox) {
+                        if (fullAccText || fullPromptEn) {
+                            updatingPromptBox.classList.remove("hidden");
+                            if (updatingPromptJa) {
+                                updatingPromptJa.textContent = fullAccText ? `【要望・会話詳細】: ${fullAccText}` : `【モチーフ】: ${data.motif || currentEtegamiMotif || '思い出の情景'}`;
+                            }
+                            if (updatingPromptEn) {
+                                updatingPromptEn.textContent = fullPromptEn ? `【AI画像プロンプト】: ${fullPromptEn}` : "";
+                            }
+                        } else {
+                            updatingPromptBox.classList.add("hidden");
+                        }
+                    }
+
                     if (voiceHint) voiceHint.classList.remove("hidden");
                     if (statusBadge) {
                         statusBadge.classList.remove("hidden");
@@ -2122,6 +2189,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[LiveWS]: Received etegami_motif_confirm_prompt ->", data);
                 if (data.motif) {
                     currentEtegamiMotif = data.motif;
+                }
+                if (data.prompt_en) {
+                    currentEtegamiPromptEn = data.prompt_en;
                 }
                 if (data.accumulated_text && !etegamiAccumulatedText) {
                     etegamiAccumulatedText = data.accumulated_text;
@@ -4606,9 +4676,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     return;
                 }
                 console.log("[Etegami Motif Confirm]: Resident confirmed motif (はい) -> Advancing to DRAWING");
-                setEtegamiPhase(ETEGAMI_PHASE.DRAWING);
-
                 const fullText = etegamiAccumulatedText || currentEtegamiTranscript || "";
+                setEtegamiPhase(ETEGAMI_PHASE.DRAWING, {
+                    motif: currentEtegamiMotif || "思い出の風景",
+                    prompt_en: currentEtegamiPromptEn,
+                    accumulated_text: fullText
+                });
                 const payload = {
                     type: "etegami_motif_confirm_response",
                     confirmed: true,

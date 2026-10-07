@@ -251,6 +251,11 @@
                                 <div class="updating-progress-track">
                                     <div class="updating-progress-bar"></div>
                                 </div>
+                                <div id="updating-prompt-box" class="updating-prompt-box hidden">
+                                    <div class="updating-prompt-label">📝 蓄積されたプロンプト・要望</div>
+                                    <div id="updating-prompt-ja" class="updating-prompt-ja"></div>
+                                    <div id="updating-prompt-en" class="updating-prompt-en"></div>
+                                </div>
                                 <div class="updating-time-hint">✨ 約10〜15秒で自動的に仕上がります</div>
                             </div>
                         </div>
@@ -547,6 +552,14 @@
                         </div>
                         <div id="artwork-confirm-title" class="motif-field-value" style="border-left-color: #10b981;">
                             【手作り絵手紙】思い出の風景
+                        </div>
+
+                        <div id="artwork-confirm-prompt-container" class="artwork-confirm-prompt-container hidden" style="margin-top: 10px;">
+                            <div class="motif-field-label" style="color: #059669;">
+                                <span>📝</span><span>反映されたプロンプトの蓄積：</span>
+                            </div>
+                            <div id="artwork-confirm-prompt-ja" class="motif-field-value" style="border-left-color: #10b981; font-size: 0.95rem; max-height: 80px; overflow-y: auto; margin-bottom: 6px;"></div>
+                            <div id="artwork-confirm-prompt-en" class="motif-field-value" style="border-left-color: #059669; font-size: 0.85rem; max-height: 80px; overflow-y: auto; color: #475569; font-family: monospace;"></div>
                         </div>
                     </div>
 

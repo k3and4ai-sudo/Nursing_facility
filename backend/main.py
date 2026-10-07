@@ -1905,6 +1905,20 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "action": "etegami_update",
                     "message": loading_msg
                 })
+                # Maintain seed and accumulated details for incremental drawing additions
+                if getattr(session, "etegami_seed", None) is None:
+                    session.etegami_seed = random.randint(10000, 999999)
+                eff_seed = session.etegami_seed
+                eff_details = getattr(session, "etegami_accumulated_details", [])
+                eff_accumulated = getattr(session, "etegami_accumulated_text", "")
+
+                if not custom_prompt_en:
+                    custom_prompt_en = multimedia.build_rich_etegami_prompt(
+                        motif_ja=motif,
+                        details_ja=eff_details,
+                        accumulated_text_ja=eff_accumulated
+                    )
+
                 # Immediately show etegami card and display prominent drawing spinner/progress badge
                 session.is_etegami_visible = True
                 await websocket.send_json({
@@ -1916,20 +1930,10 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "type": "etegami_updating",
                     "updating": True,
                     "motif": motif,
-                    "engine_label": engine_label
+                    "engine_label": engine_label,
+                    "prompt_en": custom_prompt_en,
+                    "accumulated_text": eff_accumulated
                 })
-
-                # Maintain seed and accumulated details for incremental drawing additions
-                if getattr(session, "etegami_seed", None) is None:
-                    session.etegami_seed = random.randint(10000, 999999)
-                eff_seed = session.etegami_seed
-                eff_details = getattr(session, "etegami_accumulated_details", [])
-
-                if not custom_prompt_en:
-                    custom_prompt_en = multimedia.build_rich_etegami_prompt(
-                        motif_ja=motif,
-                        details_ja=eff_details
-                    )
 
                 card_info = await asyncio.to_thread(
                     multimedia.modify_or_create_etegami,
@@ -1972,6 +1976,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     "type": "etegami_visibility",
                     "visible": True
                 })
+                card_info["prompt_en"] = custom_prompt_en
+                card_info["accumulated_text"] = eff_accumulated
                 await websocket.send_json({
                     "type": "etegami_update",
                     "force_open": True,
@@ -2551,9 +2557,11 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                     details_ja=eff_details
                 )
 
+            eff_accumulated = getattr(session, "etegami_accumulated_text", "")
             # 💡 【居住者への確認ステップ】：すぐ描かず、聞き取り内容確認画面を表示して保留する
             session.pending_motif_confirm = {
                 "motif": eff_motif,
+                "accumulated_text": eff_accumulated,
                 "prompt_en": custom_prompt_en,
                 "title": eff_title,
                 "calligraphy": eff_calligraphy
@@ -2572,6 +2580,8 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             await websocket.send_json({
                 "type": "etegami_motif_confirm_prompt",
                 "motif": eff_motif,
+                "accumulated_text": eff_accumulated,
+                "prompt_en": custom_prompt_en,
                 "title": eff_title,
                 "calligraphy": eff_calligraphy,
                 "message": f"『{eff_motif}』で絵手紙を描きますか？"
