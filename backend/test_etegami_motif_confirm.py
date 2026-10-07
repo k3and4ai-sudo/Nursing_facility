@@ -60,5 +60,38 @@ class TestEtegamiMotifConfirm(unittest.TestCase):
         self.assertEqual(session.etegami_image_engine, "google_image")
         print("✓ Verified mode and engine selection are touch-only.")
 
+    def test_continuous_speech_accumulation_and_prompt_augmentation(self):
+        from backend.multimedia import build_rich_etegami_prompt
+
+        session = MagicMock()
+        session.is_etegami_listening = True
+        session.etegami_accumulated_text = ""
+
+        # 連続した聞き取り発話の蓄積シミュレーション
+        utterances = [
+            "マルチーズを描いてほしいな",
+            "座敷を走る白い犬がいいな",
+            "赤い首輪をしていてね"
+        ]
+        for speech in utterances:
+            acc = session.etegami_accumulated_text or ""
+            if speech not in acc:
+                session.etegami_accumulated_text = (acc + " " + speech).strip()
+
+        self.assertIn("マルチーズ", session.etegami_accumulated_text)
+        self.assertIn("座敷", session.etegami_accumulated_text)
+        self.assertIn("赤い首輪", session.etegami_accumulated_text)
+
+        # 「この内容で次に進む」が押された際の画像プロンプト付け足し検証
+        prompt_en = build_rich_etegami_prompt(
+            motif_ja="マルチーズ",
+            accumulated_text_ja=session.etegami_accumulated_text
+        )
+        self.assertIn("maltese", prompt_en.lower())
+        self.assertTrue("tatami" in prompt_en.lower() or "room" in prompt_en.lower())
+        self.assertTrue("collar" in prompt_en.lower() or "red" in prompt_en.lower())
+        self.assertTrue("running" in prompt_en.lower())
+        print("✓ Verified continuous speech accumulation and prompt augmentation.")
+
 if __name__ == '__main__':
     unittest.main()

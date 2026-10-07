@@ -2224,6 +2224,8 @@ body.simple-mode .speech-box.user-box {
     font-weight: 800;
     color: #ffffff;
     min-height: 2em;
+    max-height: 160px;
+    overflow-y: auto;
     line-height: 1.4;
     word-break: break-word;
 }

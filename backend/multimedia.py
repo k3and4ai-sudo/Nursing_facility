@@ -179,28 +179,33 @@ def generate_image_with_gemini(
 def build_rich_etegami_prompt(
     motif_ja: str,
     details_ja: Optional[List[str]] = None,
-    base_prompt_en: Optional[str] = None
+    base_prompt_en: Optional[str] = None,
+    accumulated_text_ja: Optional[str] = None
 ) -> str:
     """
     Translates and synthesizes Japanese motif and conversational details into a rich,
     authentic English prompt tailored for Japanese Etegami watercolor artwork.
-    Supports continuous refinement and 'drawing addition' onto the base artwork.
+    Supports continuous refinement and 'drawing addition' onto the base artwork,
+    incorporating the entire resident listening transcript collected during conversation.
     """
     clean_motif = (motif_ja or "").strip()
     clean_details = [d.strip() for d in (details_ja or []) if d and len(d.strip()) > 1]
+    accumulated_str = (accumulated_text_ja or "").strip()
 
     # Combine motif and additional details into a context string
     details_str = "、".join(clean_details) if clean_details else ""
     context_str = f"モチーフ: 「{clean_motif}」"
     if details_str:
         context_str += f"、追加の情景・聞き取った様子: 「{details_str}」"
+    if accumulated_str:
+        context_str += f"、聞き取った会話内容・要望詳細: 「{accumulated_str}」"
 
     # 1. Try Ollama LLM prompt translation
     try:
         system_inst = (
             "あなたは絵手紙・日本の水彩画の画像生成プロンプト専門家です。\n"
-            "与えられたモチーフや会話から聞き取った情景を、日本の伝統的な絵手紙（Etegami style、和紙テクスチャ、淡いパステル調の水彩、繊細な墨線）の美麗な英語プロンプトに変換してください。\n"
-            "最初の絵に要素を描き足す（drawing addition / adding elements to the scene）ような連続性のある構図にしてください。\n"
+            "与えられたモチーフや会話から聞き取った情景・要望詳細を、日本の伝統的な絵手紙（Etegami style、和紙テクスチャ、淡いパステル調の水彩、繊細な墨線）の美麗な英語プロンプトに変換してください。\n"
+            "会話内容から聞き取った具体的な特徴（色、装飾、首輪、場所、動作、表情、周囲の情景）をプロンプトに漏れなく付け足してください。\n"
             "出力は英語のプロンプト1文のみ（A beautiful Japanese watercolor Etegami painting of ...）を出力してください。余計な解説や引用符は不要です。"
         )
         user_inst = f"{context_str}\n英語プロンプト:"
@@ -209,7 +214,7 @@ def build_rich_etegami_prompt(
             "prompt": user_inst,
             "system": system_inst,
             "stream": False,
-            "options": {"temperature": 0.2, "num_predict": 120}
+            "options": {"temperature": 0.2, "num_predict": 140}
         }
         req = urllib.request.Request(
             f"{config.OLLAMA_URL}/api/generate",
@@ -232,26 +237,42 @@ def build_rich_etegami_prompt(
         "マルチーズ": "a fluffy cute white maltese puppy dog",
         "犬": "a cute playful puppy dog",
         "子犬": "a friendly cute puppy",
+        "白い犬": "a beautiful pure white puppy dog",
+        "白": "pure white coat",
+        "首輪": "wearing a cute decorative collar",
+        "赤い首輪": "wearing a charming little red collar",
+        "赤": "warm red accents",
+        "青": "soft blue accents",
+        "黄色": "cheerful yellow accents",
+        "スマート": "slender and energetic silhouette",
         "猫": "a gentle lovely cat curled up",
         "子猫": "a playful sweet kitten",
+        "三毛猫": "a charming tricolor calico cat",
         "座敷": "traditional Japanese tatami room with shoji paper screens",
         "畳": "sunny tatami mat floor",
         "走る": "running joyfully and playfully",
-        "走って": "running energetically",
+        "走って": "running energetically with delight",
+        "駆け回る": "dashing around happily",
         "縁側": "wooden engawa porch overlooking a garden",
+        "庭": "a tranquil Japanese garden with stones and plants",
         "お茶": "a steaming cup of green tea in a rustic ceramic cup",
         "桜": "blooming soft pink cherry blossoms",
+        "朝顔": "blooming morning glory flowers",
+        "風鈴": "a delicate glass wind chime swaying in breeze",
         "コスモス": "delicate pink cosmos autumn flowers",
         "紅葉": "vibrant autumn maple leaves",
         "向日葵": "bright yellow blooming sunflowers",
         "ひまわり": "bright yellow blooming sunflowers",
         "富士山": "majestic Mount Fuji with snow cap in morning mist",
-        "小鳥": "gentle little songbirds perched on a twig"
+        "夕焼け": "a warm glowing nostalgic sunset sky",
+        "小鳥": "gentle little songbirds perched on a twig",
+        "すずめ": "cute little sparrows hopping around"
     }
 
     english_elements = []
+    combined_search_text = context_str
     for k, v in translation_map.items():
-        if k in context_str and v not in english_elements:
+        if k in combined_search_text and v not in english_elements:
             english_elements.append(v)
 
     if not english_elements:

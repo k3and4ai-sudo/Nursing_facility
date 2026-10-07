@@ -354,6 +354,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentEtegamiMotif = "";
     let currentEtegamiCalligraphy = "心穏やかに 寄り添う日々";
     let currentEtegamiTranscript = "";
+    let etegamiAccumulatedUtterances = [];
+    let etegamiAccumulatedText = "";
     let isEtegamiConfirming = false;
     let isEtegamiModalSelecting = false;
     let hasConfirmedEtegamiModeAndEngine = false;
@@ -437,11 +439,15 @@ document.addEventListener("DOMContentLoaded", () => {
             if (updatingBadge) updatingBadge.classList.add("hidden");
 
             const motifTarget = document.getElementById("motif-confirm-target");
+            const detailsTarget = document.getElementById("motif-confirm-details");
             const calligraphyTarget = document.getElementById("motif-confirm-calligraphy");
             const motifToConfirm = payload.motif || currentEtegamiMotif || currentEtegamiTranscript || "思い出の情景";
             currentEtegamiMotif = motifToConfirm;
 
             if (motifTarget) motifTarget.textContent = motifToConfirm;
+            if (detailsTarget) {
+                detailsTarget.textContent = payload.accumulated_text || etegamiAccumulatedText || currentEtegamiTranscript || "（お話しされた内容）";
+            }
             if (calligraphyTarget) calligraphyTarget.textContent = payload.calligraphy || currentEtegamiCalligraphy;
 
             if (motifConfirmModal) {
@@ -655,21 +661,57 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.showSaveConfirmModal = showSaveConfirmModal;
 
-    // 👂 聞き取りテキスト更新ヘルパー
+    // 👂 聞き取りテキスト更新ヘルパー（「この内容で次に進む」が押されるまで連続で蓄積・表示）
     function updateEtegamiListeningText(text) {
         if (!text) return;
-        // 完成・保存済み、または聞き取りフェーズでない時は更新しない
+        // 完成・保存済みの時は更新しない
         if (currentEtegamiPhase === ETEGAMI_PHASE.COMPLETED) {
             return;
         }
-        currentEtegamiTranscript = text.trim();
+        const clean = text.trim();
+        if (!clean) return;
+
+        // 聞き取った文字列を連続で蓄積
+        const lastIdx = etegamiAccumulatedUtterances.length - 1;
+        if (lastIdx >= 0) {
+            const lastUtterance = etegamiAccumulatedUtterances[lastIdx];
+            if (clean === lastUtterance) {
+                // 完全重複はスキップ
+                return;
+            }
+            if (clean.startsWith(lastUtterance) || (clean.length > lastUtterance.length && clean.includes(lastUtterance))) {
+                // 直前発話の途中経過・補完（長くなった差分に置き換え）
+                etegamiAccumulatedUtterances[lastIdx] = clean;
+            } else if (lastUtterance.startsWith(clean)) {
+                // 直前発話より短いPrefixはスキップ
+                return;
+            } else {
+                // 新しい文・発話として追加
+                etegamiAccumulatedUtterances.push(clean);
+            }
+        } else {
+            etegamiAccumulatedUtterances.push(clean);
+        }
+
+        // 句読点で自然に連結して連続表示テキストを作成
+        etegamiAccumulatedText = etegamiAccumulatedUtterances
+            .map(u => u.replace(/[。、]+$/, ""))
+            .filter(Boolean)
+            .join("。");
+        if (etegamiAccumulatedText && !etegamiAccumulatedText.endsWith("。")) {
+            etegamiAccumulatedText += "。";
+        }
+
+        currentEtegamiTranscript = etegamiAccumulatedText;
         const listeningTextEl = document.getElementById("etegami-listening-text");
         if (listeningTextEl) {
-            listeningTextEl.textContent = currentEtegamiTranscript;
+            listeningTextEl.textContent = etegamiAccumulatedText;
+            listeningTextEl.scrollTop = listeningTextEl.scrollHeight;
         }
 
         // キーワード抽出してモチーフ候補を自動更新
         const candidates = [
+            "座敷を走るスマートなマルチーズ", "スマートなマルチーズ", "座敷を走るマルチーズ", "マルチーズ",
             "座敷の中で子犬が走っている", "座敷の中で犬が走っている", "座敷の中を走る子犬", "座敷の中を走る犬",
             "座敷の中を走り回る犬", "座敷を走り回る犬", "座敷で走り回る犬", "座敷を走り回る白い犬", "座敷を走る白い犬",
             "座敷で走る子犬", "座敷で走る犬", "座敷を走る子犬", "座敷を走る犬",
@@ -690,9 +732,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
         if (!currentEtegamiMotif && currentEtegamiTranscript.length > 0) {
-            const clean = currentEtegamiTranscript.replace(/[。、！？\s]/g, "");
-            if (clean.length > 0) {
-                currentEtegamiMotif = clean.length > 24 ? clean.substring(0, 24) : clean;
+            const cleanNoPunct = currentEtegamiTranscript.replace(/[。、！？\s]/g, "");
+            if (cleanNoPunct.length > 0) {
+                currentEtegamiMotif = cleanNoPunct.length > 24 ? cleanNoPunct.substring(0, 24) : cleanNoPunct;
             }
         }
     }
@@ -2080,14 +2122,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[LiveWS]: Received etegami_motif_confirm_prompt ->", data);
                 if (data.motif) {
                     currentEtegamiMotif = data.motif;
-                    if (typeof updateEtegamiListeningText === "function") {
-                        updateEtegamiListeningText(data.motif);
-                    }
+                }
+                if (data.accumulated_text && !etegamiAccumulatedText) {
+                    etegamiAccumulatedText = data.accumulated_text;
+                    currentEtegamiTranscript = data.accumulated_text;
                 }
                 if (data.calligraphy) currentEtegamiCalligraphy = data.calligraphy;
-                if (currentEtegamiPhase === ETEGAMI_PHASE.CONFIRM_CONTENT) {
-                    setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_CONTENT, data);
-                }
+                setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_CONTENT, data);
             } else if (data.type === "etegami_motif_confirm_dismiss") {
                 console.log("[LiveWS]: Received etegami_motif_confirm_dismiss");
                 const confirmModal = document.getElementById("etegami-motif-confirm-modal");
@@ -4496,6 +4537,8 @@ document.addEventListener("DOMContentLoaded", () => {
             btnClear.addEventListener("click", (e) => {
                 e.stopPropagation();
                 console.log("[Etegami]: Resident pressed '内容クリア' -> Clearing transcript & motif");
+                etegamiAccumulatedUtterances = [];
+                etegamiAccumulatedText = "";
                 currentEtegamiTranscript = "";
                 currentEtegamiMotif = "";
                 const listeningTextEl = document.getElementById("etegami-listening-text");
@@ -4517,9 +4560,31 @@ document.addEventListener("DOMContentLoaded", () => {
         if (btnNext) {
             btnNext.addEventListener("click", (e) => {
                 e.stopPropagation();
-                console.log("[Etegami]: Resident pressed '次へ進む' -> Advancing to CONFIRM_CONTENT");
-                const chosenMotif = currentEtegamiMotif || currentEtegamiTranscript || "思い出の風景";
-                setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_CONTENT, { motif: chosenMotif });
+                console.log("[Etegami]: Resident pressed 'この内容で次に進む' -> Advancing to CONFIRM_CONTENT");
+                const fullText = etegamiAccumulatedText || currentEtegamiTranscript || "";
+                let chosenMotif = currentEtegamiMotif;
+                if (!chosenMotif && fullText) {
+                    const clean = fullText.replace(/[。、！？\s]/g, "");
+                    chosenMotif = clean.length > 24 ? clean.substring(0, 24) : clean;
+                }
+                chosenMotif = chosenMotif || "思い出の風景";
+                currentEtegamiMotif = chosenMotif;
+
+                setEtegamiPhase(ETEGAMI_PHASE.CONFIRM_CONTENT, {
+                    motif: chosenMotif,
+                    accumulated_text: fullText
+                });
+
+                const payload = {
+                    type: "etegami_listening_next",
+                    motif: chosenMotif,
+                    accumulated_text: fullText
+                };
+                if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    liveWs.send(JSON.stringify(payload));
+                } else if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(payload));
+                }
             });
         }
     }
@@ -4543,10 +4608,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("[Etegami Motif Confirm]: Resident confirmed motif (はい) -> Advancing to DRAWING");
                 setEtegamiPhase(ETEGAMI_PHASE.DRAWING);
 
+                const fullText = etegamiAccumulatedText || currentEtegamiTranscript || "";
                 const payload = {
                     type: "etegami_motif_confirm_response",
                     confirmed: true,
-                    motif: currentEtegamiMotif || "思い出の風景"
+                    motif: currentEtegamiMotif || "思い出の風景",
+                    accumulated_text: fullText
                 };
                 if (liveWs && liveWs.readyState === WebSocket.OPEN) {
                     liveWs.send(JSON.stringify(payload));
@@ -4602,6 +4669,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 console.log("[Etegami Artwork Confirm]: Resident approved artwork (はい) -> Completing & Saving!");
                 setEtegamiPhase(ETEGAMI_PHASE.COMPLETED);
+                etegamiAccumulatedUtterances = [];
+                etegamiAccumulatedText = "";
+                currentEtegamiTranscript = "";
+                currentEtegamiMotif = "";
 
                 showTemporaryToast("💮 絵手紙が完成しました。通常会話に戻します。", 5000);
                 playTTSVoice("絵手紙が完成しました。通常会話に戻します。", true);
