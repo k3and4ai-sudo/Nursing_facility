@@ -95,8 +95,9 @@ class PIIGuardrailMonitor:
             audio_np = np.frombuffer(buf_copy, dtype=np.int16).astype(np.float32) / 32768.0
             
             # Energy check: Skip Whisper if audio is essentially silence / room noise (prevents hallucinations)
+            peak = float(np.max(np.abs(audio_np)))
             rms = float(np.sqrt(np.mean(audio_np ** 2)))
-            if rms < 0.016:
+            if peak < 0.035 or rms < 0.020:
                 return
 
             # Execute Faster-Whisper / Whisper STT in threadpool executor
@@ -112,20 +113,7 @@ class PIIGuardrailMonitor:
             if not text or len(text) < 3:
                 return
 
-            # Filter out silence hallucinations & system audio echo
-            from backend.speech import has_repetitive_loop, is_japanese_speech
-            if has_repetitive_loop(text) or not is_japanese_speech(text):
-                print(f"[PII Guardrail Whisper Filtered Invalid/Loop]: '{text}'")
-                return
-
-            hallucinations = [
-                "ご視聴", "チャンネル登録", "お会いしましょう", "会話が終了します",
-                "今回の会話はここまで", "動画をご覧", "高評価", "字幕", "提供",
-                "個人情報保護のため", "会話を一時停止", "個人情報は話さない",
-                "スタッフに連絡する場合は", "ボタンを押してください",
-                "逃げ出せ", "逃げろ", "逃げて", "おやすみなさい"
-            ]
-            if any(h in text for h in hallucinations):
+            if self.is_hallucination_or_echo(text):
                 print(f"[PII Guardrail Whisper Filtered Hallucination/Echo]: '{text}'")
                 return
                 
@@ -155,7 +143,28 @@ class PIIGuardrailMonitor:
         except Exception as e:
             print(f"[PII Guardrail Error]: {e}")
         finally:
+            async with self.lock:
+                self.audio_buffer.clear()
+                self.last_check_len = 0
             self.is_processing = False
+
+    @staticmethod
+    def is_hallucination_or_echo(text: str) -> bool:
+        if not text:
+            return True
+        from backend.speech import has_repetitive_loop, is_japanese_speech
+        if has_repetitive_loop(text) or not is_japanese_speech(text):
+            return True
+
+        hallucinations = [
+            "ご視聴", "チャンネル登録", "お会いしましょう", "会話が終了します",
+            "今回の会話はここまで", "動画をご覧", "高評価", "字幕", "提供",
+            "個人情報保護のため", "会話を一時停止", "個人情報は話さない",
+            "スタッフに連絡する場合は", "ボタンを押してください",
+            "逃げ出せ", "逃げろ", "逃げて", "おやすみなさい",
+            "私の作品によると", "作品によると", "この映像は", "映像によると"
+        ]
+        return any(h in text for h in hallucinations)
 
     def reset(self):
         """Resets audio buffer and re-enables active monitoring for next conversation turn."""

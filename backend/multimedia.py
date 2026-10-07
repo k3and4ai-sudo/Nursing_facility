@@ -778,8 +778,13 @@ def translate_motif_for_etegami_art(motif: str) -> str:
     is_run = any(r in m for r in ["走", "駆", "かけっこ", "回り", "回る", "ダッシュ"])
     is_white = any(w in m for w in ["白", "しろ", "ホワイト"]) or is_maltese
 
+    is_smart = any(s in m for s in ["スマート", "すまーと", "細身", "すらっと", "すらり", "スリム", "すりむ"])
+
     if is_maltese:
-        dog_desc = "cute fluffy white Maltese puppy dog"
+        if is_smart:
+            dog_desc = "graceful slender well-groomed white Maltese dog with neat silky coat"
+        else:
+            dog_desc = "cute fluffy white Maltese puppy dog"
         # マルチーズが走る場合は座敷や和室との相性が抜群
         if is_room or is_run:
             return f"{dog_desc} running cheerfully across a traditional Japanese tatami zashiki room with shoji screens"
@@ -856,14 +861,19 @@ def extract_etegami_motif_from_speech(
         "居住者（高齢者）の自然な発話や会話文脈の中から、絵手紙として描くべき具体的な情景・題材・モチーフを抽出してください。\n\n"
         "【重要方針：登録単語リストに依存しない自由な抽出】\n"
         "1. 固定の単語リストに囚われず、居住者が語った思い出・情景・風景・生き物・場所・色・動作を自然に汲み取ってください。\n"
-        "   ・居住者が具体的な新しい動物や題材（例: 「マルチーズ」「白い犬」「走る姿」等）を話した時は、直前の古いモチーフに縛られず、新しく話された対象を主役に据えたモチーフ（例: 「元気に走る白いマルチーズ」「座敷の中の白いマルチーズ」等）を柔軟に構成してください。\n"
+        "   ・居住者が具体的な新しい動物や題材（例: 「マルチーズ」「白い犬」「走る姿」等）を話した時は、直前の古いモチーフに縛られず、新しく話された対象を主役に据えたモチーフ（例: 「元気に走る白いマルチーズ」「座敷の中の白いマルチーズ」等）を柔軟に構成してください。\n\n"
+        "2. 【手直し・特徴の修正・要望の最優先抽出】：\n"
+        "   ・居住者が絵の仕上がりについて「マルチーズはもっとスマートです」「もっとスマートにして」「もっと白く」「もっと大きく」「走っているところ」「座敷の中で」などの手直し・訂正・特徴の描写・要望を話した時は、日常の雑談と誤認せず、必ず絵手紙のモチーフ修正要望（is_motif: true）として抽出してください！\n"
+        "   ・直前のモチーフ（例: 「座敷を走るマルチーズ」）がある場合、その修正内容を反映させた合成モチーフ（例: 「座敷を走るスマートなマルチーズ」「スマートなマルチーズ」等）を作成してください。\n"
         "   例:\n"
+        "   - 「マルチーズはもっとスマートです」 -> motif_ja: \"スマートなマルチーズ\", prompt_en: \"A beautiful Japanese watercolor painting of a slender graceful white Maltese dog running, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
+        "   - 「もっとスマートなマルチーズが走り回っています」 -> motif_ja: \"座敷を走るスマートなマルチーズ\", prompt_en: \"A beautiful Japanese watercolor painting of a slender graceful Maltese dog running cheerfully in a tatami room, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「白いマルチーズでした」 -> motif_ja: \"白いマルチーズ\", prompt_en: \"A beautiful Japanese watercolor painting of a cute fluffy white Maltese puppy dog, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「座敷の周りの風景を描いてください」 -> motif_ja: \"座敷の周りの風景\", prompt_en: \"A beautiful Japanese watercolor painting of the scenery around the traditional tatami zashiki room with shoji screens, serene garden view, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「昔、縁側でおばあちゃんと冷たいスイカを食べたんだよ」 -> motif_ja: \"縁側でおばあちゃんと食べたスイカ\", prompt_en: \"A warm nostalgic Japanese watercolor painting of enjoying cold watermelon slices on a wooden engawa porch with grandmother, summer sunlight, traditional Etegami style, pastel wash on washi paper, masterpiece\"\n"
         "   - 「座敷の中を走る白い犬」 -> motif_ja: \"座敷を走る白い犬\", prompt_en: \"A cute playful white puppy running across a traditional Japanese tatami room with shoji doors, traditional Etegami style, washi paper, masterpiece\"\n\n"
-        "2. 単なる挨拶（「こんにちは」「おはよう」）、接続確認（「聞こえますか」）、予定の質問（「今日の予定は？」）、秘密の指示（「内緒にして」）等の日常会話は必ず is_motif: false としてください。\n\n"
-        "3. 出力形式 (必ず以下の有効なJSONのみを出力してください):\n"
+        "3. 単なる挨拶（「こんにちは」「おはよう」）、接続確認（「聞こえますか」）、予定の質問（「今日の予定は？」）、秘密の指示（「内緒にして」）等の日常会話は必ず is_motif: false としてください。\n\n"
+        "4. 出力形式 (必ず以下の有効なJSONのみを出力してください):\n"
         "{\n"
         '  "is_motif": true,\n'
         '  "motif_ja": "抽出した日本語のモチーフ（3〜20文字程度）",\n'
@@ -912,18 +922,45 @@ def extract_etegami_motif_from_speech(
 
         parsed = json.loads(clean_json)
         if isinstance(parsed, dict) and "is_motif" in parsed:
+            # もし is_motif が False と判定されても、発話に明らかなモチーフや手直し語（スマート、マルチーズ等）が含まれている場合は補正
+            has_strong_motif = any(k in speech_text for k in [
+                "マルチーズ", "まるちーず", "犬", "子犬", "スマート", "すまーと", "座敷", "走り", "走って", "散歩", "猫", "花", "桜"
+            ])
+            if not parsed.get("is_motif") and (has_strong_motif or (current_motif and any(k in speech_text for k in ["もっと", "直して", "変えて", "です", "でした"]))):
+                print(f"[LLM Motif Extraction Override]: Ollama gave is_motif=False for speech='{speech_text}', but overriding to True due to keywords/context.")
+                motif_name = speech_text.replace("もっと", "").replace("です", "").replace("でした", "").strip()[:15]
+                if current_motif and ("スマート" in speech_text or "すまーと" in speech_text):
+                    motif_name = f"スマートな{current_motif}"
+                parsed["is_motif"] = True
+                parsed["motif_ja"] = motif_name or current_motif or "思い出の情景"
+                parsed["prompt_en"] = build_rich_etegami_prompt(parsed["motif_ja"])
+                parsed["title"] = f"【手作り絵手紙】{parsed['motif_ja'][:12]}"
+                parsed["calligraphy"] = "心あたたまる 日々をあなたへ"
+
             print(f"[LLM Motif Extraction SUCCESS]: speech='{speech_text}' -> motif='{parsed.get('motif_ja')}', is_motif={parsed.get('is_motif')}")
             return parsed
     except Exception as e_ollama:
         print(f"[LLM Motif Extraction Notice]: Ollama inference fallback ({e_ollama}).")
 
     # Fallback heuristic
-    is_motif = any(k in speech_text for k in ["描いて", "かいて", "絵", "風景", "座敷", "犬", "猫", "花", "山", "庭", "部屋", "思い出", "情景"])
+    is_retry_context = bool(current_motif) and any(k in speech_text for k in ["もっと", "直", "変え", "です", "でした", "スマート", "すまーと", "走", "白"])
+    is_motif = is_retry_context or any(k in speech_text for k in [
+        "描いて", "かいて", "絵", "風景", "座敷", "犬", "子犬", "マルチーズ", "猫", "花", "山", "庭", "部屋", "思い出", "情景", "スマート", "すまーと"
+    ])
+    
+    fallback_motif = speech_text[:15]
+    if current_motif and ("スマート" in speech_text or "すまーと" in speech_text):
+        fallback_motif = f"スマートな{current_motif}"
+    elif current_motif and ("マルチーズ" in speech_text or "まるちーず" in speech_text):
+        fallback_motif = "座敷を走るスマートなマルチーズ" if "スマート" in speech_text else "座敷を走るマルチーズ"
+    elif "マルチーズ" in speech_text:
+        fallback_motif = "スマートなマルチーズ" if ("スマート" in speech_text or "すまーと" in speech_text) else "マルチーズ"
+
     return {
         "is_motif": is_motif,
-        "motif_ja": speech_text[:15],
-        "prompt_en": f"A beautiful Japanese watercolor painting of {speech_text[:20]}, traditional Etegami art style, pastel colors, washi paper",
-        "title": f"【手作り絵手紙】{speech_text[:12]}",
+        "motif_ja": fallback_motif,
+        "prompt_en": build_rich_etegami_prompt(fallback_motif),
+        "title": f"【手作り絵手紙】{fallback_motif[:12]}",
         "calligraphy": "心あたたまる 日々をあなたへ"
     }
 

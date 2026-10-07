@@ -232,26 +232,40 @@ document.addEventListener("DOMContentLoaded", () => {
             return false;
         }
 
-        // 2. 「デジタル絵手紙」を含む場合は無条件で表示 (終了キーワードがない場合)
-        if (norm.includes("デジタル絵手紙") || norm.includes("デジタルえてがみ") || norm.includes("ベジタル絵手紙")) {
-            return true;
+        // 会話中の通常発話やシステム案内（「通常会話に戻します」「完成しました」など）はトリガー除外
+        if (norm.includes("通常会話") || norm.includes("普通会話") || norm.includes("完成しました") || norm.includes("保存しました")) {
+            return null;
         }
 
-        // 3. 絵手紙・お絵描き・絵を描く等の直接パターン
-        if (["絵を描", "絵をか", "絵手紙", "えてがみ", "お絵描き", "お絵かき", "おえかき"].some(p => norm.includes(p))) {
-            return true;
+        // 2. 絵手紙・お絵描きの対象キーワード（必須）
+        const hasExplicitArtWord = [
+            "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ", "デジタル絵",
+            "お絵描き", "お絵かき", "おえかき", "イラスト", "絵を", "絵の", "絵が"
+        ].some(w => norm.includes(w));
+
+        if (!hasExplicitArtWord) {
+            return null;
         }
 
-        // 4. 絵/え + 起動・表示アクション
-        if ((norm.includes("絵") || norm.includes("え")) && [
-            "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
-            "起動して", "きどうして", "起動", "きどう",
-            "かきたい", "描きたい", "書きたい", "かく", "描く", "書く",
-            "出して", "だして", "出す", "だす", "出したい", "だしたい",
-            "表示して", "ひょうじして", "表示", "ひょうじ", "表",
-            "見せて", "みせて", "見たい", "みたい",
-            "したい", "しよう", "する", "やる", "やって", "お願い", "おねがい"
-        ].some(k => norm.includes(k))) {
+        // 3. 意図の明確なアクション動詞（必須：単に「絵手紙」と口にしただけでは起動しない）
+        const hasCreationVerb = [
+            "描きたい", "かきたい", "書きたい", "描こう", "かこう", "書こう",
+            "作りたい", "つくろう", "作ろう", "新しく描いて", "始めたい", "はじめたい", "起動"
+        ].some(v => norm.includes(v));
+
+        const hasShowVerb = [
+            "開いて", "ひらいて", "開く", "ひらく",
+            "出して", "だして", "出したい", "だしたい",
+            "表示して", "ひょうじして", "表示",
+            "見せて", "みせて", "見たい", "みたい"
+        ].some(v => norm.includes(v));
+
+        const isFalseKakitai = ["汗をかき", "汗かき", "恥をかき", "恥かき"].some(f => norm.includes(f));
+        if (isFalseKakitai) {
+            return null;
+        }
+
+        if (hasCreationVerb || hasShowVerb) {
             return true;
         }
 
@@ -261,6 +275,11 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleEtegamiVoiceTrigger(text, source = "voice") {
         if (isEtegamiConfirming || isEtegamiModalSelecting) {
             console.log(`[Etegami Voice Trigger] (${source}): Blocked voice hide/show trigger because confirmation/selection modal is active: "${text}"`);
+            return false;
+        }
+        // 完成直後10秒間のクールダウン期間中は音声による再起動を防止
+        if (window._lastEtegamiCompletedTime && (Date.now() - window._lastEtegamiCompletedTime < 10000)) {
+            console.log(`[Etegami Voice Trigger] (${source}): Cooldown active after completion - ignoring trigger.`);
             return false;
         }
         const intent = checkEtegamiVoiceIntent(text);
@@ -593,6 +612,7 @@ document.addEventListener("DOMContentLoaded", () => {
             hasConfirmedEtegamiModeAndEngine = false;
             currentEtegamiMotif = "";
             currentEtegamiTranscript = "";
+            window._lastEtegamiCompletedTime = Date.now();
 
             // UI通知と音声案内「通常会話に戻します」を実行
             if (typeof showTemporaryToast === "function") {

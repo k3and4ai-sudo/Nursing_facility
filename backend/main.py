@@ -1534,23 +1534,35 @@ def check_etegami_visibility_intent(text: str):
         if not any(k in norm for k in ["描きたい", "かきたい", "書きたい", "出して", "見せて", "開いて", "更新して"]) and not has_motif:
             return False
 
-    # 2. 制作・描画開始リクエスト（「描きたい」「かきたい」「作ろう」等）は
-    # Geminiとの問答を経てモチーフが決まってから表示するため、ここでは即時表示(True)にしない
+    # 通常会話の復帰アナウンスや日常会話のフレーズは除外
+    if any(ign in norm for ign in ["通常会話", "普通会話", "完成しました", "保存しました"]):
+        return None
+
+    has_art_keyword = any(k in norm for k in [
+        "絵手紙", "えてがみ", "デジタル絵手紙", "デジタルえてがみ", "デジタル絵",
+        "お絵描き", "お絵かき", "おえかき", "イラスト", "絵を", "絵の", "絵が"
+    ])
+    if not has_art_keyword:
+        return None
+
+    # 2. 制作・描画開始リクエスト（「絵手紙を描きたい」「絵を描こう」等）
     is_creation_intent = any(k in norm for k in [
         "描きたい", "かきたい", "書きたい", "描こう", "かこう", "書こう",
-        "作りたい", "つくろう", "作ろう", "お絵描きしたい", "お絵かきしたい"
+        "作りたい", "つくろう", "作ろう", "お絵描きしたい", "お絵かきしたい",
+        "始めたい", "はじめたい", "起動"
     ])
-    if is_creation_intent:
+    is_false_kakitai = any(f in norm for f in ["汗をかき", "汗かき", "恥をかき", "恥かき"])
+    if is_creation_intent and not is_false_kakitai:
         return "creation_request"
 
     # 3. 鑑賞・表示リクエスト（「見せて」「開いて」「出して」「表示して」等）
     is_show_intent = any(k in norm for k in [
-        "開いて", "ひらいて", "開く", "ひらく", "あけて", "あける",
-        "表示して", "ひょうじして", "表示", "ひょうじ",
+        "開いて", "ひらいて", "開く", "ひらく",
+        "表示して", "ひょうじして", "表示",
         "見せて", "みせて", "見たい", "みたい",
-        "出して", "だして", "出す", "だす"
+        "出して", "だして", "出したい", "だしたい"
     ])
-    if any(k in norm for k in ["絵", "え", "絵手紙", "えてがみ", "デジタル絵手紙"]) and is_show_intent:
+    if is_show_intent:
         return True
 
     return None
@@ -2119,6 +2131,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
                 session.pending_artwork_confirm = None
                 session.pending_save_confirm = None
                 session.is_etegami_visible = False
+                session.last_etegami_completed_time = time.time()
 
                 # 🎙️ Gemini Liveへ絵手紙完了と通常会話への復帰を明確に指示
                 try:
@@ -2181,6 +2194,23 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             .replace("揉えて", "見せて")
             .replace("もえて", "見せて")
         )
+
+        # 完成直後10秒間のクールダウン期間中は絵手紙トリガーを無視
+        if (time.time() - getattr(session, "last_etegami_completed_time", 0.0) < 10.0):
+            return
+
+        # 絵手紙セッションが進行中でない（要求前、非表示、モード未決定、描き直し待ちでもない）通常会話状態の場合
+        is_etegami_in_progress = (
+            getattr(session, "has_resident_requested_etegami", False) or
+            getattr(session, "is_etegami_visible", False) or
+            bool(getattr(session, "etegami_prepare_mode", None)) or
+            getattr(session, "is_awaiting_etegami_retry", False)
+        )
+        if not is_etegami_in_progress:
+            # 通常会話中は「絵手紙を描きたい」等の明確な起動リクエストがない限り処理しない
+            intent = check_etegami_visibility_intent(speech_text)
+            if intent != "creation_request" and intent is not True:
+                return
 
         is_busy = getattr(session, "is_etegami_updating", False)
 
@@ -2253,7 +2283,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             return
 
         # 絵手紙が表示されている、または更新要求がある場合、聞き取り中バッジを表示
-        is_etegami_active = getattr(session, "is_etegami_visible", False) or getattr(session, "has_resident_requested_etegami", False) or any(k in clean for k in etegami_resident_keywords)
+        is_etegami_active = getattr(session, "is_etegami_visible", False) or getattr(session, "has_resident_requested_etegami", False)
         if is_etegami_active:
             try:
                 await websocket.send_json({
@@ -2312,7 +2342,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             (any(m in clean for m in [
                 "犬", "子犬", "マルチーズ", "まるちーず", "座敷", "走り", "わんこ", "猫", "ねこ", "スマート", "文化祭", "学園祭", "喫茶店", "喫茶", "純喫茶", "カフェ", "コーヒー",
                 "教室", "黒板", "机", "先生", "学校", "展覧会", "夕焼け", "夕暮れ", "夕日", "小鳥", "雀", "運動会", "お弁当", "桜", "朝顔", "紅葉", "富士山"
-            ]) and has_draw_verb) or
+            ]) and has_draw_verb and getattr(session, "is_etegami_visible", False)) or
             is_scene_description
         )
 
@@ -2513,6 +2543,7 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
     session.is_etegami_updating = False
     session.is_etegami_visible = False
     session.is_etegami_modal_selecting = False
+    session.last_etegami_completed_time = 0.0
 
     latest_whisper_transcription = {"text": "", "time": 0.0}
 
@@ -2574,24 +2605,22 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_schedule_visibility(False))
 
         # 1-3. Immediate voice command detection for Etegami Card visibility
-        etegami_vis_intent = check_etegami_visibility_intent(text_to_check)
-        if etegami_vis_intent == "creation_request":
-            session.has_resident_requested_etegami = True
-            print(f"[Whisper Guardrail ({terminal_id})]: Resident requested etegami creation (session flag set): '{text_to_check}'")
-        elif etegami_vis_intent is True:
-            print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Etegami Card: '{text_to_check}'")
-            asyncio.create_task(on_live_etegami_visibility(True))
-        elif etegami_vis_intent is False:
-            is_confirming = (
-                getattr(session, "pending_motif_confirm", None) or
-                getattr(session, "pending_artwork_confirm", None) or
-                getattr(session, "pending_save_confirm", None)
-            )
-            if not is_confirming:
-                print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
-                asyncio.create_task(on_live_etegami_visibility(False))
-            else:
-                print(f"[Whisper Guardrail ({terminal_id})]: Blocked Hide Etegami Card because confirmation is pending on screen: '{text_to_check}'")
+        if (time.time() - getattr(session, "last_etegami_completed_time", 0.0) >= 10.0):
+            etegami_vis_intent = check_etegami_visibility_intent(text_to_check)
+            if etegami_vis_intent is True:
+                print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Show Etegami Card: '{text_to_check}'")
+                asyncio.create_task(on_live_etegami_visibility(True))
+            elif etegami_vis_intent is False:
+                is_confirming = (
+                    getattr(session, "pending_motif_confirm", None) or
+                    getattr(session, "pending_artwork_confirm", None) or
+                    getattr(session, "pending_save_confirm", None)
+                )
+                if not is_confirming:
+                    print(f"[Whisper Guardrail ({terminal_id})]: Voice triggered Hide Etegami Card: '{text_to_check}'")
+                    asyncio.create_task(on_live_etegami_visibility(False))
+                else:
+                    print(f"[Whisper Guardrail ({terminal_id})]: Blocked Hide Etegami Card because confirmation is pending on screen: '{text_to_check}'")
 
         # 2. Check for personal information (PII)
         # Exclude confidential/privacy mode requests from being treated as PII violations
@@ -2664,28 +2693,29 @@ async def websocket_user_live_endpoint(websocket: WebSocket, terminal_id: str):
             asyncio.create_task(on_live_schedule_visibility(False))
 
         # Check for etegami card triggers directly from Whisper STT
-        etegami_stt_intent = check_etegami_visibility_intent(transcribed_text)
-        if etegami_stt_intent == "creation_request":
-            session.has_resident_requested_etegami = True
-            print(f"[Whisper STT ({terminal_id})]: Resident requested etegami creation (session flag set): '{transcribed_text}'")
-            if not getattr(session, "etegami_prepare_mode", None):
-                session.is_etegami_modal_selecting = True
-                asyncio.create_task(websocket.send_json({"type": "etegami_mode_confirm_prompt"}))
-                try:
-                    asyncio.create_task(session.send_system_note(
-                        "利用者が絵手紙の作成を希望しました。画面にモード確認画面（『今までの絵をベースにする』『新しく描く』）が表示されています。利用者に優しく『今までの絵をベースにしますか？それとも新しく描きますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
-                    ))
-                except Exception as e:
-                    pass
-        elif etegami_stt_intent is True:
-            print(f"[Whisper STT ({terminal_id})]: Voice triggered Show Etegami Card: '{transcribed_text}'")
-            asyncio.create_task(on_live_etegami_visibility(True))
-        elif etegami_stt_intent is False:
-            print(f"[Whisper STT ({terminal_id})]: Voice triggered Hide Etegami Card: '{transcribed_text}'")
-            asyncio.create_task(on_live_etegami_visibility(False))
+        if (time.time() - getattr(session, "last_etegami_completed_time", 0.0) >= 10.0):
+            etegami_stt_intent = check_etegami_visibility_intent(transcribed_text)
+            if etegami_stt_intent == "creation_request":
+                session.has_resident_requested_etegami = True
+                print(f"[Whisper STT ({terminal_id})]: Resident requested etegami creation (session flag set): '{transcribed_text}'")
+                if not getattr(session, "etegami_prepare_mode", None):
+                    session.is_etegami_modal_selecting = True
+                    asyncio.create_task(websocket.send_json({"type": "etegami_mode_confirm_prompt"}))
+                    try:
+                        asyncio.create_task(session.send_system_note(
+                            "利用者が絵手紙の作成を希望しました。画面にモード確認画面（『今までの絵をベースにする』『新しく描く』）が表示されています。利用者に優しく『今までの絵をベースにしますか？それとも新しく描きますか？画面のボタンをタッチしてくださいね』と音声で案内してください。回答は画面タッチで行うため、声での返答は求めないでください。"
+                        ))
+                    except Exception as e:
+                        pass
+            elif etegami_stt_intent is True:
+                print(f"[Whisper STT ({terminal_id})]: Voice triggered Show Etegami Card: '{transcribed_text}'")
+                asyncio.create_task(on_live_etegami_visibility(True))
+            elif etegami_stt_intent is False:
+                print(f"[Whisper STT ({terminal_id})]: Voice triggered Hide Etegami Card: '{transcribed_text}'")
+                asyncio.create_task(on_live_etegami_visibility(False))
 
-        # モード選択・エンジン選択は画面タッチのみで決定するため音声判定は廃止
-        asyncio.create_task(check_resident_etegami_trigger(transcribed_text))
+            # モード選択・エンジン選択は画面タッチのみで決定するため音声判定は廃止
+            asyncio.create_task(check_resident_etegami_trigger(transcribed_text))
 
         # 3. Check for confidential recording stop / resume triggers directly from Whisper STT
         confidential_stop_words = [
