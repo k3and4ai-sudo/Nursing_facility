@@ -507,6 +507,17 @@
                         <div id="motif-confirm-calligraphy" class="motif-field-value" style="border-left-color: #d97706;">
                             元気に 駆け回る姿に… 笑顔咲く
                         </div>
+
+                        <!-- 📝 プロンプト確認エリア（「プロンプト確認」ボタンを押すと展開表示） -->
+                        <div id="motif-confirm-prompt-container" class="motif-confirm-prompt-container hidden" style="margin-top: 10px; padding: 10px; background: #f8fafc; border: 2px dashed #0284c7; border-radius: 12px;">
+                            <div class="motif-field-label" style="color: #0369a1; font-weight: 800;">
+                                <span>📝</span><span>蓄積された作成プロンプト（英語 & 要望詳細）：</span>
+                            </div>
+                            <div style="font-size: 0.82rem; color: #64748b; margin-top: 4px; margin-bottom: 2px;">【聞き取り要望・会話の蓄積（日本語）】</div>
+                            <div id="motif-confirm-prompt-ja" class="motif-field-value" style="border-left-color: #0284c7; font-size: 0.95rem; max-height: 80px; overflow-y: auto; background: #ffffff;"></div>
+                            <div style="font-size: 0.82rem; color: #64748b; margin-top: 8px; margin-bottom: 2px;">【AI画像生成プロンプト（英語）】</div>
+                            <div id="motif-confirm-prompt-en" class="motif-field-value" style="border-left-color: #0369a1; font-size: 0.85rem; max-height: 90px; overflow-y: auto; color: #334155; font-family: ui-monospace, monospace; background: #ffffff;"></div>
+                        </div>
                     </div>
 
                     <!-- タッチ案内バナー -->
@@ -518,11 +529,17 @@
 
                 <!-- 常に画面内に収まる固定フッターボタン -->
                 <div class="etegami-modal-buttons-row">
-                    <button id="btn-motif-confirm-retry" class="modal-btn motif-btn-secondary" type="button">
+                    <button id="btn-motif-confirm-retry" class="modal-btn motif-btn-secondary" type="button" style="flex: 1;">
                         <span class="btn-icon">✏️</span>
                         <span>直す (いいえ)</span>
                     </button>
-                    <button id="btn-motif-confirm-ok" class="modal-btn motif-btn-primary" type="button">
+                    <!-- 「これで描く」の前にプロンプト確認ボタンを配置 -->
+                    <button id="btn-motif-confirm-show-prompt" class="modal-btn motif-btn-accent" type="button" style="flex: 1.1; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border: none; border-radius: 18px;">
+                        <span class="btn-icon">📝</span>
+                        <span id="btn-motif-confirm-prompt-label">プロンプト確認</span>
+                    </button>
+                    <!-- 「これで描く」ボタンは最初非表示、またはプロンプト確認後に表示 -->
+                    <button id="btn-motif-confirm-ok" class="modal-btn motif-btn-primary" type="button" style="flex: 1.3;">
                         <span class="btn-icon">🎨</span>
                         <span>これで描く (はい)</span>
                     </button>

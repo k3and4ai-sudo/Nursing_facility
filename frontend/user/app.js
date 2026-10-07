@@ -451,6 +451,33 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (calligraphyTarget) calligraphyTarget.textContent = payload.calligraphy || currentEtegamiCalligraphy;
 
+            if (payload.prompt_en) currentEtegamiPromptEn = payload.prompt_en;
+            if (payload.accumulated_text) etegamiAccumulatedText = payload.accumulated_text;
+
+            // プロンプト確認エリアの表示をリセット
+            const promptContainer = document.getElementById("motif-confirm-prompt-container");
+            const promptJaEl = document.getElementById("motif-confirm-prompt-ja");
+            const promptEnEl = document.getElementById("motif-confirm-prompt-en");
+            const btnShowPrompt = document.getElementById("btn-motif-confirm-show-prompt");
+            const btnPromptLabel = document.getElementById("btn-motif-confirm-prompt-label");
+            const btnOk = document.getElementById("btn-motif-confirm-ok");
+
+            const fullAccText = payload.accumulated_text || etegamiAccumulatedText || currentEtegamiTranscript || "";
+            const fullPromptEn = payload.prompt_en || currentEtegamiPromptEn || "";
+
+            if (promptJaEl) {
+                promptJaEl.textContent = fullAccText || `（聞き取り内容: ${motifToConfirm}）`;
+            }
+            if (promptEnEl) {
+                promptEnEl.textContent = fullPromptEn || "（プロンプトを合成中...）";
+            }
+            if (promptContainer) {
+                promptContainer.classList.add("hidden");
+            }
+            if (btnPromptLabel) {
+                btnPromptLabel.textContent = "プロンプト確認";
+            }
+
             if (motifConfirmModal) {
                 motifConfirmModal.classList.remove("hidden");
                 try { motifConfirmModal.scrollTop = 0; } catch (e) {}
@@ -4663,6 +4690,37 @@ document.addEventListener("DOMContentLoaded", () => {
     function initEtegamiMotifConfirm() {
         const btnOk = document.getElementById("btn-motif-confirm-ok");
         const btnRetry = document.getElementById("btn-motif-confirm-retry");
+        const btnShowPrompt = document.getElementById("btn-motif-confirm-show-prompt");
+        const btnPromptLabel = document.getElementById("btn-motif-confirm-prompt-label");
+        const promptContainer = document.getElementById("motif-confirm-prompt-container");
+        const promptJaEl = document.getElementById("motif-confirm-prompt-ja");
+        const promptEnEl = document.getElementById("motif-confirm-prompt-en");
+
+        if (btnShowPrompt) {
+            btnShowPrompt.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (!promptContainer) return;
+
+                const isCurrentlyHidden = promptContainer.classList.contains("hidden");
+                if (isCurrentlyHidden) {
+                    // 蓄積プロンプトを展開表示
+                    const fullAccText = etegamiAccumulatedText || currentEtegamiTranscript || "";
+                    const fullPromptEn = currentEtegamiPromptEn || "";
+                    if (promptJaEl) {
+                        promptJaEl.textContent = fullAccText || `【モチーフ】: ${currentEtegamiMotif || '思い出の情景'}`;
+                    }
+                    if (promptEnEl) {
+                        promptEnEl.textContent = fullPromptEn || "（プロンプトを合成中...）";
+                    }
+                    promptContainer.classList.remove("hidden");
+                    if (btnPromptLabel) btnPromptLabel.textContent = "プロンプトを隠す";
+                    showTemporaryToast("📝 蓄積された要望とAI画像プロンプトを表示しました", 3000);
+                } else {
+                    promptContainer.classList.add("hidden");
+                    if (btnPromptLabel) btnPromptLabel.textContent = "プロンプト確認";
+                }
+            });
+        }
 
         if (btnOk) {
             btnOk.addEventListener("click", (e) => {
